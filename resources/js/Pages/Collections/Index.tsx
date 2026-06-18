@@ -78,7 +78,7 @@ export default function Index({
         >
             <Head title="Galleries" />
 
-            <div className="px-8 py-10">
+            <div className="px-4 sm:px-8 py-10">
                 {collections.data.length === 0 ? (
                     <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-neutral-200 py-32">
                         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-neutral-100">

@@ -62,7 +62,7 @@ export default function Dashboard(_: PageProps) {
         >
             <Head title="Dashboard" />
 
-            <div className="px-8 py-10">
+            <div className="px-4 sm:px-8 py-10">
                 {/* Welcome */}
                 <div className="mb-10">
                     <h2 className="text-2xl font-light text-neutral-900">

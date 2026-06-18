@@ -86,6 +86,11 @@ class Studio extends Model
         return $this->hasMany(Collection::class);
     }
 
+    public function sites(): HasMany
+    {
+        return $this->hasMany(Site::class);
+    }
+
     public function isOnFreePlan(): bool
     {
         return $this->plan === 'free';

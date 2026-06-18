@@ -59,6 +59,11 @@ class Project extends Model
         return $this->hasMany(Invoice::class);
     }
 
+    public function contracts(): HasMany
+    {
+        return $this->hasMany(Contract::class);
+    }
+
     public function noteEntries(): HasMany
     {
         return $this->hasMany(ProjectNote::class)->latest();

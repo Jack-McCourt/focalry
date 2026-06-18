@@ -64,7 +64,7 @@ export default function Show({
             <Head title={contact.name} />
             <StudioManagerNav active="contacts" />
 
-            <div className="grid gap-8 px-8 py-8 lg:grid-cols-3">
+            <div className="grid gap-8 px-4 sm:px-8 py-8 lg:grid-cols-3">
                 {/* Edit form */}
                 <div className="lg:col-span-2">
                     <form onSubmit={submit} className="max-w-lg rounded-xl border border-neutral-200 bg-white p-6">

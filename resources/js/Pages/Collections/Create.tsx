@@ -33,7 +33,7 @@ export default function Create(_: PageProps) {
         >
             <Head title="New Gallery" />
 
-            <div className="flex min-h-[calc(100vh-3.5rem)] items-start justify-center px-8 pt-16">
+            <div className="flex min-h-[calc(100vh-3.5rem)] items-start justify-center px-4 sm:px-8 pt-16">
                 <div className="w-full max-w-md">
                     <div className="mb-8">
                         <h2 className="text-xl font-light text-neutral-900">

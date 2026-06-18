@@ -1,7 +1,9 @@
 import Modal from '@/Components/Modal';
+import SendEmailModal from '@/Components/SendEmailModal';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import {
     Collection,
+    EmailDefaults,
     FavouriteActivity,
     GallerySet,
     PageProps,
@@ -34,6 +36,7 @@ interface ShowProps extends Record<string, unknown> {
     photos: Photo[];
     sets: GallerySet[];
     activity: FavouriteActivity[];
+    email_defaults: EmailDefaults;
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -1356,6 +1359,7 @@ export default function Show({
     photos: initialPhotos,
     sets: initialSets,
     activity,
+    email_defaults,
 }: PageProps<ShowProps>) {
     const [photos, setPhotos] = useState<Photo[]>(initialPhotos);
     const [sets, setSets] = useState<GallerySet[]>(initialSets);
@@ -1364,6 +1368,7 @@ export default function Show({
     const [settingsSection, setSettingsSection] = useState<'details' | 'cover' | 'privacy'>('details');
     const [activeSetId, setActiveSetId] = useState<number | null>(initialSets[0]?.id ?? null);
     const [showShare, setShowShare] = useState(false);
+    const [emailOpen, setEmailOpen] = useState(false);
 
     // Keep sets in sync with server props (after create/rename/delete/reorder).
     useEffect(() => setSets(initialSets), [initialSets]);
@@ -1597,6 +1602,12 @@ export default function Show({
                             </svg>
                             Share
                         </button>
+                        <button onClick={() => setEmailOpen(true)} className="btn-secondary">
+                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+                            </svg>
+                            Email
+                        </button>
                         <button
                             onClick={togglePublish}
                             disabled={publishing}
@@ -1632,6 +1643,8 @@ export default function Show({
                 collection={collection}
                 galleryUrl={galleryUrl}
             />
+
+            <SendEmailModal open={emailOpen} onClose={() => setEmailOpen(false)} defaults={email_defaults} />
 
             <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
                 {/* Main content */}

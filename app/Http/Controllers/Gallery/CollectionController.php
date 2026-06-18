@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Gallery;
 
 use App\Http\Controllers\Controller;
 use App\Models\Collection;
+use App\Support\ClientEmailContent;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -88,11 +89,14 @@ class CollectionController extends Controller
                 'notes_count' => $list->favourites->whereNotNull('note')->count(),
             ]);
 
+        $collection->loadMissing(['contact', 'studio']);
+
         return Inertia::render('Collections/Show', [
             'collection' => $this->sanitizedCollection($collection),
             'photos' => $photos,
             'sets' => $sets,
             'activity' => $activity,
+            'email_defaults' => ClientEmailContent::defaults($collection),
         ]);
     }
 

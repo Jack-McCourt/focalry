@@ -1,8 +1,9 @@
 import Modal from '@/Components/Modal';
+import SendEmailModal from '@/Components/SendEmailModal';
 import StudioManagerNav from '@/Components/StudioManagerNav';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { centsToInput, currencySymbol, formatMoney, toCents } from '@/lib/money';
-import { Invoice, PageProps } from '@/types';
+import { EmailDefaults, Invoice, PageProps } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 
@@ -96,8 +97,9 @@ function PaymentModal({ invoice, show, onClose }: { invoice: Invoice; show: bool
     );
 }
 
-export default function Show({ invoice }: PageProps<{ invoice: Invoice }>) {
+export default function Show({ invoice, email_defaults }: PageProps<{ invoice: Invoice; email_defaults: EmailDefaults }>) {
     const [showPayment, setShowPayment] = useState(false);
+    const [emailOpen, setEmailOpen] = useState(false);
     const [copied, setCopied] = useState(false);
     const balance = Math.max(0, invoice.total_cents - invoice.amount_paid_cents);
     const items = invoice.items ?? [];
@@ -158,6 +160,7 @@ export default function Show({ invoice }: PageProps<{ invoice: Invoice }>) {
                         >
                             PDF
                         </a>
+                        <button onClick={() => setEmailOpen(true)} className="btn-secondary">Email client</button>
                         {invoice.status === 'draft' && (
                             <button onClick={() => post('invoices.sent')} className="btn-secondary">Mark as sent</button>
                         )}
@@ -174,7 +177,7 @@ export default function Show({ invoice }: PageProps<{ invoice: Invoice }>) {
             <Head title={invoice.number} />
             <StudioManagerNav active="invoices" />
 
-            <div className="px-8 py-8">
+            <div className="px-4 sm:px-8 py-8">
                 <div className="grid gap-6 lg:grid-cols-3">
                     {/* Document */}
                     <div className="rounded-xl border border-neutral-200 bg-white p-8 lg:col-span-2">
@@ -383,6 +386,7 @@ export default function Show({ invoice }: PageProps<{ invoice: Invoice }>) {
             </div>
 
             <PaymentModal invoice={invoice} show={showPayment} onClose={() => setShowPayment(false)} />
+            <SendEmailModal open={emailOpen} onClose={() => setEmailOpen(false)} defaults={email_defaults} />
         </AuthenticatedLayout>
     );
 }

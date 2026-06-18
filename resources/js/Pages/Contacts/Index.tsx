@@ -128,7 +128,7 @@ export default function Index({
             <Head title="Contacts" />
             <StudioManagerNav active="contacts" />
 
-            <div className="px-8 py-8">
+            <div className="px-4 sm:px-8 py-8">
                 {/* Filters */}
                 <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap gap-1.5">

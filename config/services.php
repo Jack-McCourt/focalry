@@ -20,6 +20,14 @@ return [
         'key' => env('POSTMARK_API_KEY'),
     ],
 
+    // Two-way client messaging. `inbound_address` is the Postmark inbound address
+    // (a +token mailbox-hash routes a reply to its conversation); `inbound_secret`
+    // is the path segment that protects the inbound webhook.
+    'messaging' => [
+        'inbound_address' => env('MESSAGING_INBOUND_ADDRESS'),
+        'inbound_secret' => env('MESSAGING_INBOUND_SECRET'),
+    ],
+
     'resend' => [
         'key' => env('RESEND_API_KEY'),
     ],

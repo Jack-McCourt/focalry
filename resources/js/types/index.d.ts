@@ -169,6 +169,163 @@ export interface Project {
     position: number;
 }
 
+export type ContractFieldType = 'text' | 'multiline' | 'date' | 'checkbox' | 'invoice';
+
+export interface ContractField {
+    key: string;
+    label: string;
+    type: ContractFieldType;
+    fill_by: 'studio' | 'client';
+    value?: string | boolean | null;
+}
+
+export interface ContractSignatureRecord {
+    id: number;
+    role: 'studio' | 'client';
+    signer_name: string;
+    signature_type: 'typed' | 'drawn';
+    signature_data: string | null;
+    signed_at: string;
+}
+
+export interface Contract {
+    id: number;
+    public_id: string;
+    project_id: number | null;
+    contact_id: number | null;
+    title: string;
+    body: string | null;
+    fields: ContractField[];
+    status: 'draft' | 'sent' | 'signed' | 'declined' | 'void';
+    sent_at: string | null;
+    signed_at: string | null;
+    contact?: { id: number; name: string; email?: string | null } | null;
+    project?: { id: number; name: string } | null;
+    signatures?: ContractSignatureRecord[];
+    created_at: string;
+    updated_at: string;
+}
+
+export interface EmailOption {
+    key: string;
+    label: string;
+    default: boolean;
+}
+
+export interface EmailDefaults {
+    type: 'invoice' | 'contract' | 'collection';
+    id: number;
+    to: string | null;
+    subject: string;
+    body: string;
+    cta_label: string;
+    options: EmailOption[];
+}
+
+// ─── Website builder ────────────────────────────────────────────────────────
+
+export type SiteFont = 'sans' | 'serif';
+
+export interface SiteTheme {
+    primary_color: string;
+    font: SiteFont;
+}
+
+export type SiteBlockType =
+    | 'hero'
+    | 'about'
+    | 'services'
+    | 'gallery'
+    | 'blog'
+    | 'contact'
+    | 'text'
+    | 'image'
+    | 'grid'
+    | 'footer';
+
+export interface BlockSettings {
+    background?: string;
+    text_color?: string;
+    text_size?: 'sm' | 'base' | 'lg' | 'xl';
+    padding?: 'none' | 'sm' | 'md' | 'lg' | 'xl';
+}
+
+export interface SiteNavItem {
+    label: string;
+    kind: 'page' | 'url';
+    target: string;
+}
+
+export interface BlogPostCard {
+    title: string;
+    slug: string;
+    excerpt: string | null;
+    cover_image: string | null;
+    published_at: string | null;
+    url?: string;
+}
+
+export interface SiteBlock<T = Record<string, unknown>> {
+    id: string;
+    type: SiteBlockType;
+    data: T;
+    settings?: BlockSettings;
+    /** Nested blocks per column — used by the `grid` container block. */
+    children?: SiteBlock[][];
+}
+
+export interface SitePageData {
+    id?: number;
+    parent_id?: number | null;
+    is_post?: boolean;
+    title: string;
+    slug: string;
+    is_home: boolean;
+    is_blog?: boolean;
+    status?: 'draft' | 'published';
+    published_at?: string | null;
+    excerpt?: string | null;
+    cover_image?: string | null;
+    blocks: SiteBlock[];
+    seo_title?: string | null;
+    seo_description?: string | null;
+}
+
+export interface SiteData {
+    id: number;
+    name: string;
+    slug: string;
+    template: string;
+    theme: SiteTheme;
+    header_nav: SiteNavItem[];
+    footer_nav: SiteNavItem[];
+    contact_email: string | null;
+    seo_title: string | null;
+    seo_description: string | null;
+    is_published: boolean;
+    published_at: string | null;
+    pages: SitePageData[];
+}
+
+export interface SiteTemplateMeta {
+    key: string;
+    name: string;
+    description: string;
+}
+
+export interface SiteLeadRow {
+    id: number;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    event_date: string | null;
+    event_type: string | null;
+    message: string | null;
+    contact: { id: number; name: string } | null;
+    project: { id: number; name: string } | null;
+    created_at: string;
+}
+
 export interface Photo {
     id: number;
     collection_id: number;

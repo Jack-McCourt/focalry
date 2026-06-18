@@ -54,7 +54,7 @@ export default function Edit({
             <Head title={`Edit ${invoice.number}`} />
             <StudioManagerNav active="invoices" />
 
-            <form onSubmit={submit} className="px-8 py-8">
+            <form onSubmit={submit} className="px-4 sm:px-8 py-8">
                 <InvoiceFormErrors errors={errors} />
                 <div className="rounded-xl border border-neutral-200 bg-white p-6">
                     <InvoiceForm data={data} setData={setData} errors={errors} projects={projects} />

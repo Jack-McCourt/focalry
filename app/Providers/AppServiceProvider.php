@@ -14,6 +14,11 @@ class AppServiceProvider extends ServiceProvider
     {
         // Bind a null current studio ID by default; SetCurrentStudio middleware overwrites this.
         $this->app->bind('current.studio.id', fn () => null);
+
+        // We register the webhook route manually in routes/api.php. This must run in
+        // register() — by boot() time Cashier's provider has already registered its
+        // default /stripe/webhook route (which lacks our checkout.session handler).
+        Cashier::ignoreRoutes();
     }
 
     public function boot(): void
@@ -22,9 +27,6 @@ class AppServiceProvider extends ServiceProvider
 
         // Studio is the Cashier billable entity, not User.
         Cashier::useCustomerModel(Studio::class);
-
-        // We register the webhook route manually in routes/api.php.
-        Cashier::ignoreRoutes();
 
         Model::shouldBeStrict(! app()->isProduction());
     }

@@ -57,7 +57,7 @@ class ProjectController extends Controller
 
     public function show(Project $project): JsonResponse
     {
-        $project->load(['invoices' => fn ($q) => $q->orderByDesc('id'), 'noteEntries']);
+        $project->load(['invoices' => fn ($q) => $q->orderByDesc('id'), 'contracts' => fn ($q) => $q->orderByDesc('id'), 'noteEntries']);
 
         return response()->json([
             'invoices' => $project->invoices->map(fn (Invoice $i) => [
@@ -69,6 +69,11 @@ class ProjectController extends Controller
                 'total_cents' => $i->total_cents,
                 'amount_paid_cents' => $i->amount_paid_cents,
                 'balance_cents' => $i->balanceCents(),
+            ]),
+            'contracts' => $project->contracts->map(fn ($c) => [
+                'id' => $c->id,
+                'title' => $c->title,
+                'status' => $c->status,
             ]),
             'notes' => $project->noteEntries->map(fn ($n) => [
                 'id' => $n->id,

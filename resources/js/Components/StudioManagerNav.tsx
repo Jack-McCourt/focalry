@@ -6,13 +6,13 @@ const SECTIONS: { key: Section; label: string; href: string | null }[] = [
     { key: 'contacts', label: 'Contacts', href: '/contacts' },
     { key: 'projects', label: 'Projects', href: '/projects' },
     { key: 'invoices', label: 'Invoices', href: '/invoices' },
-    { key: 'contracts', label: 'Contracts', href: null },
+    { key: 'contracts', label: 'Contracts', href: '/contracts' },
     { key: 'bookings', label: 'Bookings', href: null },
 ];
 
 export default function StudioManagerNav({ active }: { active: Section }) {
     return (
-        <nav className="flex items-center gap-1 border-b border-neutral-200 px-8">
+        <nav className="flex items-center gap-1 overflow-x-auto border-b border-neutral-200 px-4 sm:px-8">
             {SECTIONS.map((s) => {
                 const isActive = s.key === active;
                 const classes = `relative -mb-px border-b-2 px-3 py-3 text-sm font-medium transition ${

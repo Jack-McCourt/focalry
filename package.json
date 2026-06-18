@@ -4,6 +4,7 @@
     "type": "module",
     "scripts": {
         "build": "tsc && vite build",
+        "build:watch": "vite build --watch",
         "dev": "vite"
     },
     "devDependencies": {
@@ -28,6 +29,9 @@
     "dependencies": {
         "@stripe/connect-js": "^3.4.5",
         "@stripe/react-connect-js": "^3.4.3",
+        "@tiptap/pm": "^3.27.0",
+        "@tiptap/react": "^3.27.0",
+        "@tiptap/starter-kit": "^3.27.0",
         "axios": "^1.18.0"
     }
 }

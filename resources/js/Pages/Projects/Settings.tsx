@@ -46,7 +46,7 @@ export default function Settings({
             <Head title="Project settings" />
             <StudioManagerNav active="projects" />
 
-            <div className="space-y-10 px-8 py-8">
+            <div className="space-y-10 px-4 sm:px-8 py-8">
                 <Section title="Statuses" description="The Kanban columns. Drag order with the arrows; click a swatch to recolour.">
                     <ColorListEditor
                         items={statuses}

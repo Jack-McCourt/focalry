@@ -27,6 +27,20 @@ const INV_STATUS: Record<InvoiceLite['status'], string> = {
     void: 'bg-neutral-100 text-neutral-400 line-through',
 };
 
+interface ContractLite {
+    id: number;
+    title: string;
+    status: 'draft' | 'sent' | 'signed' | 'declined' | 'void';
+}
+
+const CON_STATUS: Record<ContractLite['status'], string> = {
+    draft: 'bg-neutral-100 text-neutral-500',
+    sent: 'bg-blue-50 text-blue-700',
+    signed: 'bg-emerald-50 text-emerald-700',
+    declined: 'bg-red-50 text-red-700',
+    void: 'bg-neutral-100 text-neutral-400 line-through',
+};
+
 interface NoteEntry {
     id: number;
     body: string;
@@ -75,6 +89,7 @@ export default function ProjectDrawer({
     onPatchCustom: (key: string, value: CustomValue) => void;
 }) {
     const [invoices, setInvoices] = useState<InvoiceLite[]>([]);
+    const [contracts, setContracts] = useState<ContractLite[]>([]);
     const [loading, setLoading] = useState(false);
     const [name, setName] = useState('');
     const [notes, setNotes] = useState<NoteEntry[]>([]);
@@ -90,7 +105,7 @@ export default function ProjectDrawer({
         setLoading(true);
         axios
             .get(route('projects.show', project.id))
-            .then((r) => { setInvoices(r.data.invoices ?? []); setNotes(r.data.notes ?? []); })
+            .then((r) => { setInvoices(r.data.invoices ?? []); setContracts(r.data.contracts ?? []); setNotes(r.data.notes ?? []); })
             .finally(() => setLoading(false));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [project?.id]);
@@ -282,9 +297,38 @@ export default function ProjectDrawer({
                         )}
                     </Section>
 
-                    {/* Future modules */}
-                    <Section title="Contracts">
-                        <p className="text-sm text-neutral-400">Contracts will appear here.</p>
+                    {/* Contracts */}
+                    <Section
+                        title="Contracts"
+                        action={
+                            <button
+                                type="button"
+                                onClick={() => router.visit(`/contracts/create?project=${project.id}`)}
+                                className="text-xs font-medium text-neutral-600 hover:text-neutral-900"
+                            >
+                                + New contract
+                            </button>
+                        }
+                    >
+                        {loading ? (
+                            <p className="text-sm text-neutral-400">Loading…</p>
+                        ) : contracts.length === 0 ? (
+                            <p className="text-sm text-neutral-400">No contracts yet.</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {contracts.map((c) => (
+                                    <button
+                                        type="button"
+                                        key={c.id}
+                                        onClick={() => router.visit(route('contracts.show', c.id))}
+                                        className="flex w-full items-center justify-between rounded-lg border border-neutral-200 px-3 py-2 text-left transition hover:border-neutral-300"
+                                    >
+                                        <span className="truncate text-sm font-medium text-neutral-900">{c.title}</span>
+                                        <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${CON_STATUS[c.status]}`}>{c.status}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </Section>
                     <Section title="Bookings">
                         <p className="text-sm text-neutral-400">Bookings will appear here.</p>

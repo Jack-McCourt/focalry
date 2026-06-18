@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\Project;
 use App\Models\Studio;
+use App\Support\ClientEmailContent;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -105,10 +106,11 @@ class InvoiceController extends Controller
 
     public function show(Invoice $invoice): Response
     {
-        $invoice->load(['items', 'schedules', 'payments', 'contact:id,first_name,last_name,company,email,phone', 'project:id,name']);
+        $invoice->load(['items', 'schedules', 'payments', 'contact:id,first_name,last_name,company,email,phone', 'project:id,name', 'studio']);
 
         return Inertia::render('Invoices/Show', [
             'invoice' => $invoice,
+            'email_defaults' => ClientEmailContent::defaults($invoice),
         ]);
     }
 

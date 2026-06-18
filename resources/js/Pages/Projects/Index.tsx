@@ -216,7 +216,7 @@ export default function Index({ projects, statuses, types, fields, contacts, fil
             <Head title="Projects" />
             <StudioManagerNav active="projects" />
 
-            <div className="px-8 py-6">
+            <div className="px-4 sm:px-8 py-6">
                 {/* View switcher + filters */}
                 <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5">

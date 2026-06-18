@@ -44,6 +44,14 @@ function IconWebsite({ className }: { className?: string }) {
     );
 }
 
+function IconMessages({ className }: { className?: string }) {
+    return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+        </svg>
+    );
+}
+
 function IconSettings({ className }: { className?: string }) {
     return (
         <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -69,12 +77,14 @@ function SidebarLink({
     label,
     active,
     soon,
+    badge,
 }: {
     href: string;
     icon: React.FC<{ className?: string }>;
     label: string;
     active: boolean;
     soon?: boolean;
+    badge?: number;
 }) {
     return (
         <Link
@@ -90,6 +100,11 @@ function SidebarLink({
             {soon && (
                 <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-zinc-400">
                     Soon
+                </span>
+            )}
+            {!soon && !!badge && badge > 0 && (
+                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-600 px-1.5 text-[11px] font-semibold text-white">
+                    {badge > 99 ? '99+' : badge}
                 </span>
             )}
         </Link>
@@ -131,9 +146,10 @@ export default function AuthenticatedLayout({
     header,
     children,
 }: PropsWithChildren<{ header?: ReactNode }>) {
-    const { auth } = usePage<{ auth: Auth; flash: Flash }>().props;
+    const { auth, unread_messages } = usePage<{ auth: Auth; flash: Flash; unread_messages: number }>().props;
     const user = auth.user!;
     const studio = auth.studio;
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
     const navItems = [
         {
@@ -165,11 +181,19 @@ export default function AuthenticatedLayout({
             soon: false,
         },
         {
+            label: 'Messages',
+            href: route('messages.index'),
+            icon: IconMessages,
+            active: route().current('messages.*'),
+            soon: false,
+            badge: unread_messages,
+        },
+        {
             label: 'Website',
-            href: '#',
+            href: route('website.edit'),
             icon: IconWebsite,
-            active: false,
-            soon: true,
+            active: route().current('website.*'),
+            soon: false,
         },
     ];
 
@@ -182,11 +206,21 @@ export default function AuthenticatedLayout({
 
     return (
         <div className="flex h-screen overflow-hidden bg-neutral-50">
+            {/* ── Mobile backdrop ── */}
+            {sidebarOpen && (
+                <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
+            )}
+
             {/* ── Sidebar ── */}
-            <aside className="flex w-56 shrink-0 flex-col" style={{ background: '#141414' }}>
+            <aside
+                className={`fixed inset-y-0 left-0 z-40 flex w-56 shrink-0 flex-col transition-transform duration-200 lg:static lg:translate-x-0 ${
+                    sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+                }`}
+                style={{ background: '#141414' }}
+            >
                 {/* Logo */}
-                <div className="flex h-14 items-center px-4">
-                    <Link href={route('dashboard')} className="flex items-center gap-2">
+                <div className="flex h-14 items-center justify-between px-4">
+                    <Link href={route('dashboard')} className="flex items-center gap-2" onClick={() => setSidebarOpen(false)}>
                         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white">
                             <svg className="h-4 w-4 text-neutral-900" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M12 9a3.75 3.75 0 100 7.5A3.75 3.75 0 0012 9z" />
@@ -197,6 +231,16 @@ export default function AuthenticatedLayout({
                             {studio?.name ?? 'Studio'}
                         </span>
                     </Link>
+                    <button
+                        type="button"
+                        onClick={() => setSidebarOpen(false)}
+                        className="rounded-md p-1.5 text-zinc-400 hover:bg-sidebar-hover hover:text-white lg:hidden"
+                        aria-label="Close menu"
+                    >
+                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
 
                 {/* Nav items */}
@@ -244,13 +288,22 @@ export default function AuthenticatedLayout({
             </aside>
 
             {/* ── Main ── */}
-            <div className="flex flex-1 flex-col overflow-hidden">
-                {/* Page header bar */}
-                {header && (
-                    <div className="flex h-14 shrink-0 items-center border-b border-neutral-200 bg-white px-8">
-                        {header}
-                    </div>
-                )}
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                {/* Top bar — always present on mobile (for the menu button), and on
+                    desktop only when the page provides a header. */}
+                <div className={`flex h-14 shrink-0 items-center gap-2 border-b border-neutral-200 bg-white px-4 sm:px-6 lg:px-8 ${header ? '' : 'lg:hidden'}`}>
+                    <button
+                        type="button"
+                        onClick={() => setSidebarOpen(true)}
+                        className="-ml-1 rounded-md p-2 text-neutral-600 hover:bg-neutral-100 lg:hidden"
+                        aria-label="Open menu"
+                    >
+                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+                        </svg>
+                    </button>
+                    {header && <div className="min-w-0 flex-1">{header}</div>}
+                </div>
 
                 {/* Flash */}
                 <FlashBanner />

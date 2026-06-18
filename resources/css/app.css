@@ -38,3 +38,68 @@
         @apply rounded-xl bg-white shadow-sm ring-1 ring-neutral-950/5;
     }
 }
+
+/* ── Per-block style settings (website builder) ──
+   These intentionally use higher specificity than Tailwind utilities so a
+   block's own background/text colours can be overridden by its settings. */
+.blk-bg > section,
+.blk-bg > footer {
+    background-color: transparent;
+}
+
+.blk-text h1,
+.blk-text h2,
+.blk-text h3,
+.blk-text h4,
+.blk-text p,
+.blk-text a,
+.blk-text li,
+.blk-text span {
+    color: inherit;
+}
+
+.blk-size-sm p {
+    font-size: 0.875rem;
+    line-height: 1.5rem;
+}
+
+.blk-size-lg p {
+    font-size: 1.125rem;
+    line-height: 1.85rem;
+}
+
+.blk-size-xl p {
+    font-size: 1.25rem;
+    line-height: 2rem;
+}
+
+/* Vertical padding override (beats the block's own py-* utilities). */
+.blk-pad-none > section,
+.blk-pad-none > footer {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.blk-pad-sm > section,
+.blk-pad-sm > footer {
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+}
+
+.blk-pad-md > section,
+.blk-pad-md > footer {
+    padding-top: 3rem;
+    padding-bottom: 3rem;
+}
+
+.blk-pad-lg > section,
+.blk-pad-lg > footer {
+    padding-top: 5rem;
+    padding-bottom: 5rem;
+}
+
+.blk-pad-xl > section,
+.blk-pad-xl > footer {
+    padding-top: 8rem;
+    padding-bottom: 8rem;
+}

@@ -50,7 +50,7 @@ export default function Settings({
             <Head title="Invoice settings" />
             <StudioManagerNav active="invoices" />
 
-            <form onSubmit={submit} className="px-8 py-8">
+            <form onSubmit={submit} className="px-4 sm:px-8 py-8">
                 <div className="max-w-xl space-y-8 rounded-xl border border-neutral-200 bg-white p-6">
                     {/* Payment methods */}
                     <div>

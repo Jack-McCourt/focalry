@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Gallery\PhotoController;
 use App\Http\Controllers\Gallery\PresignedUploadController;
+use App\Http\Controllers\Mail\InboundMailController;
 use App\Http\Controllers\Stripe\WebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -14,6 +15,10 @@ use Illuminate\Support\Facades\Route;
 // Stripe webhooks — no auth, Stripe signature verified in controller
 Route::post('stripe/webhook', [WebhookController::class, 'handleWebhook'])
     ->name('cashier.webhook');
+
+// Postmark inbound email webhook — no auth, protected by the URL path secret
+Route::post('mail/inbound/{secret}', [InboundMailController::class, 'handle'])
+    ->name('mail.inbound');
 
 // Authenticated studio API routes
 Route::middleware(['auth:sanctum', 'verified'])->group(function () {

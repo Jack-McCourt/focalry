@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\Gallery\CollectionController;
 use App\Http\Controllers\Gallery\FavouriteController;
 use App\Http\Controllers\Gallery\FavouriteListDownloadController;
@@ -7,16 +8,22 @@ use App\Http\Controllers\Gallery\GalleryController;
 use App\Http\Controllers\Gallery\GalleryDownloadController;
 use App\Http\Controllers\Gallery\SetController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\Public\ContractSigningController;
+use App\Http\Controllers\Public\PublicSiteController;
 use App\Http\Controllers\Settings\StudioSettingsController;
 use App\Http\Controllers\Stripe\ConnectController;
 use App\Http\Controllers\Stripe\PublicInvoiceController;
+use App\Http\Controllers\StudioManager\ClientEmailController;
 use App\Http\Controllers\StudioManager\ContactController;
+use App\Http\Controllers\StudioManager\ContractController;
+use App\Http\Controllers\StudioManager\ContractTemplateController;
 use App\Http\Controllers\StudioManager\InvoiceController;
 use App\Http\Controllers\StudioManager\InvoiceSettingsController;
 use App\Http\Controllers\StudioManager\ProjectController;
 use App\Http\Controllers\StudioManager\ProjectFieldController;
 use App\Http\Controllers\StudioManager\ProjectNoteController;
 use App\Http\Controllers\StudioManager\ProjectSettingsController;
+use App\Http\Controllers\StudioManager\SiteController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -82,6 +89,41 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('project-types/{type}', [ProjectSettingsController::class, 'updateType'])->name('project-types.update');
     Route::delete('project-types/{type}', [ProjectSettingsController::class, 'destroyType'])->name('project-types.destroy');
 
+    // Messages (two-way client messaging)
+    Route::get('messages', [ConversationController::class, 'index'])->name('messages.index');
+    Route::post('messages', [ConversationController::class, 'store'])->name('messages.store');
+    Route::get('messages/{conversation}', [ConversationController::class, 'index'])->name('messages.show');
+    Route::post('messages/{conversation}/reply', [ConversationController::class, 'reply'])->name('messages.reply');
+    Route::post('messages/{conversation}/archive', [ConversationController::class, 'archive'])->name('messages.archive');
+    Route::delete('messages/{conversation}', [ConversationController::class, 'destroy'])->name('messages.destroy');
+
+    // Website builder (studio's marketing site + lead capture)
+    Route::get('website', [SiteController::class, 'edit'])->name('website.edit');
+    Route::put('website', [SiteController::class, 'update'])->name('website.update');
+    Route::post('website/publish', [SiteController::class, 'publish'])->name('website.publish');
+    Route::post('website/template', [SiteController::class, 'applyTemplate'])->name('website.template');
+    Route::post('website/upload', [SiteController::class, 'uploadImage'])->name('website.upload');
+    Route::get('website/gallery-images', [SiteController::class, 'galleryImages'])->name('website.gallery.images');
+    Route::post('website/gallery-images', [SiteController::class, 'importGalleryImages'])->name('website.gallery.import');
+    Route::get('website/leads', [SiteController::class, 'leads'])->name('website.leads');
+
+    // Send an email to a client about an invoice / contract / gallery
+    Route::post('client-emails', [ClientEmailController::class, 'send'])->name('client-emails.send');
+
+    // Studio Manager — Contracts
+    // Template routes registered before the resource so 'templates' isn't matched as {contract}.
+    Route::get('contracts/templates', [ContractTemplateController::class, 'index'])->name('contracts.templates.index');
+    Route::get('contracts/templates/create', [ContractTemplateController::class, 'create'])->name('contracts.templates.create');
+    Route::post('contracts/templates', [ContractTemplateController::class, 'store'])->name('contracts.templates.store');
+    Route::get('contracts/templates/{template}/edit', [ContractTemplateController::class, 'edit'])->name('contracts.templates.edit');
+    Route::patch('contracts/templates/{template}', [ContractTemplateController::class, 'update'])->name('contracts.templates.update');
+    Route::delete('contracts/templates/{template}', [ContractTemplateController::class, 'destroy'])->name('contracts.templates.destroy');
+    Route::resource('contracts', ContractController::class);
+    Route::post('contracts/{contract}/send', [ContractController::class, 'send'])->name('contracts.send');
+    Route::post('contracts/{contract}/sign', [ContractController::class, 'sign'])->name('contracts.sign');
+    Route::post('contracts/{contract}/void', [ContractController::class, 'void'])->name('contracts.void');
+    Route::get('contracts/{contract}/pdf', [ContractController::class, 'pdf'])->name('contracts.pdf');
+
     // Studio Manager — Invoices
     // Settings routes registered before the resource so they don't match {invoice}.
     Route::get('invoices/settings', [InvoiceSettingsController::class, 'edit'])->name('invoices.settings.edit');
@@ -109,10 +151,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('favourite-lists.export-csv');
 });
 
+// Public contract signing (no auth — resolved by unguessable public_id)
+Route::get('/c/{publicId}', [ContractSigningController::class, 'show'])->name('contracts.public.show');
+Route::post('/c/{publicId}/sign', [ContractSigningController::class, 'sign'])->name('contracts.public.sign');
+
 // Public invoice payment (no auth — resolved by unguessable public_id)
 Route::get('/i/{publicId}', [PublicInvoiceController::class, 'show'])->name('invoices.public.show');
 Route::get('/i/{publicId}/pdf', [PublicInvoiceController::class, 'pdf'])->name('invoices.public.pdf');
 Route::post('/i/{publicId}/checkout', [PublicInvoiceController::class, 'checkout'])->name('invoices.public.checkout');
+
+// Public studio website (no auth — resolved by slug, only if published)
+Route::post('/site/{slug}/contact', [PublicSiteController::class, 'submitLead'])->name('sites.public.lead');
+Route::get('/site/{slug}/{parent}/{post}', [PublicSiteController::class, 'showPost'])->name('sites.public.post');
+Route::get('/site/{slug}/{page?}', [PublicSiteController::class, 'show'])->name('sites.public.show');
 
 // Public gallery (no full auth — password/email-gate handled inside)
 Route::get('/g/{slug}', [GalleryController::class, 'show'])->name('gallery.show');
