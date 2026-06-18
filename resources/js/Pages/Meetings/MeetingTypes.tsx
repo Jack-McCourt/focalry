@@ -202,8 +202,8 @@ function MeetingTypeModal({
                         <div>
                             <span className="label">Video provider</span>
                             <select className={field} value={data.video_provider} onChange={(e) => setData('video_provider', e.target.value as MeetingType['video_provider'])}>
-                                <option value="google_meet">Google Meet (auto link)</option>
-                                <option value="zoom">Zoom (add link manually)</option>
+                                <option value="google_meet">Google Meet</option>
+                                <option value="zoom">Zoom</option>
                             </select>
                         </div>
                     ) : (

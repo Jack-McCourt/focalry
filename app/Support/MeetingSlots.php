@@ -2,9 +2,12 @@
 
 namespace App\Support;
 
+use App\Models\AvailabilityBlock;
 use App\Models\AvailabilityRule;
 use App\Models\Meeting;
 use App\Models\MeetingType;
+use App\Models\Project;
+use App\Models\Studio;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -37,6 +40,10 @@ class MeetingSlots
             return [];
         }
 
+        // Whole days that are unavailable: manually blocked, and (optionally)
+        // days that already have a project booked on them.
+        $blockedDays = self::blockedDays($type->studio_id, $from, $to);
+
         // Existing active meetings in the range, to subtract from availability.
         $meetings = Meeting::withoutGlobalScopes()
             ->where('studio_id', $type->studio_id)
@@ -55,8 +62,9 @@ class MeetingSlots
             $dow = (int) $cursor->dayOfWeek; // 0 = Sunday
             $windows = $rules->get($dow);
 
-            if ($windows) {
-                $dayKey = $cursor->format('Y-m-d');
+            $dayKey = $cursor->format('Y-m-d');
+
+            if ($windows && ! isset($blockedDays[$dayKey])) {
                 $dayMeetings = $meetings->filter(fn (Meeting $m) => $m->starts_at->copy()->setTimezone($tz)->isSameDay($cursor));
 
                 // Per-day cap is counted against this meeting type only.
@@ -79,6 +87,36 @@ class MeetingSlots
         }
 
         return $result;
+    }
+
+    /**
+     * Set of "Y-m-d" => true days that are fully unavailable: manually blocked
+     * dates, plus (if the studio opts in) days that already have a project.
+     *
+     * @return array<string, bool>
+     */
+    private static function blockedDays(int $studioId, CarbonInterface $from, CarbonInterface $to): array
+    {
+        $blocked = AvailabilityBlock::withoutGlobalScopes()
+            ->where('studio_id', $studioId)
+            ->whereBetween('date', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
+            ->pluck('date')
+            ->mapWithKeys(fn ($d) => [Carbon::parse($d)->format('Y-m-d') => true])
+            ->all();
+
+        if (Studio::find($studioId)?->block_project_dates) {
+            $projectDays = Project::withoutGlobalScopes()
+                ->where('studio_id', $studioId)
+                ->whereNotNull('event_date')
+                ->whereBetween('event_date', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
+                ->pluck('event_date')
+                ->mapWithKeys(fn ($d) => [Carbon::parse($d)->format('Y-m-d') => true])
+                ->all();
+
+            $blocked += $projectDays;
+        }
+
+        return $blocked;
     }
 
     /**

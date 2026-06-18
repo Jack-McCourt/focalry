@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\StudioManager;
 
 use App\Http\Controllers\Controller;
+use App\Models\AvailabilityBlock;
 use App\Models\AvailabilityRule;
+use App\Models\Project;
+use App\Models\Studio;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -24,6 +27,12 @@ class AvailabilityController extends Controller
                     'start_time' => substr((string) $r->start_time, 0, 5),
                     'end_time' => substr((string) $r->end_time, 0, 5),
                 ]),
+            'blocked_dates' => AvailabilityBlock::where('date', '>=', now()->startOfDay())
+                ->orderBy('date')->pluck('date')->map(fn ($d) => $d->format('Y-m-d'))->values(),
+            'block_project_dates' => (bool) $studio?->block_project_dates,
+            'project_dates' => Project::whereNotNull('event_date')
+                ->where('event_date', '>=', now()->startOfDay())
+                ->orderBy('event_date')->pluck('event_date')->map(fn ($d) => $d->format('Y-m-d'))->unique()->values(),
             'timezone' => config('app.timezone'),
             'calendar' => [
                 'connected' => (bool) $studio?->googleCalendarConnected(),
@@ -44,6 +53,9 @@ class AvailabilityController extends Controller
             'rules.*.day_of_week' => 'required|integer|between:0,6',
             'rules.*.start_time' => 'required|date_format:H:i',
             'rules.*.end_time' => 'required|date_format:H:i',
+            'blocked_dates' => 'present|array',
+            'blocked_dates.*' => 'date_format:Y-m-d',
+            'block_project_dates' => 'boolean',
         ]);
 
         $studioId = app('current.studio.id');
@@ -62,6 +74,14 @@ class AvailabilityController extends Controller
                 'end_time' => $rule['end_time'],
             ]);
         }
+
+        // Replace the manually blocked dates.
+        AvailabilityBlock::where('studio_id', $studioId)->delete();
+        foreach (array_unique($data['blocked_dates']) as $date) {
+            AvailabilityBlock::create(['studio_id' => $studioId, 'date' => $date]);
+        }
+
+        Studio::whereKey($studioId)->update(['block_project_dates' => $request->boolean('block_project_dates')]);
 
         return back()->with('success', 'Availability updated.');
     }

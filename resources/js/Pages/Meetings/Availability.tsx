@@ -3,6 +3,7 @@ import StudioManagerNav from '@/Components/StudioManagerNav';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
+import { useState } from 'react';
 
 interface Rule {
     day_of_week: number;
@@ -25,11 +26,36 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 
 export default function Availability({
     rules,
+    blocked_dates,
+    block_project_dates,
+    project_dates,
     timezone,
     calendar,
     zoom,
-}: PageProps<{ rules: Rule[]; timezone: string; calendar: CalendarState; zoom: ZoomState }>) {
-    const { data, setData, patch, processing, recentlySuccessful } = useForm<{ rules: Rule[] }>({ rules });
+}: PageProps<{
+    rules: Rule[];
+    blocked_dates: string[];
+    block_project_dates: boolean;
+    project_dates: string[];
+    timezone: string;
+    calendar: CalendarState;
+    zoom: ZoomState;
+}>) {
+    const { data, setData, patch, processing, recentlySuccessful } = useForm<{
+        rules: Rule[];
+        blocked_dates: string[];
+        block_project_dates: boolean;
+    }>({ rules, blocked_dates, block_project_dates });
+
+    const [newBlock, setNewBlock] = useState('');
+
+    const addBlock = () => {
+        if (!newBlock || data.blocked_dates.includes(newBlock)) { setNewBlock(''); return; }
+        setData('blocked_dates', [...data.blocked_dates, newBlock].sort());
+        setNewBlock('');
+    };
+
+    const fmtDay = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
     const addWindow = (dow: number) =>
         setData('rules', [...data.rules, { day_of_week: dow, start_time: '09:00', end_time: '17:00' }]);
@@ -149,6 +175,36 @@ export default function Availability({
                                 </div>
                             );
                         })}
+                    </div>
+
+                    {/* Time off / blocked dates */}
+                    <div className="mt-6 rounded-xl border border-neutral-200 bg-white p-4">
+                        <p className="text-sm font-medium text-neutral-900">Time off</p>
+                        <p className="mt-0.5 text-xs text-neutral-500">Block specific days so no one can book them.</p>
+                        <div className="mt-3 flex items-center gap-2">
+                            <input type="date" value={newBlock} onChange={(e) => setNewBlock(e.target.value)} className="rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900" />
+                            <button type="button" onClick={addBlock} className="btn-secondary px-3 py-1.5 text-xs">Block day</button>
+                        </div>
+                        {data.blocked_dates.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-1.5">
+                                {data.blocked_dates.map((d) => (
+                                    <span key={d} className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-1 text-xs text-neutral-700">
+                                        {fmtDay(d)}
+                                        <button type="button" onClick={() => setData('blocked_dates', data.blocked_dates.filter((x) => x !== d))} className="text-neutral-400 hover:text-red-600">✕</button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+
+                        <label className="mt-4 flex items-start gap-2 border-t border-neutral-100 pt-4 text-sm text-neutral-700">
+                            <input type="checkbox" checked={data.block_project_dates} onChange={(e) => setData('block_project_dates', e.target.checked)} className="mt-0.5 rounded border-neutral-300" />
+                            <span>
+                                Block days that already have a project
+                                <span className="block text-xs text-neutral-400">
+                                    Days matching a project's event date won't be bookable{project_dates.length > 0 ? ` (${project_dates.length} upcoming)` : ''}.
+                                </span>
+                            </span>
+                        </label>
                     </div>
 
                     <div className="mt-4 flex items-center gap-4">

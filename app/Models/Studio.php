@@ -33,6 +33,7 @@ class Studio extends Model
         'google_calendar_email',
         'zoom',
         'zoom_email',
+        'block_project_dates',
         'plan',
         'commission_rate',
         'storage_used',
@@ -49,6 +50,7 @@ class Studio extends Model
             'invoice_settings' => 'array',
             'google_calendar' => 'array',
             'zoom' => 'array',
+            'block_project_dates' => 'boolean',
             'trial_ends_at' => 'datetime',
         ];
     }

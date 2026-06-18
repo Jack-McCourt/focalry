@@ -1,9 +1,11 @@
 <?php
 
+use App\Models\AvailabilityBlock;
 use App\Models\AvailabilityRule;
 use App\Models\Contact;
 use App\Models\Meeting;
 use App\Models\MeetingType;
+use App\Models\Project;
 use App\Models\Studio;
 use App\Models\User;
 use App\Support\MeetingSlots;
@@ -173,6 +175,46 @@ it('creates a meeting type with an auto-generated slug', function () {
     expect($type->name)->toBe('Strategy Session')->and($type->slug)->toBe('strategy-session');
 });
 
+it('excludes a manually blocked day', function () {
+    [$studio] = meetingStudio();
+    weekdayAvailability($studio->id); // Monday 09:00–12:00
+    $type = makeMeetingType($studio->id);
+    AvailabilityBlock::create(['studio_id' => $studio->id, 'date' => '2026-07-06']);
+
+    $slots = MeetingSlots::forMeetingType($type, Carbon::now(), Carbon::now()->endOfDay());
+
+    expect($slots)->toBeEmpty();
+});
+
+it('excludes days with a project when the studio opts in', function () {
+    [$studio] = meetingStudio();
+    weekdayAvailability($studio->id);
+    $type = makeMeetingType($studio->id);
+    $studio->update(['block_project_dates' => true]);
+    Project::create(['studio_id' => $studio->id, 'name' => 'Smith wedding', 'event_date' => '2026-07-06']);
+
+    $slots = MeetingSlots::forMeetingType($type, Carbon::now(), Carbon::now()->endOfDay());
+    expect($slots)->toBeEmpty();
+
+    // With the setting off, the day is bookable again.
+    $studio->update(['block_project_dates' => false]);
+    $slots = MeetingSlots::forMeetingType($type, Carbon::now(), Carbon::now()->endOfDay());
+    expect($slots['2026-07-06'] ?? [])->toHaveCount(3);
+});
+
+it('saves blocked dates and the project-block setting', function () {
+    [$studio, $user] = meetingStudio();
+
+    $this->actingAs($user)->patch(route('availability.update'), [
+        'rules' => [],
+        'blocked_dates' => ['2026-07-06', '2026-07-07'],
+        'block_project_dates' => true,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect(AvailabilityBlock::withoutGlobalScopes()->where('studio_id', $studio->id)->count())->toBe(2)
+        ->and($studio->refresh()->block_project_dates)->toBeTrue();
+});
+
 it('replaces the weekly availability on update', function () {
     [$studio, $user] = meetingStudio();
     weekdayAvailability($studio->id, 1, '09:00', '12:00');
@@ -182,6 +224,7 @@ it('replaces the weekly availability on update', function () {
             ['day_of_week' => 2, 'start_time' => '10:00', 'end_time' => '16:00'],
             ['day_of_week' => 4, 'start_time' => '10:00', 'end_time' => '14:00'],
         ],
+        'blocked_dates' => [],
     ])->assertRedirect()->assertSessionHasNoErrors();
 
     $rules = AvailabilityRule::withoutGlobalScopes()->where('studio_id', $studio->id)->get();

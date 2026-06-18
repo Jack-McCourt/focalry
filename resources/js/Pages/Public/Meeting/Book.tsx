@@ -59,6 +59,27 @@ export default function Book({
         new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
     const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
+    // ── Month calendar ──
+    const available = useMemo(() => new Set(dates), [dates]);
+    const toISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const thisMonth = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1); };
+    const startMonth = useMemo(() => {
+        const first = dates[0] ? new Date(dates[0] + 'T00:00:00') : new Date();
+        return new Date(first.getFullYear(), first.getMonth(), 1);
+    }, [dates]);
+    const [month, setMonth] = useState(startMonth);
+
+    const monthLabel = month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    const cells: (string | null)[] = [];
+    const firstWeekday = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
+    const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+    for (let i = 0; i < firstWeekday; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(toISO(new Date(month.getFullYear(), month.getMonth(), d)));
+    const canPrev = month > thisMonth();
+    const shiftMonth = (delta: number) => setMonth(new Date(month.getFullYear(), month.getMonth() + delta, 1));
+
+    const pickDate = (iso: string) => { setSelectedDate(iso); setSelectedSlot(null); setData('starts_at', ''); };
+
     const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900';
 
     return (
@@ -82,20 +103,41 @@ export default function Book({
                     </div>
                 ) : (
                     <div className="rounded-xl border border-neutral-200 bg-white p-5">
-                        {/* Step 1: date */}
-                        <p className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-400">Pick a date</p>
-                        <div className="flex flex-wrap gap-2">
-                            {dates.map((d) => (
-                                <button
-                                    key={d}
-                                    onClick={() => { setSelectedDate(d); setSelectedSlot(null); setData('starts_at', ''); }}
-                                    className={`rounded-lg border px-3 py-2 text-sm transition ${
-                                        selectedDate === d ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 text-neutral-700 hover:border-neutral-300'
-                                    }`}
-                                >
-                                    {fmtDate(d)}
-                                </button>
-                            ))}
+                        {/* Step 1: date — month calendar */}
+                        <div className="mb-3 flex items-center justify-between">
+                            <button type="button" onClick={() => shiftMonth(-1)} disabled={!canPrev} className="rounded-md p-1.5 text-neutral-500 enabled:hover:bg-neutral-100 disabled:opacity-30" aria-label="Previous month">
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                            </button>
+                            <span className="text-sm font-semibold text-neutral-900">{monthLabel}</span>
+                            <button type="button" onClick={() => shiftMonth(1)} className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100" aria-label="Next month">
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium uppercase tracking-wide text-neutral-400">
+                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i} className="py-1">{d}</div>)}
+                        </div>
+                        <div className="mt-1 grid grid-cols-7 gap-1">
+                            {cells.map((iso, i) => {
+                                if (!iso) return <div key={i} />;
+                                const isAvail = available.has(iso);
+                                const day = Number(iso.slice(-2));
+                                const selected = selectedDate === iso;
+                                return (
+                                    <button
+                                        key={iso}
+                                        type="button"
+                                        disabled={!isAvail}
+                                        onClick={() => pickDate(iso)}
+                                        className={`flex aspect-square items-center justify-center rounded-lg text-sm transition ${
+                                            selected ? 'bg-neutral-900 font-semibold text-white'
+                                                : isAvail ? 'font-medium text-neutral-800 hover:bg-neutral-100 ring-1 ring-inset ring-neutral-200'
+                                                : 'text-neutral-300'
+                                        }`}
+                                    >
+                                        {day}
+                                    </button>
+                                );
+                            })}
                         </div>
 
                         {/* Step 2: time */}
