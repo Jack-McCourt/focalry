@@ -1,6 +1,6 @@
 import { Link } from '@inertiajs/react';
 
-type Section = 'contacts' | 'projects' | 'invoices' | 'contracts' | 'meetings';
+type Section = 'contacts' | 'projects' | 'invoices' | 'contracts' | 'meetings' | 'bookings';
 
 const SECTIONS: { key: Section; label: string; href: string | null }[] = [
     { key: 'contacts', label: 'Contacts', href: '/contacts' },
@@ -8,6 +8,7 @@ const SECTIONS: { key: Section; label: string; href: string | null }[] = [
     { key: 'invoices', label: 'Invoices', href: '/invoices' },
     { key: 'contracts', label: 'Contracts', href: '/contracts' },
     { key: 'meetings', label: 'Meetings', href: '/meetings' },
+    { key: 'bookings', label: 'Bookings', href: '/packages' },
 ];
 
 export default function StudioManagerNav({ active }: { active: Section }) {

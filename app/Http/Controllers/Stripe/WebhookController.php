@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Stripe;
 
 use App\Models\Invoice;
+use App\Models\PackageBooking;
 use App\Models\Studio;
+use App\Services\PackageFulfillment;
 use Laravel\Cashier\Http\Controllers\WebhookController as CashierWebhookController;
 
 class WebhookController extends CashierWebhookController
@@ -26,9 +28,27 @@ class WebhookController extends CashierWebhookController
     protected function handleCheckoutSessionCompleted(array $payload): void
     {
         $session = $payload['data']['object'] ?? [];
-        $invoiceId = $session['metadata']['invoice_id'] ?? null;
 
-        if (! $invoiceId || ($session['payment_status'] ?? null) !== 'paid') {
+        if (($session['payment_status'] ?? null) !== 'paid') {
+            return;
+        }
+
+        // A package booking was paid → mark it paid and create the Project.
+        if ($packageBookingId = $session['metadata']['package_booking_id'] ?? null) {
+            $booking = PackageBooking::withoutGlobalScopes()->find($packageBookingId);
+            if ($booking) {
+                app(PackageFulfillment::class)->markPaid(
+                    $booking,
+                    $session['payment_intent'] ?? null,
+                    (int) ($session['amount_total'] ?? 0),
+                );
+            }
+
+            return;
+        }
+
+        $invoiceId = $session['metadata']['invoice_id'] ?? null;
+        if (! $invoiceId) {
             return;
         }
 

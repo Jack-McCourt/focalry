@@ -13,6 +13,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public\ContractSigningController;
 use App\Http\Controllers\Public\PublicMeetingController;
+use App\Http\Controllers\Public\PublicPackageController;
 use App\Http\Controllers\Public\PublicSiteController;
 use App\Http\Controllers\Settings\GoogleCalendarController;
 use App\Http\Controllers\Settings\StudioSettingsController;
@@ -28,6 +29,7 @@ use App\Http\Controllers\StudioManager\InvoiceController;
 use App\Http\Controllers\StudioManager\InvoiceSettingsController;
 use App\Http\Controllers\StudioManager\MeetingController;
 use App\Http\Controllers\StudioManager\MeetingTypeController;
+use App\Http\Controllers\StudioManager\PackageController;
 use App\Http\Controllers\StudioManager\ProjectController;
 use App\Http\Controllers\StudioManager\ProjectFieldController;
 use App\Http\Controllers\StudioManager\ProjectNoteController;
@@ -131,6 +133,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('availability', [AvailabilityController::class, 'edit'])->name('availability.edit');
     Route::patch('availability', [AvailabilityController::class, 'update'])->name('availability.update');
+
+    // Bookings — sellable packages (paid shoots → create a Project)
+    Route::get('packages', [PackageController::class, 'index'])->name('packages.index');
+    Route::post('packages', [PackageController::class, 'store'])->name('packages.store');
+    Route::patch('packages/{package}', [PackageController::class, 'update'])->name('packages.update');
+    Route::delete('packages/{package}', [PackageController::class, 'destroy'])->name('packages.destroy');
 
     // Google Calendar connection (per studio)
     Route::get('settings/google-calendar/connect', [GoogleCalendarController::class, 'connect'])->name('google-calendar.connect');
@@ -240,6 +248,11 @@ Route::get('/book/{slug}', [PublicMeetingController::class, 'index'])->name('mee
 Route::get('/book/{slug}/{type}', [PublicMeetingController::class, 'show'])->name('meetings.public.show');
 Route::post('/book/{slug}/{type}', [PublicMeetingController::class, 'store'])->name('meetings.public.store');
 Route::get('/booking/{meeting}', [PublicMeetingController::class, 'confirmation'])->name('meetings.public.confirmation');
+
+// Public packages / booking shop (no auth) — studio resolved by slug. Embeddable via ?embed=1.
+Route::get('/packages/{slug}', [PublicPackageController::class, 'index'])->name('packages.public');
+Route::post('/packages/{slug}/{package}/checkout', [PublicPackageController::class, 'checkout'])->name('packages.public.checkout');
+Route::get('/package-booking/{booking}', [PublicPackageController::class, 'confirmation'])->name('packages.public.confirmation');
 
 // Email open-tracking pixel (read receipts) — token-protected, no auth.
 Route::get('/e/o/{message}/{token}', MailOpenController::class)
