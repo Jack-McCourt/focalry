@@ -1,4 +1,3 @@
-import { formatMoney } from '@/lib/money';
 import { Head, Link } from '@inertiajs/react';
 
 interface StudioRef {
@@ -12,8 +11,6 @@ interface MeetingTypeRef {
     name: string;
     description: string | null;
     duration_minutes: number;
-    price_cents: number;
-    currency: string;
     location_type: 'video' | 'phone' | 'in_person';
     location: string | null;
     video_provider: 'google_meet' | 'zoom';
@@ -57,7 +54,6 @@ export default function Studio({ studio, meetingTypes }: { studio: StudioRef; me
                                 </div>
                                 <p className="mt-1 text-sm text-neutral-500">
                                     {t.duration_minutes} min · {LOCATION_LABELS[t.location_type]}
-                                    {t.price_cents > 0 ? ` · ${formatMoney(t.price_cents, t.currency)}` : ' · Free'}
                                 </p>
                                 {t.description && <p className="mt-2 text-sm text-neutral-600">{t.description}</p>}
                             </Link>

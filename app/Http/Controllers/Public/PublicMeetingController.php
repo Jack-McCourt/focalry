@@ -7,7 +7,7 @@ use App\Models\Contact;
 use App\Models\Meeting;
 use App\Models\MeetingType;
 use App\Models\Studio;
-use App\Services\GoogleCalendarService;
+use App\Services\MeetingScheduler;
 use App\Support\MeetingSlots;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -109,17 +109,15 @@ class PublicMeetingController extends Controller
                 'starts_at' => $starts,
                 'ends_at' => $starts->copy()->addMinutes($meetingType->duration_minutes),
                 'status' => $meetingType->manual_approve ? 'pending' : 'confirmed',
-                'price_cents' => $meetingType->price_cents,
-                'currency' => $meetingType->currency,
                 'location' => $meetingType->location,
                 'notes' => $data['notes'] ?? null,
             ]);
         });
 
-        // Auto-confirmed meetings sync to the studio's calendar immediately
-        // (pending ones sync when the studio confirms them).
+        // Auto-confirmed meetings get their video link + calendar invite now
+        // (pending ones are synced when the studio confirms them).
         if ($meeting->status === 'confirmed') {
-            app(GoogleCalendarService::class)->syncMeeting($meeting);
+            app(MeetingScheduler::class)->sync($meeting);
         }
 
         return redirect()->route('meetings.public.confirmation', ['meeting' => $meeting->public_id]);
@@ -176,8 +174,6 @@ class PublicMeetingController extends Controller
             'name' => $t->name,
             'description' => $t->description,
             'duration_minutes' => $t->duration_minutes,
-            'price_cents' => $t->price_cents,
-            'currency' => $t->currency,
             'location_type' => $t->location_type,
             'location' => $t->location,
             'video_provider' => $t->video_provider,

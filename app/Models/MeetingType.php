@@ -18,8 +18,6 @@ class MeetingType extends Model
         'slug',
         'description',
         'duration_minutes',
-        'price_cents',
-        'currency',
         'location_type',
         'location',
         'video_provider',
@@ -35,7 +33,6 @@ class MeetingType extends Model
     {
         return [
             'duration_minutes' => 'integer',
-            'price_cents' => 'integer',
             'buffer_minutes' => 'integer',
             'min_lead_hours' => 'integer',
             'max_per_day' => 'integer',

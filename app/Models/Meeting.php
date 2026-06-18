@@ -26,12 +26,11 @@ class Meeting extends Model
         'starts_at',
         'ends_at',
         'status',
-        'price_cents',
-        'currency',
         'location',
         'notes',
         'meeting_url',
         'google_event_id',
+        'zoom_meeting_id',
         'reminders_sent',
     ];
 
@@ -40,7 +39,6 @@ class Meeting extends Model
         return [
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
-            'price_cents' => 'integer',
             'reminders_sent' => 'array',
         ];
     }

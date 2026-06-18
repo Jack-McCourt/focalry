@@ -1,7 +1,6 @@
 import MeetingsSubNav from '@/Components/MeetingsSubNav';
 import StudioManagerNav from '@/Components/StudioManagerNav';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { formatMoney } from '@/lib/money';
 import { PageProps } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 
@@ -13,8 +12,6 @@ interface MeetingItem {
     starts_at: string;
     ends_at: string;
     status: 'pending' | 'confirmed' | 'declined' | 'cancelled' | 'completed';
-    price_cents: number;
-    currency: string;
     location: string | null;
     notes: string | null;
     meeting_url: string | null;
@@ -102,7 +99,6 @@ export default function Index({
                                         </div>
                                         <p className="mt-0.5 text-xs text-neutral-500">
                                             {m.meeting_type?.name ?? 'Meeting'}
-                                            {m.price_cents > 0 && <> · {formatMoney(m.price_cents, m.currency)}</>}
                                         </p>
                                         <p className="mt-1 text-sm text-neutral-700">{fmtRange(m.starts_at, m.ends_at)}</p>
                                         <p className="mt-0.5 text-xs text-neutral-400">

@@ -39,8 +39,6 @@ function makeMeetingType(int $studioId, array $attrs = []): MeetingType
         'studio_id' => $studioId,
         'name' => 'Discovery Call',
         'duration_minutes' => 60,
-        'price_cents' => 0,
-        'currency' => 'usd',
         'location_type' => 'video',
         'video_provider' => 'google_meet',
         'min_lead_hours' => 0,
@@ -68,7 +66,7 @@ it('excludes slots that conflict with an existing meeting', function () {
         'client_name' => 'X', 'client_email' => 'x@e.com',
         'starts_at' => Carbon::parse('2026-07-06 10:00', 'UTC'),
         'ends_at' => Carbon::parse('2026-07-06 11:00', 'UTC'),
-        'status' => 'confirmed', 'price_cents' => 0, 'currency' => 'usd',
+        'status' => 'confirmed',
     ]);
 
     $slots = MeetingSlots::forMeetingType($type, Carbon::now(), Carbon::now()->endOfDay());
@@ -89,7 +87,7 @@ it('honours the minimum lead time', function () {
 it('lets a client book an open slot and creates a lead contact', function () {
     [$studio] = meetingStudio();
     weekdayAvailability($studio->id);
-    $type = makeMeetingType($studio->id, ['price_cents' => 5000]);
+    $type = makeMeetingType($studio->id);
 
     $this->post(route('meetings.public.store', ['slug' => 'lens-studio', 'type' => $type->slug]), [
         'starts_at' => '2026-07-06T10:00:00+00:00',
@@ -99,8 +97,7 @@ it('lets a client book an open slot and creates a lead contact', function () {
 
     $meeting = Meeting::withoutGlobalScopes()->first();
     expect($meeting)->not->toBeNull()
-        ->and($meeting->status)->toBe('confirmed')
-        ->and($meeting->price_cents)->toBe(5000);
+        ->and($meeting->status)->toBe('confirmed');
 
     $contact = Contact::withoutGlobalScopes()->where('email', 'dana@example.com')->first();
     expect($contact)->not->toBeNull()
@@ -131,7 +128,7 @@ it('rejects booking a slot that is already taken', function () {
         'client_name' => 'X', 'client_email' => 'x@e.com',
         'starts_at' => Carbon::parse('2026-07-06 10:00', 'UTC'),
         'ends_at' => Carbon::parse('2026-07-06 11:00', 'UTC'),
-        'status' => 'confirmed', 'price_cents' => 0, 'currency' => 'usd',
+        'status' => 'confirmed',
     ]);
 
     $this->post(route('meetings.public.store', ['slug' => 'lens-studio', 'type' => $type->slug]), [
@@ -150,7 +147,7 @@ it('lets the studio confirm and decline meetings', function () {
         'client_name' => 'X', 'client_email' => 'x@e.com',
         'starts_at' => Carbon::parse('2026-07-10 10:00', 'UTC'),
         'ends_at' => Carbon::parse('2026-07-10 11:00', 'UTC'),
-        'status' => 'pending', 'price_cents' => 0, 'currency' => 'usd',
+        'status' => 'pending',
     ]);
 
     $this->actingAs($user)->post(route('meetings.confirm', $meeting))->assertRedirect();
@@ -166,8 +163,6 @@ it('creates a meeting type with an auto-generated slug', function () {
     $this->actingAs($user)->post(route('meeting-types.store'), [
         'name' => 'Strategy Session',
         'duration_minutes' => 45,
-        'price_cents' => 0,
-        'currency' => 'usd',
         'location_type' => 'video',
         'video_provider' => 'google_meet',
         'buffer_minutes' => 0,

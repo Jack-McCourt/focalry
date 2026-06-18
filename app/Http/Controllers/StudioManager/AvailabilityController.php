@@ -29,6 +29,11 @@ class AvailabilityController extends Controller
                 'connected' => (bool) $studio?->googleCalendarConnected(),
                 'email' => $studio?->google_calendar_email,
             ],
+            'zoom' => [
+                'connected' => (bool) $studio?->zoomConnected(),
+                'email' => $studio?->zoom_email,
+                'configured' => (bool) config('services.zoom.client_id'),
+            ],
         ]);
     }
 

@@ -16,6 +16,7 @@ use App\Http\Controllers\Public\PublicMeetingController;
 use App\Http\Controllers\Public\PublicSiteController;
 use App\Http\Controllers\Settings\GoogleCalendarController;
 use App\Http\Controllers\Settings\StudioSettingsController;
+use App\Http\Controllers\Settings\ZoomController;
 use App\Http\Controllers\Stripe\ConnectController;
 use App\Http\Controllers\Stripe\PublicInvoiceController;
 use App\Http\Controllers\StudioManager\AvailabilityController;
@@ -135,6 +136,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('settings/google-calendar/connect', [GoogleCalendarController::class, 'connect'])->name('google-calendar.connect');
     Route::get('settings/google-calendar/callback', [GoogleCalendarController::class, 'callback'])->name('google-calendar.callback');
     Route::delete('settings/google-calendar', [GoogleCalendarController::class, 'disconnect'])->name('google-calendar.disconnect');
+
+    // Zoom connection (per studio) — auto-creates Zoom links for video meetings
+    Route::get('settings/zoom/connect', [ZoomController::class, 'connect'])->name('zoom.connect');
+    Route::get('settings/zoom/callback', [ZoomController::class, 'callback'])->name('zoom.callback');
+    Route::delete('settings/zoom', [ZoomController::class, 'disconnect'])->name('zoom.disconnect');
 
     // Website builder (studio's marketing site + lead capture)
     Route::get('website', [SiteController::class, 'edit'])->name('website.edit');

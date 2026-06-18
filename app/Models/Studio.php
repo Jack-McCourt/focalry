@@ -31,6 +31,8 @@ class Studio extends Model
         'email_signature',
         'google_calendar',
         'google_calendar_email',
+        'zoom',
+        'zoom_email',
         'plan',
         'commission_rate',
         'storage_used',
@@ -46,6 +48,7 @@ class Studio extends Model
             'storage_used' => 'integer',
             'invoice_settings' => 'array',
             'google_calendar' => 'array',
+            'zoom' => 'array',
             'trial_ends_at' => 'datetime',
         ];
     }
@@ -53,6 +56,11 @@ class Studio extends Model
     public function googleCalendarConnected(): bool
     {
         return ! empty($this->google_calendar['refresh_token'] ?? null);
+    }
+
+    public function zoomConnected(): bool
+    {
+        return ! empty($this->zoom['refresh_token'] ?? null);
     }
 
     /**

@@ -4,7 +4,7 @@ namespace App\Http\Controllers\StudioManager;
 
 use App\Http\Controllers\Controller;
 use App\Models\Meeting;
-use App\Services\GoogleCalendarService;
+use App\Services\MeetingScheduler;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -43,26 +43,26 @@ class MeetingController extends Controller
         ]);
     }
 
-    public function confirm(Meeting $meeting, GoogleCalendarService $calendar): RedirectResponse
+    public function confirm(Meeting $meeting, MeetingScheduler $scheduler): RedirectResponse
     {
         $meeting->update(['status' => 'confirmed']);
-        $calendar->syncMeeting($meeting);
+        $scheduler->sync($meeting);
 
         return back()->with('success', 'Meeting confirmed.');
     }
 
-    public function decline(Meeting $meeting, GoogleCalendarService $calendar): RedirectResponse
+    public function decline(Meeting $meeting, MeetingScheduler $scheduler): RedirectResponse
     {
         $meeting->update(['status' => 'declined']);
-        $calendar->removeMeeting($meeting);
+        $scheduler->cancel($meeting);
 
         return back()->with('success', 'Meeting declined.');
     }
 
-    public function cancel(Meeting $meeting, GoogleCalendarService $calendar): RedirectResponse
+    public function cancel(Meeting $meeting, MeetingScheduler $scheduler): RedirectResponse
     {
         $meeting->update(['status' => 'cancelled']);
-        $calendar->removeMeeting($meeting);
+        $scheduler->cancel($meeting);
 
         return back()->with('success', 'Meeting cancelled.');
     }
@@ -78,8 +78,6 @@ class MeetingController extends Controller
             'starts_at' => $m->starts_at->toIso8601String(),
             'ends_at' => $m->ends_at->toIso8601String(),
             'status' => $m->status,
-            'price_cents' => $m->price_cents,
-            'currency' => $m->currency,
             'location' => $m->location,
             'notes' => $m->notes,
             'meeting_url' => $m->meeting_url,

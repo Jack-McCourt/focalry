@@ -15,13 +15,20 @@ interface CalendarState {
     email: string | null;
 }
 
+interface ZoomState {
+    connected: boolean;
+    email: string | null;
+    configured: boolean;
+}
+
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export default function Availability({
     rules,
     timezone,
     calendar,
-}: PageProps<{ rules: Rule[]; timezone: string; calendar: CalendarState }>) {
+    zoom,
+}: PageProps<{ rules: Rule[]; timezone: string; calendar: CalendarState; zoom: ZoomState }>) {
     const { data, setData, patch, processing, recentlySuccessful } = useForm<{ rules: Rule[] }>({ rules });
 
     const addWindow = (dow: number) =>
@@ -71,6 +78,34 @@ export default function Availability({
                     ) : (
                         <a href={route('google-calendar.connect')} className="btn-primary px-3 py-1.5 text-xs">Connect</a>
                     )}
+                </div>
+
+                {/* Zoom connection */}
+                <div className="mb-6 flex max-w-2xl flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4">
+                    <div className="flex items-center gap-3">
+                        <svg className="h-6 w-6 text-neutral-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" /></svg>
+                        <div>
+                            <p className="text-sm font-medium text-neutral-900">Zoom</p>
+                            {!zoom.configured ? (
+                                <p className="text-xs text-neutral-500">Zoom isn’t configured on the server yet (ZOOM_CLIENT_ID/SECRET).</p>
+                            ) : zoom.connected ? (
+                                <p className="text-xs text-emerald-600">Connected{zoom.email ? ` · ${zoom.email}` : ''} — video meetings set to Zoom get a Zoom link automatically.</p>
+                            ) : (
+                                <p className="text-xs text-neutral-500">Connect to auto-create Zoom links for meeting types set to Zoom.</p>
+                            )}
+                        </div>
+                    </div>
+                    {zoom.configured && (zoom.connected ? (
+                        <button
+                            type="button"
+                            onClick={() => confirm('Disconnect Zoom? New Zoom meetings will no longer be created automatically.') && router.delete(route('zoom.disconnect'))}
+                            className="btn-secondary px-3 py-1.5 text-xs"
+                        >
+                            Disconnect
+                        </button>
+                    ) : (
+                        <a href={route('zoom.connect')} className="btn-primary px-3 py-1.5 text-xs">Connect</a>
+                    ))}
                 </div>
 
                 <form onSubmit={submit} className="max-w-2xl">

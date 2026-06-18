@@ -2,8 +2,6 @@ import MeetingsSubNav from '@/Components/MeetingsSubNav';
 import Modal from '@/Components/Modal';
 import StudioManagerNav from '@/Components/StudioManagerNav';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { CURRENCIES } from '@/lib/currencies';
-import { centsToInput, formatMoney, toCents } from '@/lib/money';
 import { PageProps } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
@@ -14,8 +12,6 @@ interface MeetingType {
     slug: string;
     description: string | null;
     duration_minutes: number;
-    price_cents: number;
-    currency: string;
     location_type: 'video' | 'phone' | 'in_person';
     location: string | null;
     video_provider: 'google_meet' | 'zoom';
@@ -36,10 +32,10 @@ const LOCATION_LABELS: Record<string, string> = {
 
 export default function MeetingTypes({
     meetingTypes,
-    default_currency,
     booking_base_url,
     calendar_connected,
-}: PageProps<{ meetingTypes: MeetingType[]; default_currency: string; booking_base_url: string; calendar_connected: boolean }>) {
+    zoom_connected,
+}: PageProps<{ meetingTypes: MeetingType[]; booking_base_url: string; calendar_connected: boolean; zoom_connected: boolean }>) {
     const [editing, setEditing] = useState<MeetingType | null>(null);
     const [creating, setCreating] = useState(false);
     const [copied, setCopied] = useState(false);
@@ -101,7 +97,6 @@ export default function MeetingTypes({
                                 <p className="mt-1 text-xs text-neutral-500">
                                     {t.duration_minutes} min · {LOCATION_LABELS[t.location_type]}
                                     {t.location_type === 'video' ? ` (${t.video_provider === 'zoom' ? 'Zoom' : 'Google Meet'})` : ''}
-                                    {t.price_cents > 0 ? ` · ${formatMoney(t.price_cents, t.currency)}` : ' · Free'}
                                 </p>
                                 <p className="mt-2 text-[11px] text-neutral-400">
                                     {t.meetings_count} meeting{t.meetings_count === 1 ? '' : 's'}
@@ -113,8 +108,8 @@ export default function MeetingTypes({
                 )}
             </div>
 
-            {creating && <MeetingTypeModal onClose={() => setCreating(false)} defaultCurrency={default_currency} />}
-            {editing && <MeetingTypeModal onClose={() => setEditing(null)} meetingType={editing} defaultCurrency={default_currency} />}
+            {creating && <MeetingTypeModal onClose={() => setCreating(false)} zoomConnected={zoom_connected} />}
+            {editing && <MeetingTypeModal onClose={() => setEditing(null)} meetingType={editing} zoomConnected={zoom_connected} />}
         </AuthenticatedLayout>
     );
 }
@@ -122,19 +117,17 @@ export default function MeetingTypes({
 function MeetingTypeModal({
     onClose,
     meetingType,
-    defaultCurrency,
+    zoomConnected,
 }: {
     onClose: () => void;
     meetingType?: MeetingType;
-    defaultCurrency: string;
+    zoomConnected: boolean;
 }) {
     const isEdit = !!meetingType;
     const { data, setData, post, patch, processing, errors, transform } = useForm({
         name: meetingType?.name ?? '',
         description: meetingType?.description ?? '',
         duration_minutes: meetingType?.duration_minutes ?? 30,
-        price: meetingType ? centsToInput(meetingType.price_cents) : '0.00',
-        currency: meetingType?.currency ?? defaultCurrency,
         location_type: meetingType?.location_type ?? 'video',
         location: meetingType?.location ?? '',
         video_provider: meetingType?.video_provider ?? 'google_meet',
@@ -148,7 +141,6 @@ function MeetingTypeModal({
 
     transform((d) => ({
         ...d,
-        price_cents: toCents(d.price),
         max_per_day: d.max_per_day === '' ? null : Number(d.max_per_day),
     }));
 
@@ -224,22 +216,11 @@ function MeetingTypeModal({
 
                 {data.location_type === 'video' && data.video_provider === 'zoom' && (
                     <p className="-mt-2 text-xs text-neutral-400">
-                        Automatic Zoom links aren’t available yet — the meeting will be scheduled and you can add the Zoom link to the invite manually. Google Meet links are generated automatically.
+                        {zoomConnected
+                            ? 'A Zoom link is created automatically when a meeting is confirmed.'
+                            : 'Connect Zoom on the Availability tab to auto-create links. Until then the meeting is scheduled without a Zoom link.'}
                     </p>
                 )}
-
-                <div className="grid grid-cols-2 gap-3">
-                    <div>
-                        <span className="label">Price</span>
-                        <input className={field} value={data.price} onChange={(e) => setData('price', e.target.value)} placeholder="0.00" />
-                    </div>
-                    <div>
-                        <span className="label">Currency</span>
-                        <select className={field} value={data.currency} onChange={(e) => setData('currency', e.target.value)}>
-                            {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
-                        </select>
-                    </div>
-                </div>
 
                 <div className="grid grid-cols-3 gap-3">
                     <div>

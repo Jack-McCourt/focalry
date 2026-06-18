@@ -27,14 +27,14 @@ function meetingFor(Studio $studio, string $locationType = 'video', string $prov
 {
     $type = MeetingType::create([
         'studio_id' => $studio->id, 'name' => 'Consult', 'duration_minutes' => 30,
-        'price_cents' => 0, 'currency' => 'usd', 'location_type' => $locationType, 'video_provider' => $provider, 'buffer_minutes' => 0, 'min_lead_hours' => 0,
+        'location_type' => $locationType, 'video_provider' => $provider, 'buffer_minutes' => 0, 'min_lead_hours' => 0,
     ]);
 
     return Meeting::create([
         'studio_id' => $studio->id, 'meeting_type_id' => $type->id,
         'client_name' => 'Dana Lee', 'client_email' => 'dana@example.com',
         'starts_at' => now()->addDays(3), 'ends_at' => now()->addDays(3)->addMinutes(30),
-        'status' => 'confirmed', 'price_cents' => 0, 'currency' => 'usd',
+        'status' => 'confirmed',
     ]);
 }
 

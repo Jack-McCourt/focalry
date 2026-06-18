@@ -21,14 +21,14 @@ function confirmedMeeting(Carbon $startsAt): Meeting
     app()->instance('current.studio.id', $studio->id);
     $type = MeetingType::create([
         'studio_id' => $studio->id, 'name' => 'Discovery Call', 'duration_minutes' => 30,
-        'price_cents' => 0, 'currency' => 'usd', 'location_type' => 'video', 'video_provider' => 'google_meet', 'buffer_minutes' => 0, 'min_lead_hours' => 0,
+        'location_type' => 'video', 'video_provider' => 'google_meet', 'buffer_minutes' => 0, 'min_lead_hours' => 0,
     ]);
 
     return Meeting::create([
         'studio_id' => $studio->id, 'meeting_type_id' => $type->id,
         'client_name' => 'Dana Lee', 'client_email' => 'dana@example.com',
         'starts_at' => $startsAt, 'ends_at' => $startsAt->copy()->addMinutes(30),
-        'status' => 'confirmed', 'price_cents' => 0, 'currency' => 'usd',
+        'status' => 'confirmed',
     ]);
 }
 

@@ -1,4 +1,3 @@
-import { formatMoney } from '@/lib/money';
 import { Head, Link, useForm } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 
@@ -13,8 +12,6 @@ interface MeetingTypeRef {
     name: string;
     description: string | null;
     duration_minutes: number;
-    price_cents: number;
-    currency: string;
     location_type: 'video' | 'phone' | 'in_person';
     location: string | null;
     video_provider: 'google_meet' | 'zoom';
@@ -74,7 +71,6 @@ export default function Book({
                     <h1 className="text-2xl font-semibold text-neutral-900">{meetingType.name}</h1>
                     <p className="mt-1 text-sm text-neutral-500">
                         {meetingType.duration_minutes} min · {LOCATION_LABELS[meetingType.location_type]}
-                        {meetingType.price_cents > 0 ? ` · ${formatMoney(meetingType.price_cents, meetingType.currency)}` : ' · Free'}
                         {meetingType.location ? ` · ${meetingType.location}` : ''}
                     </p>
                     {meetingType.description && <p className="mt-3 text-sm text-neutral-600">{meetingType.description}</p>}

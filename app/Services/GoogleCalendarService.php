@@ -39,16 +39,25 @@ class GoogleCalendarService
         // Only Google Meet auto-generates a link; Zoom links are added separately.
         $wantsMeet = $type?->location_type === 'video' && ($type->video_provider ?? 'google_meet') === 'google_meet';
 
+        // For non-Meet video meetings (e.g. Zoom), surface the join link in the
+        // invite so both parties get it.
+        $description = collect([
+            $meeting->notes ?: null,
+            (! $wantsMeet && $meeting->meeting_url) ? "Join: {$meeting->meeting_url}" : null,
+        ])->filter()->implode("\n\n") ?: null;
+
         $payload = [
             'summary' => trim(($type?->name ?? 'Meeting').' — '.$meeting->client_name),
-            'description' => $meeting->notes ?: null,
+            'description' => $description,
             'start' => ['dateTime' => $meeting->starts_at->toRfc3339String(), 'timeZone' => config('app.timezone')],
             'end' => ['dateTime' => $meeting->ends_at->toRfc3339String(), 'timeZone' => config('app.timezone')],
             // Inviting the client as an attendee makes Google email them the invite.
             'attendees' => [['email' => $meeting->client_email, 'displayName' => $meeting->client_name]],
         ];
 
-        if ($meeting->location) {
+        if (! $wantsMeet && $meeting->meeting_url) {
+            $payload['location'] = $meeting->meeting_url;
+        } elseif ($meeting->location) {
             $payload['location'] = $meeting->location;
         }
 

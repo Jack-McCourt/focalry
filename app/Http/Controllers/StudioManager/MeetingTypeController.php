@@ -4,7 +4,6 @@ namespace App\Http\Controllers\StudioManager;
 
 use App\Http\Controllers\Controller;
 use App\Models\MeetingType;
-use App\Support\Currencies;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -19,9 +18,9 @@ class MeetingTypeController extends Controller
 
         return Inertia::render('Meetings/MeetingTypes', [
             'meetingTypes' => MeetingType::orderBy('name')->withCount('meetings')->get(),
-            'default_currency' => $studio?->default_currency ?? 'usd',
             'booking_base_url' => url('/book/'.($studio?->slug ?? '')),
             'calendar_connected' => (bool) $studio?->googleCalendarConnected(),
+            'zoom_connected' => (bool) $studio?->zoomConnected(),
         ]);
     }
 
@@ -53,8 +52,6 @@ class MeetingTypeController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:5000',
             'duration_minutes' => 'required|integer|min:5|max:1440',
-            'price_cents' => 'required|integer|min:0',
-            'currency' => ['required', 'string', Rule::in(Currencies::codes())],
             'location_type' => ['required', Rule::in(['video', 'phone', 'in_person'])],
             'location' => 'nullable|string|max:255',
             'video_provider' => ['required', Rule::in(['google_meet', 'zoom'])],
