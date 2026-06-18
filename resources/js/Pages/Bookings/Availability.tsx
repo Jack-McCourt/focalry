@@ -2,7 +2,7 @@ import BookingsSubNav from '@/Components/BookingsSubNav';
 import StudioManagerNav from '@/Components/StudioManagerNav';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 
 interface Rule {
     day_of_week: number;
@@ -10,12 +10,18 @@ interface Rule {
     end_time: string;
 }
 
+interface CalendarState {
+    connected: boolean;
+    email: string | null;
+}
+
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export default function Availability({
     rules,
     timezone,
-}: PageProps<{ rules: Rule[]; timezone: string }>) {
+    calendar,
+}: PageProps<{ rules: Rule[]; timezone: string; calendar: CalendarState }>) {
     const { data, setData, patch, processing, recentlySuccessful } = useForm<{ rules: Rule[] }>({ rules });
 
     const dayRules = (dow: number) => data.rules.filter((r) => r.day_of_week === dow);
@@ -43,6 +49,32 @@ export default function Availability({
             <BookingsSubNav active="availability" />
 
             <div className="px-4 py-6 sm:px-8">
+                {/* Google Calendar connection */}
+                <div className="mb-6 flex max-w-2xl flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4">
+                    <div className="flex items-center gap-3">
+                        <svg className="h-6 w-6 text-neutral-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
+                        <div>
+                            <p className="text-sm font-medium text-neutral-900">Google Calendar</p>
+                            {calendar.connected ? (
+                                <p className="text-xs text-emerald-600">Connected{calendar.email ? ` · ${calendar.email}` : ''} — confirmed bookings sync automatically.</p>
+                            ) : (
+                                <p className="text-xs text-neutral-500">Connect to add confirmed bookings to your calendar and auto-create Meet links for video sessions.</p>
+                            )}
+                        </div>
+                    </div>
+                    {calendar.connected ? (
+                        <button
+                            type="button"
+                            onClick={() => confirm('Disconnect Google Calendar? New bookings will no longer sync.') && router.delete(route('google-calendar.disconnect'))}
+                            className="btn-secondary px-3 py-1.5 text-xs"
+                        >
+                            Disconnect
+                        </button>
+                    ) : (
+                        <a href={route('google-calendar.connect')} className="btn-primary px-3 py-1.5 text-xs">Connect</a>
+                    )}
+                </div>
+
                 <form onSubmit={submit} className="max-w-2xl">
                     <p className="mb-4 text-sm text-neutral-500">
                         Set the hours you accept bookings each week. Open time slots are generated from these hours

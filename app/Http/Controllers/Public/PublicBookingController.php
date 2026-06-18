@@ -7,6 +7,7 @@ use App\Models\Booking;
 use App\Models\Contact;
 use App\Models\SessionType;
 use App\Models\Studio;
+use App\Services\GoogleCalendarService;
 use App\Support\BookingSlots;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -114,6 +115,12 @@ class PublicBookingController extends Controller
                 'notes' => $data['notes'] ?? null,
             ]);
         });
+
+        // Auto-confirmed bookings sync to the studio's calendar immediately
+        // (pending ones sync when the studio confirms them).
+        if ($booking->status === 'confirmed') {
+            app(GoogleCalendarService::class)->syncBooking($booking);
+        }
 
         return redirect()->route('booking.confirmation', ['booking' => $booking->public_id]);
     }

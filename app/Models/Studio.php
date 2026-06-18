@@ -29,6 +29,8 @@ class Studio extends Model
         'default_currency',
         'invoice_settings',
         'email_signature',
+        'google_calendar',
+        'google_calendar_email',
         'plan',
         'commission_rate',
         'storage_used',
@@ -43,8 +45,14 @@ class Studio extends Model
             'commission_rate' => 'integer',
             'storage_used' => 'integer',
             'invoice_settings' => 'array',
+            'google_calendar' => 'array',
             'trial_ends_at' => 'datetime',
         ];
+    }
+
+    public function googleCalendarConnected(): bool
+    {
+        return ! empty($this->google_calendar['refresh_token'] ?? null);
     }
 
     /**

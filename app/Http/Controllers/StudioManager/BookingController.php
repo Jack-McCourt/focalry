@@ -4,6 +4,7 @@ namespace App\Http\Controllers\StudioManager;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
+use App\Services\GoogleCalendarService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -42,23 +43,26 @@ class BookingController extends Controller
         ]);
     }
 
-    public function confirm(Booking $booking): RedirectResponse
+    public function confirm(Booking $booking, GoogleCalendarService $calendar): RedirectResponse
     {
         $booking->update(['status' => 'confirmed']);
+        $calendar->syncBooking($booking);
 
         return back()->with('success', 'Booking confirmed.');
     }
 
-    public function decline(Booking $booking): RedirectResponse
+    public function decline(Booking $booking, GoogleCalendarService $calendar): RedirectResponse
     {
         $booking->update(['status' => 'declined']);
+        $calendar->removeBooking($booking);
 
         return back()->with('success', 'Booking declined.');
     }
 
-    public function cancel(Booking $booking): RedirectResponse
+    public function cancel(Booking $booking, GoogleCalendarService $calendar): RedirectResponse
     {
         $booking->update(['status' => 'cancelled']);
+        $calendar->removeBooking($booking);
 
         return back()->with('success', 'Booking cancelled.');
     }

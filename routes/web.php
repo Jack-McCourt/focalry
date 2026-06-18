@@ -14,6 +14,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public\ContractSigningController;
 use App\Http\Controllers\Public\PublicBookingController;
 use App\Http\Controllers\Public\PublicSiteController;
+use App\Http\Controllers\Settings\GoogleCalendarController;
 use App\Http\Controllers\Settings\StudioSettingsController;
 use App\Http\Controllers\Stripe\ConnectController;
 use App\Http\Controllers\Stripe\PublicInvoiceController;
@@ -129,6 +130,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('availability', [AvailabilityController::class, 'edit'])->name('availability.edit');
     Route::patch('availability', [AvailabilityController::class, 'update'])->name('availability.update');
+
+    // Google Calendar connection (per studio)
+    Route::get('settings/google-calendar/connect', [GoogleCalendarController::class, 'connect'])->name('google-calendar.connect');
+    Route::get('settings/google-calendar/callback', [GoogleCalendarController::class, 'callback'])->name('google-calendar.callback');
+    Route::delete('settings/google-calendar', [GoogleCalendarController::class, 'disconnect'])->name('google-calendar.disconnect');
 
     // Website builder (studio's marketing site + lead capture)
     Route::get('website', [SiteController::class, 'edit'])->name('website.edit');

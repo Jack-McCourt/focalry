@@ -13,6 +13,8 @@ class AvailabilityController extends Controller
 {
     public function edit(): Response
     {
+        $studio = auth()->user()->studio;
+
         return Inertia::render('Bookings/Availability', [
             'rules' => AvailabilityRule::orderBy('day_of_week')->orderBy('start_time')
                 ->get(['id', 'day_of_week', 'start_time', 'end_time'])
@@ -23,6 +25,10 @@ class AvailabilityController extends Controller
                     'end_time' => substr((string) $r->end_time, 0, 5),
                 ]),
             'timezone' => config('app.timezone'),
+            'calendar' => [
+                'connected' => (bool) $studio?->googleCalendarConnected(),
+                'email' => $studio?->google_calendar_email,
+            ],
         ]);
     }
 
