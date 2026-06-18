@@ -1,13 +1,13 @@
 import { Link } from '@inertiajs/react';
 
-type Section = 'contacts' | 'projects' | 'invoices' | 'contracts' | 'bookings';
+type Section = 'contacts' | 'projects' | 'invoices' | 'contracts' | 'meetings';
 
 const SECTIONS: { key: Section; label: string; href: string | null }[] = [
     { key: 'contacts', label: 'Contacts', href: '/contacts' },
     { key: 'projects', label: 'Projects', href: '/projects' },
     { key: 'invoices', label: 'Invoices', href: '/invoices' },
     { key: 'contracts', label: 'Contracts', href: '/contracts' },
-    { key: 'bookings', label: 'Bookings', href: '/bookings' },
+    { key: 'meetings', label: 'Meetings', href: '/meetings' },
 ];
 
 export default function StudioManagerNav({ active }: { active: Section }) {

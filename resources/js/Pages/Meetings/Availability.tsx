@@ -1,4 +1,4 @@
-import BookingsSubNav from '@/Components/BookingsSubNav';
+import MeetingsSubNav from '@/Components/MeetingsSubNav';
 import StudioManagerNav from '@/Components/StudioManagerNav';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
@@ -24,8 +24,6 @@ export default function Availability({
 }: PageProps<{ rules: Rule[]; timezone: string; calendar: CalendarState }>) {
     const { data, setData, patch, processing, recentlySuccessful } = useForm<{ rules: Rule[] }>({ rules });
 
-    const dayRules = (dow: number) => data.rules.filter((r) => r.day_of_week === dow);
-
     const addWindow = (dow: number) =>
         setData('rules', [...data.rules, { day_of_week: dow, start_time: '09:00', end_time: '17:00' }]);
 
@@ -43,10 +41,10 @@ export default function Availability({
     };
 
     return (
-        <AuthenticatedLayout header={<h1 className="text-sm font-semibold text-neutral-900">Bookings</h1>}>
+        <AuthenticatedLayout header={<h1 className="text-sm font-semibold text-neutral-900">Meetings</h1>}>
             <Head title="Availability" />
-            <StudioManagerNav active="bookings" />
-            <BookingsSubNav active="availability" />
+            <StudioManagerNav active="meetings" />
+            <MeetingsSubNav active="availability" />
 
             <div className="px-4 py-6 sm:px-8">
                 {/* Google Calendar connection */}
@@ -56,16 +54,16 @@ export default function Availability({
                         <div>
                             <p className="text-sm font-medium text-neutral-900">Google Calendar</p>
                             {calendar.connected ? (
-                                <p className="text-xs text-emerald-600">Connected{calendar.email ? ` · ${calendar.email}` : ''} — confirmed bookings sync automatically.</p>
+                                <p className="text-xs text-emerald-600">Connected{calendar.email ? ` · ${calendar.email}` : ''} — confirmed meetings sync and invite both parties automatically.</p>
                             ) : (
-                                <p className="text-xs text-neutral-500">Connect to add confirmed bookings to your calendar and auto-create Meet links for video sessions.</p>
+                                <p className="text-xs text-neutral-500">Connect to add confirmed meetings to your calendar, email invites to both parties, and auto-create Google Meet links.</p>
                             )}
                         </div>
                     </div>
                     {calendar.connected ? (
                         <button
                             type="button"
-                            onClick={() => confirm('Disconnect Google Calendar? New bookings will no longer sync.') && router.delete(route('google-calendar.disconnect'))}
+                            onClick={() => confirm('Disconnect Google Calendar? New meetings will no longer sync.') && router.delete(route('google-calendar.disconnect'))}
                             className="btn-secondary px-3 py-1.5 text-xs"
                         >
                             Disconnect
@@ -77,8 +75,8 @@ export default function Availability({
 
                 <form onSubmit={submit} className="max-w-2xl">
                     <p className="mb-4 text-sm text-neutral-500">
-                        Set the hours you accept bookings each week. Open time slots are generated from these hours
-                        minus existing bookings. Times are in <span className="font-medium text-neutral-700">{timezone}</span>.
+                        Set the hours you accept meetings each week. Open time slots are generated from these hours
+                        minus existing meetings. Times are in <span className="font-medium text-neutral-700">{timezone}</span>.
                     </p>
 
                     <div className="divide-y divide-neutral-100 rounded-xl border border-neutral-200 bg-white">

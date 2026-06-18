@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 
-class Booking extends Model
+class Meeting extends Model
 {
     use BelongsToStudio, HasFactory;
 
@@ -17,7 +17,7 @@ class Booking extends Model
 
     protected $fillable = [
         'studio_id',
-        'session_type_id',
+        'meeting_type_id',
         'contact_id',
         'public_id',
         'client_name',
@@ -47,16 +47,16 @@ class Booking extends Model
 
     protected static function booted(): void
     {
-        static::creating(function (Booking $booking) {
-            if (empty($booking->public_id)) {
-                $booking->public_id = (string) Str::uuid();
+        static::creating(function (Meeting $meeting) {
+            if (empty($meeting->public_id)) {
+                $meeting->public_id = (string) Str::uuid();
             }
         });
     }
 
-    public function sessionType(): BelongsTo
+    public function meetingType(): BelongsTo
     {
-        return $this->belongsTo(SessionType::class);
+        return $this->belongsTo(MeetingType::class);
     }
 
     public function contact(): BelongsTo

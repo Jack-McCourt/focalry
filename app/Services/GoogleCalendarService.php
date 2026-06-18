@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\Booking;
+use App\Models\Meeting;
 use App\Models\Studio;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
  * Thin wrapper over the Google Calendar REST API. Uses the per-studio OAuth
  * token stored on Studio::$google_calendar, refreshing the access token as
  * needed. All failures are logged and swallowed — calendar sync must never
- * break the booking flow.
+ * break the meeting flow.
  */
 class GoogleCalendarService
 {
@@ -21,10 +21,10 @@ class GoogleCalendarService
 
     private const API = 'https://www.googleapis.com/calendar/v3';
 
-    /** Create (or recreate) the calendar event for a booking and store its id + Meet link. */
-    public function syncBooking(Booking $booking): void
+    /** Create (or recreate) the calendar event for a meeting and store its id + Meet link. */
+    public function syncMeeting(Meeting $meeting): void
     {
-        $studio = Studio::find($booking->studio_id);
+        $studio = Studio::find($meeting->studio_id);
         if (! $studio?->googleCalendarConnected()) {
             return;
         }
@@ -35,18 +35,21 @@ class GoogleCalendarService
         }
 
         $calendarId = $studio->google_calendar['calendar_id'] ?? 'primary';
-        $wantsMeet = $booking->sessionType?->location_type === 'video';
+        $type = $meeting->meetingType;
+        // Only Google Meet auto-generates a link; Zoom links are added separately.
+        $wantsMeet = $type?->location_type === 'video' && ($type->video_provider ?? 'google_meet') === 'google_meet';
 
         $payload = [
-            'summary' => trim(($booking->sessionType?->name ?? 'Session').' — '.$booking->client_name),
-            'description' => $booking->notes ?: null,
-            'start' => ['dateTime' => $booking->starts_at->toRfc3339String(), 'timeZone' => config('app.timezone')],
-            'end' => ['dateTime' => $booking->ends_at->toRfc3339String(), 'timeZone' => config('app.timezone')],
-            'attendees' => [['email' => $booking->client_email, 'displayName' => $booking->client_name]],
+            'summary' => trim(($type?->name ?? 'Meeting').' — '.$meeting->client_name),
+            'description' => $meeting->notes ?: null,
+            'start' => ['dateTime' => $meeting->starts_at->toRfc3339String(), 'timeZone' => config('app.timezone')],
+            'end' => ['dateTime' => $meeting->ends_at->toRfc3339String(), 'timeZone' => config('app.timezone')],
+            // Inviting the client as an attendee makes Google email them the invite.
+            'attendees' => [['email' => $meeting->client_email, 'displayName' => $meeting->client_name]],
         ];
 
-        if ($booking->location) {
-            $payload['location'] = $booking->location;
+        if ($meeting->location) {
+            $payload['location'] = $meeting->location;
         }
 
         if ($wantsMeet) {
@@ -59,34 +62,36 @@ class GoogleCalendarService
         }
 
         try {
-            $existing = $booking->google_event_id;
+            $existing = $meeting->google_event_id;
             $base = Http::withToken($token)->acceptJson();
+            // sendUpdates=all → Google emails the invite/update to both parties.
+            $query = 'conferenceDataVersion=1&sendUpdates=all';
 
             $response = $existing
-                ? $base->put(self::API."/calendars/{$calendarId}/events/{$existing}?conferenceDataVersion=1", $payload)
-                : $base->post(self::API."/calendars/{$calendarId}/events?conferenceDataVersion=1", $payload);
+                ? $base->put(self::API."/calendars/{$calendarId}/events/{$existing}?{$query}", $payload)
+                : $base->post(self::API."/calendars/{$calendarId}/events?{$query}", $payload);
 
             if ($response->failed()) {
-                Log::warning('Google Calendar sync failed', ['booking' => $booking->id, 'body' => $response->body()]);
+                Log::warning('Google Calendar sync failed', ['meeting' => $meeting->id, 'body' => $response->body()]);
 
                 return;
             }
 
             $event = $response->json();
-            $booking->forceFill([
+            $meeting->forceFill([
                 'google_event_id' => $event['id'] ?? $existing,
-                'meeting_url' => $event['hangoutLink'] ?? $booking->meeting_url,
+                'meeting_url' => $event['hangoutLink'] ?? $meeting->meeting_url,
             ])->saveQuietly();
         } catch (\Throwable $e) {
-            Log::warning('Google Calendar sync error', ['booking' => $booking->id, 'error' => $e->getMessage()]);
+            Log::warning('Google Calendar sync error', ['meeting' => $meeting->id, 'error' => $e->getMessage()]);
         }
     }
 
-    /** Remove the calendar event for a booking, if one exists. */
-    public function removeBooking(Booking $booking): void
+    /** Remove the calendar event for a meeting, if one exists. */
+    public function removeMeeting(Meeting $meeting): void
     {
-        $studio = Studio::find($booking->studio_id);
-        if (! $studio?->googleCalendarConnected() || ! $booking->google_event_id) {
+        $studio = Studio::find($meeting->studio_id);
+        if (! $studio?->googleCalendarConnected() || ! $meeting->google_event_id) {
             return;
         }
 
@@ -98,10 +103,10 @@ class GoogleCalendarService
         $calendarId = $studio->google_calendar['calendar_id'] ?? 'primary';
 
         try {
-            Http::withToken($token)->delete(self::API."/calendars/{$calendarId}/events/{$booking->google_event_id}");
-            $booking->forceFill(['google_event_id' => null])->saveQuietly();
+            Http::withToken($token)->delete(self::API."/calendars/{$calendarId}/events/{$meeting->google_event_id}?sendUpdates=all");
+            $meeting->forceFill(['google_event_id' => null])->saveQuietly();
         } catch (\Throwable $e) {
-            Log::warning('Google Calendar delete error', ['booking' => $booking->id, 'error' => $e->getMessage()]);
+            Log::warning('Google Calendar delete error', ['meeting' => $meeting->id, 'error' => $e->getMessage()]);
         }
     }
 

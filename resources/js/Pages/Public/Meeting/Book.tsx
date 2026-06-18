@@ -8,31 +8,32 @@ interface StudioRef {
     logo_url: string | null;
 }
 
-interface SessionTypeRef {
+interface MeetingTypeRef {
     slug: string;
     name: string;
     description: string | null;
     duration_minutes: number;
     price_cents: number;
     currency: string;
-    location_type: 'in_person' | 'phone' | 'video';
+    location_type: 'video' | 'phone' | 'in_person';
     location: string | null;
+    video_provider: 'google_meet' | 'zoom';
     color: string | null;
 }
 
 const LOCATION_LABELS: Record<string, string> = {
-    in_person: 'In person',
-    phone: 'Phone call',
     video: 'Video call',
+    phone: 'Phone call',
+    in_person: 'In person',
 };
 
 export default function Book({
     studio,
-    sessionType,
+    meetingType,
     slots,
 }: {
     studio: StudioRef;
-    sessionType: SessionTypeRef;
+    meetingType: MeetingTypeRef;
     slots: Record<string, string[]>;
 }) {
     const dates = useMemo(() => Object.keys(slots).sort(), [slots]);
@@ -54,7 +55,7 @@ export default function Book({
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-        post(route('booking.store', { slug: studio.slug, type: sessionType.slug }));
+        post(route('meetings.public.store', { slug: studio.slug, type: meetingType.slug }));
     };
 
     const fmtDate = (d: string) =>
@@ -65,18 +66,18 @@ export default function Book({
 
     return (
         <div className="min-h-screen bg-neutral-50">
-            <Head title={`Book ${sessionType.name}`} />
+            <Head title={`Book ${meetingType.name}`} />
             <div className="mx-auto max-w-2xl px-4 py-12">
-                <Link href={route('booking.studio', studio.slug)} className="text-sm text-neutral-400 hover:text-neutral-700">← All sessions</Link>
+                <Link href={route('meetings.public.studio', studio.slug)} className="text-sm text-neutral-400 hover:text-neutral-700">← All meetings</Link>
 
                 <div className="mt-3 mb-6">
-                    <h1 className="text-2xl font-semibold text-neutral-900">{sessionType.name}</h1>
+                    <h1 className="text-2xl font-semibold text-neutral-900">{meetingType.name}</h1>
                     <p className="mt-1 text-sm text-neutral-500">
-                        {sessionType.duration_minutes} min · {LOCATION_LABELS[sessionType.location_type]}
-                        {sessionType.price_cents > 0 ? ` · ${formatMoney(sessionType.price_cents, sessionType.currency)}` : ' · Free'}
-                        {sessionType.location ? ` · ${sessionType.location}` : ''}
+                        {meetingType.duration_minutes} min · {LOCATION_LABELS[meetingType.location_type]}
+                        {meetingType.price_cents > 0 ? ` · ${formatMoney(meetingType.price_cents, meetingType.currency)}` : ' · Free'}
+                        {meetingType.location ? ` · ${meetingType.location}` : ''}
                     </p>
-                    {sessionType.description && <p className="mt-3 text-sm text-neutral-600">{sessionType.description}</p>}
+                    {meetingType.description && <p className="mt-3 text-sm text-neutral-600">{meetingType.description}</p>}
                 </div>
 
                 {dates.length === 0 ? (

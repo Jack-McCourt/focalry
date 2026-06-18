@@ -27,7 +27,7 @@ const modules = [
     },
     {
         name: 'Studio Manager',
-        description: 'Bookings, invoices, contracts, and CRM.',
+        description: 'Meetings, invoices, contracts, and CRM.',
         href: '#',
         available: false,
         icon: (

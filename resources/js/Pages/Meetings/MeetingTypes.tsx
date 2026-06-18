@@ -1,4 +1,4 @@
-import BookingsSubNav from '@/Components/BookingsSubNav';
+import MeetingsSubNav from '@/Components/MeetingsSubNav';
 import Modal from '@/Components/Modal';
 import StudioManagerNav from '@/Components/StudioManagerNav';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
@@ -8,7 +8,7 @@ import { PageProps } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 
-interface SessionType {
+interface MeetingType {
     id: number;
     name: string;
     slug: string;
@@ -16,29 +16,31 @@ interface SessionType {
     duration_minutes: number;
     price_cents: number;
     currency: string;
-    location_type: 'in_person' | 'phone' | 'video';
+    location_type: 'video' | 'phone' | 'in_person';
     location: string | null;
+    video_provider: 'google_meet' | 'zoom';
     color: string | null;
     buffer_minutes: number;
     min_lead_hours: number;
     max_per_day: number | null;
     manual_approve: boolean;
     active: boolean;
-    bookings_count: number;
+    meetings_count: number;
 }
 
 const LOCATION_LABELS: Record<string, string> = {
-    in_person: 'In person',
-    phone: 'Phone call',
     video: 'Video call',
+    phone: 'Phone call',
+    in_person: 'In person',
 };
 
-export default function SessionTypes({
-    sessionTypes,
+export default function MeetingTypes({
+    meetingTypes,
     default_currency,
     booking_base_url,
-}: PageProps<{ sessionTypes: SessionType[]; default_currency: string; booking_base_url: string }>) {
-    const [editing, setEditing] = useState<SessionType | null>(null);
+    calendar_connected,
+}: PageProps<{ meetingTypes: MeetingType[]; default_currency: string; booking_base_url: string; calendar_connected: boolean }>) {
+    const [editing, setEditing] = useState<MeetingType | null>(null);
     const [creating, setCreating] = useState(false);
     const [copied, setCopied] = useState(false);
 
@@ -49,15 +51,15 @@ export default function SessionTypes({
     };
 
     return (
-        <AuthenticatedLayout header={<h1 className="text-sm font-semibold text-neutral-900">Bookings</h1>}>
-            <Head title="Session types" />
-            <StudioManagerNav active="bookings" />
-            <BookingsSubNav active="session-types" />
+        <AuthenticatedLayout header={<h1 className="text-sm font-semibold text-neutral-900">Meetings</h1>}>
+            <Head title="Meeting types" />
+            <StudioManagerNav active="meetings" />
+            <MeetingsSubNav active="meeting-types" />
 
             <div className="px-4 py-6 sm:px-8">
                 <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4">
                     <div className="min-w-0">
-                        <p className="text-xs font-medium text-neutral-500">Your public booking page</p>
+                        <p className="text-xs font-medium text-neutral-500">Your public booking link</p>
                         <p className="truncate text-sm text-neutral-800">{booking_base_url}</p>
                     </div>
                     <div className="flex gap-2">
@@ -66,35 +68,43 @@ export default function SessionTypes({
                     </div>
                 </div>
 
+                {!calendar_connected && (
+                    <div className="mb-5 rounded-lg bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
+                        Google Calendar isn't connected — video links and calendar invites won't be sent automatically.
+                        Connect it on the <a href={route('availability.edit')} className="font-medium underline">Availability</a> tab.
+                    </div>
+                )}
+
                 <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-sm font-semibold text-neutral-900">Session types</h2>
-                    <button onClick={() => setCreating(true)} className="btn-primary">New session type</button>
+                    <h2 className="text-sm font-semibold text-neutral-900">Meeting types</h2>
+                    <button onClick={() => setCreating(true)} className="btn-primary">New meeting type</button>
                 </div>
 
-                {sessionTypes.length === 0 ? (
+                {meetingTypes.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-neutral-200 py-16 text-center">
-                        <p className="text-sm font-medium text-neutral-700">No session types yet</p>
-                        <p className="mt-1 text-sm text-neutral-400">Create one so clients can book it on your page.</p>
+                        <p className="text-sm font-medium text-neutral-700">No meeting types yet</p>
+                        <p className="mt-1 text-sm text-neutral-400">Create one (e.g. “Discovery call”) so clients can book a time with you.</p>
                     </div>
                 ) : (
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {sessionTypes.map((t) => (
+                        {meetingTypes.map((t) => (
                             <button
                                 key={t.id}
                                 onClick={() => setEditing(t)}
                                 className="rounded-xl border border-neutral-200 bg-white p-4 text-left transition hover:border-neutral-300 hover:shadow-sm"
                             >
                                 <div className="flex items-center gap-2">
-                                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: t.color ?? '#a3a3a3' }} />
+                                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: t.color ?? '#6366f1' }} />
                                     <span className="text-sm font-semibold text-neutral-900">{t.name}</span>
                                     {!t.active && <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-500">Hidden</span>}
                                 </div>
                                 <p className="mt-1 text-xs text-neutral-500">
                                     {t.duration_minutes} min · {LOCATION_LABELS[t.location_type]}
+                                    {t.location_type === 'video' ? ` (${t.video_provider === 'zoom' ? 'Zoom' : 'Google Meet'})` : ''}
                                     {t.price_cents > 0 ? ` · ${formatMoney(t.price_cents, t.currency)}` : ' · Free'}
                                 </p>
                                 <p className="mt-2 text-[11px] text-neutral-400">
-                                    {t.bookings_count} booking{t.bookings_count === 1 ? '' : 's'}
+                                    {t.meetings_count} meeting{t.meetings_count === 1 ? '' : 's'}
                                     {t.manual_approve ? ' · Manual approval' : ''}
                                 </p>
                             </button>
@@ -103,36 +113,37 @@ export default function SessionTypes({
                 )}
             </div>
 
-            {creating && <SessionTypeModal onClose={() => setCreating(false)} defaultCurrency={default_currency} />}
-            {editing && <SessionTypeModal onClose={() => setEditing(null)} sessionType={editing} defaultCurrency={default_currency} />}
+            {creating && <MeetingTypeModal onClose={() => setCreating(false)} defaultCurrency={default_currency} />}
+            {editing && <MeetingTypeModal onClose={() => setEditing(null)} meetingType={editing} defaultCurrency={default_currency} />}
         </AuthenticatedLayout>
     );
 }
 
-function SessionTypeModal({
+function MeetingTypeModal({
     onClose,
-    sessionType,
+    meetingType,
     defaultCurrency,
 }: {
     onClose: () => void;
-    sessionType?: SessionType;
+    meetingType?: MeetingType;
     defaultCurrency: string;
 }) {
-    const isEdit = !!sessionType;
+    const isEdit = !!meetingType;
     const { data, setData, post, patch, processing, errors, transform } = useForm({
-        name: sessionType?.name ?? '',
-        description: sessionType?.description ?? '',
-        duration_minutes: sessionType?.duration_minutes ?? 60,
-        price: sessionType ? centsToInput(sessionType.price_cents) : '0.00',
-        currency: sessionType?.currency ?? defaultCurrency,
-        location_type: sessionType?.location_type ?? 'in_person',
-        location: sessionType?.location ?? '',
-        color: sessionType?.color ?? '#6366f1',
-        buffer_minutes: sessionType?.buffer_minutes ?? 0,
-        min_lead_hours: sessionType?.min_lead_hours ?? 24,
-        max_per_day: sessionType?.max_per_day ?? ('' as number | ''),
-        manual_approve: sessionType?.manual_approve ?? false,
-        active: sessionType?.active ?? true,
+        name: meetingType?.name ?? '',
+        description: meetingType?.description ?? '',
+        duration_minutes: meetingType?.duration_minutes ?? 30,
+        price: meetingType ? centsToInput(meetingType.price_cents) : '0.00',
+        currency: meetingType?.currency ?? defaultCurrency,
+        location_type: meetingType?.location_type ?? 'video',
+        location: meetingType?.location ?? '',
+        video_provider: meetingType?.video_provider ?? 'google_meet',
+        color: meetingType?.color ?? '#6366f1',
+        buffer_minutes: meetingType?.buffer_minutes ?? 0,
+        min_lead_hours: meetingType?.min_lead_hours ?? 24,
+        max_per_day: meetingType?.max_per_day ?? ('' as number | ''),
+        manual_approve: meetingType?.manual_approve ?? false,
+        active: meetingType?.active ?? true,
     });
 
     transform((d) => ({
@@ -143,13 +154,13 @@ function SessionTypeModal({
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (isEdit) patch(route('session-types.update', sessionType!.id), { onSuccess: onClose });
-        else post(route('session-types.store'), { onSuccess: onClose });
+        if (isEdit) patch(route('meeting-types.update', meetingType!.id), { onSuccess: onClose });
+        else post(route('meeting-types.store'), { onSuccess: onClose });
     };
 
     const del = () => {
-        if (confirm('Delete this session type? Existing bookings are kept.')) {
-            router.delete(route('session-types.destroy', sessionType!.id), { onSuccess: onClose });
+        if (confirm('Delete this meeting type? Existing meetings are kept.')) {
+            router.delete(route('meeting-types.destroy', meetingType!.id), { onSuccess: onClose });
         }
     };
 
@@ -159,13 +170,13 @@ function SessionTypeModal({
         <Modal show onClose={onClose} maxWidth="lg">
             <form onSubmit={submit} className="space-y-4 p-6">
                 <div className="flex items-center justify-between">
-                    <h2 className="text-sm font-semibold text-neutral-900">{isEdit ? 'Edit session type' : 'New session type'}</h2>
+                    <h2 className="text-sm font-semibold text-neutral-900">{isEdit ? 'Edit meeting type' : 'New meeting type'}</h2>
                     <button type="button" onClick={onClose} className="text-neutral-400 hover:text-neutral-700">✕</button>
                 </div>
 
                 <div>
                     <span className="label">Name</span>
-                    <input className={field} value={data.name} onChange={(e) => setData('name', e.target.value)} placeholder="e.g. Engagement session" />
+                    <input className={field} value={data.name} onChange={(e) => setData('name', e.target.value)} placeholder="e.g. Discovery call" />
                     {errors.name && <p className="mt-1 text-xs text-red-600">{errors.name}</p>}
                 </div>
 
@@ -188,6 +199,37 @@ function SessionTypeModal({
 
                 <div className="grid grid-cols-2 gap-3">
                     <div>
+                        <span className="label">Meeting format</span>
+                        <select className={field} value={data.location_type} onChange={(e) => setData('location_type', e.target.value as MeetingType['location_type'])}>
+                            <option value="video">Video call</option>
+                            <option value="phone">Phone call</option>
+                            <option value="in_person">In person</option>
+                        </select>
+                    </div>
+                    {data.location_type === 'video' ? (
+                        <div>
+                            <span className="label">Video provider</span>
+                            <select className={field} value={data.video_provider} onChange={(e) => setData('video_provider', e.target.value as MeetingType['video_provider'])}>
+                                <option value="google_meet">Google Meet (auto link)</option>
+                                <option value="zoom">Zoom (add link manually)</option>
+                            </select>
+                        </div>
+                    ) : (
+                        <div>
+                            <span className="label">{data.location_type === 'phone' ? 'Phone details' : 'Location'}</span>
+                            <input className={field} value={data.location} onChange={(e) => setData('location', e.target.value)} placeholder={data.location_type === 'phone' ? 'We’ll call you' : 'Studio address'} />
+                        </div>
+                    )}
+                </div>
+
+                {data.location_type === 'video' && data.video_provider === 'zoom' && (
+                    <p className="-mt-2 text-xs text-neutral-400">
+                        Automatic Zoom links aren’t available yet — the meeting will be scheduled and you can add the Zoom link to the invite manually. Google Meet links are generated automatically.
+                    </p>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                    <div>
                         <span className="label">Price</span>
                         <input className={field} value={data.price} onChange={(e) => setData('price', e.target.value)} placeholder="0.00" />
                     </div>
@@ -196,21 +238,6 @@ function SessionTypeModal({
                         <select className={field} value={data.currency} onChange={(e) => setData('currency', e.target.value)}>
                             {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
                         </select>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                    <div>
-                        <span className="label">Location type</span>
-                        <select className={field} value={data.location_type} onChange={(e) => setData('location_type', e.target.value as SessionType['location_type'])}>
-                            <option value="in_person">In person</option>
-                            <option value="phone">Phone call</option>
-                            <option value="video">Video call</option>
-                        </select>
-                    </div>
-                    <div>
-                        <span className="label">Location / details</span>
-                        <input className={field} value={data.location} onChange={(e) => setData('location', e.target.value)} placeholder="Studio address, etc." />
                     </div>
                 </div>
 

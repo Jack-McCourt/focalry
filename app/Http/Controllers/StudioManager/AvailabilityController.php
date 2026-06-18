@@ -15,7 +15,7 @@ class AvailabilityController extends Controller
     {
         $studio = auth()->user()->studio;
 
-        return Inertia::render('Bookings/Availability', [
+        return Inertia::render('Meetings/Availability', [
             'rules' => AvailabilityRule::orderBy('day_of_week')->orderBy('start_time')
                 ->get(['id', 'day_of_week', 'start_time', 'end_time'])
                 ->map(fn (AvailabilityRule $r) => [

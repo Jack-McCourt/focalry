@@ -330,8 +330,8 @@ export default function ProjectDrawer({
                             </div>
                         )}
                     </Section>
-                    <Section title="Bookings">
-                        <p className="text-sm text-neutral-400">Bookings will appear here.</p>
+                    <Section title="Meetings">
+                        <p className="text-sm text-neutral-400">Meetings will appear here.</p>
                     </Section>
                 </div>
             )}

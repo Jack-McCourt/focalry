@@ -3,25 +3,25 @@
 namespace App\Support;
 
 use App\Models\AvailabilityRule;
-use App\Models\Booking;
-use App\Models\SessionType;
+use App\Models\Meeting;
+use App\Models\MeetingType;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 
-class BookingSlots
+class MeetingSlots
 {
     /**
-     * Compute open start times for a session type across a date range.
+     * Compute open start times for a meeting type across a date range.
      *
-     * Slots respect: the studio's weekly availability windows, the session
-     * duration, buffer padding around existing bookings, the minimum lead
+     * Slots respect: the studio's weekly availability windows, the meeting
+     * duration, buffer padding around existing meetings, the minimum lead
      * time, and the per-day cap. Returns a map of "Y-m-d" => list of ISO8601
      * start times (in the app timezone).
      *
      * @return array<string, array<int, string>>
      */
-    public static function forSessionType(SessionType $type, CarbonInterface $from, CarbonInterface $to): array
+    public static function forMeetingType(MeetingType $type, CarbonInterface $from, CarbonInterface $to): array
     {
         $tz = config('app.timezone');
         $now = Carbon::now($tz);
@@ -37,12 +37,12 @@ class BookingSlots
             return [];
         }
 
-        // Existing active bookings in the range, to subtract from availability.
-        $bookings = Booking::withoutGlobalScopes()
+        // Existing active meetings in the range, to subtract from availability.
+        $meetings = Meeting::withoutGlobalScopes()
             ->where('studio_id', $type->studio_id)
-            ->whereIn('status', Booking::ACTIVE_STATUSES)
+            ->whereIn('status', Meeting::ACTIVE_STATUSES)
             ->whereBetween('starts_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
-            ->get(['session_type_id', 'starts_at', 'ends_at']);
+            ->get(['meeting_type_id', 'starts_at', 'ends_at']);
 
         $duration = max(5, $type->duration_minutes);
         $buffer = max(0, $type->buffer_minutes);
@@ -57,11 +57,11 @@ class BookingSlots
 
             if ($windows) {
                 $dayKey = $cursor->format('Y-m-d');
-                $dayBookings = $bookings->filter(fn (Booking $b) => $b->starts_at->copy()->setTimezone($tz)->isSameDay($cursor));
+                $dayMeetings = $meetings->filter(fn (Meeting $m) => $m->starts_at->copy()->setTimezone($tz)->isSameDay($cursor));
 
-                // Per-day cap is counted against this session type only.
+                // Per-day cap is counted against this meeting type only.
                 if ($type->max_per_day !== null) {
-                    $taken = $dayBookings->where('session_type_id', $type->id)->count();
+                    $taken = $dayMeetings->where('meeting_type_id', $type->id)->count();
                     if ($taken >= $type->max_per_day) {
                         $cursor->addDay();
 
@@ -69,7 +69,7 @@ class BookingSlots
                     }
                 }
 
-                $slots = self::slotsForDay($cursor, $windows, $duration, $buffer, $earliest, $dayBookings, $tz);
+                $slots = self::slotsForDay($cursor, $windows, $duration, $buffer, $earliest, $dayMeetings, $tz);
                 if ($slots !== []) {
                     $result[$dayKey] = $slots;
                 }
@@ -83,10 +83,10 @@ class BookingSlots
 
     /**
      * @param  Collection<int, AvailabilityRule>  $windows
-     * @param  Collection<int, Booking>  $dayBookings
+     * @param  Collection<int, Meeting>  $dayMeetings
      * @return array<int, string>
      */
-    private static function slotsForDay(Carbon $day, Collection $windows, int $duration, int $buffer, Carbon $earliest, Collection $dayBookings, string $tz): array
+    private static function slotsForDay(Carbon $day, Collection $windows, int $duration, int $buffer, Carbon $earliest, Collection $dayMeetings, string $tz): array
     {
         $slots = [];
 
@@ -98,7 +98,7 @@ class BookingSlots
             while ($candidate->copy()->addMinutes($duration)->lte($windowEnd)) {
                 $candidateEnd = $candidate->copy()->addMinutes($duration);
 
-                if ($candidate->gte($earliest) && ! self::conflicts($candidate, $candidateEnd, $buffer, $dayBookings, $tz)) {
+                if ($candidate->gte($earliest) && ! self::conflicts($candidate, $candidateEnd, $buffer, $dayMeetings, $tz)) {
                     $slots[] = $candidate->toIso8601String();
                 }
 
@@ -111,14 +111,14 @@ class BookingSlots
         return array_values(array_unique($slots));
     }
 
-    /** @param  Collection<int, Booking>  $dayBookings */
-    private static function conflicts(Carbon $start, Carbon $end, int $buffer, Collection $dayBookings, string $tz): bool
+    /** @param  Collection<int, Meeting>  $dayMeetings */
+    private static function conflicts(Carbon $start, Carbon $end, int $buffer, Collection $dayMeetings, string $tz): bool
     {
-        foreach ($dayBookings as $b) {
-            $bStart = $b->starts_at->copy()->setTimezone($tz)->subMinutes($buffer);
-            $bEnd = $b->ends_at->copy()->setTimezone($tz)->addMinutes($buffer);
+        foreach ($dayMeetings as $m) {
+            $mStart = $m->starts_at->copy()->setTimezone($tz)->subMinutes($buffer);
+            $mEnd = $m->ends_at->copy()->setTimezone($tz)->addMinutes($buffer);
 
-            if ($start->lt($bEnd) && $end->gt($bStart)) {
+            if ($start->lt($mEnd) && $end->gt($mStart)) {
                 return true;
             }
         }

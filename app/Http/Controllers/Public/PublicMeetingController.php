@@ -3,12 +3,12 @@
 namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
-use App\Models\Booking;
 use App\Models\Contact;
-use App\Models\SessionType;
+use App\Models\Meeting;
+use App\Models\MeetingType;
 use App\Models\Studio;
 use App\Services\GoogleCalendarService;
-use App\Support\BookingSlots;
+use App\Support\MeetingSlots;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,7 +17,7 @@ use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
-class PublicBookingController extends Controller
+class PublicMeetingController extends Controller
 {
     /** How far ahead clients can book. */
     private const WINDOW_DAYS = 60;
@@ -26,37 +26,37 @@ class PublicBookingController extends Controller
     {
         $studio = $this->resolveStudio($slug);
 
-        $types = SessionType::withoutGlobalScopes()
+        $types = MeetingType::withoutGlobalScopes()
             ->where('studio_id', $studio->id)
             ->where('active', true)
             ->orderBy('name')
             ->get();
 
-        return Inertia::render('Public/Booking/Studio', [
+        return Inertia::render('Public/Meeting/Studio', [
             'studio' => $this->studioPayload($studio),
-            'sessionTypes' => $types->map(fn (SessionType $t) => $this->typePayload($t))->values(),
+            'meetingTypes' => $types->map(fn (MeetingType $t) => $this->typePayload($t))->values(),
         ]);
     }
 
     public function show(string $slug, string $type): Response
     {
         $studio = $this->resolveStudio($slug);
-        $sessionType = $this->resolveType($studio, $type);
+        $meetingType = $this->resolveType($studio, $type);
 
         $from = Carbon::now(config('app.timezone'));
         $to = $from->copy()->addDays(self::WINDOW_DAYS);
 
-        return Inertia::render('Public/Booking/Book', [
+        return Inertia::render('Public/Meeting/Book', [
             'studio' => $this->studioPayload($studio),
-            'sessionType' => $this->typePayload($sessionType),
-            'slots' => BookingSlots::forSessionType($sessionType, $from, $to),
+            'meetingType' => $this->typePayload($meetingType),
+            'slots' => MeetingSlots::forMeetingType($meetingType, $from, $to),
         ]);
     }
 
     public function store(Request $request, string $slug, string $type): RedirectResponse
     {
         $studio = $this->resolveStudio($slug);
-        $sessionType = $this->resolveType($studio, $type);
+        $meetingType = $this->resolveType($studio, $type);
 
         $data = $request->validate([
             'starts_at' => 'required|date',
@@ -70,7 +70,7 @@ class PublicBookingController extends Controller
 
         // Re-check availability server-side so a stale or tampered slot can't
         // double-book. The submitted start must still be an open slot.
-        $open = BookingSlots::forSessionType($sessionType, $starts->copy()->startOfDay(), $starts->copy()->endOfDay());
+        $open = MeetingSlots::forMeetingType($meetingType, $starts->copy()->startOfDay(), $starts->copy()->endOfDay());
         $openForDay = $open[$starts->format('Y-m-d')] ?? [];
         $stillOpen = collect($openForDay)->contains(fn ($iso) => Carbon::parse($iso)->equalTo($starts));
 
@@ -80,7 +80,7 @@ class PublicBookingController extends Controller
             ]);
         }
 
-        $booking = DB::transaction(function () use ($studio, $sessionType, $data, $starts) {
+        $meeting = DB::transaction(function () use ($studio, $meetingType, $data, $starts) {
             [$first, $last] = $this->splitName($data['client_name']);
 
             $contact = Contact::withoutGlobalScopes()
@@ -99,47 +99,47 @@ class PublicBookingController extends Controller
                 ]);
             }
 
-            return Booking::create([
+            return Meeting::create([
                 'studio_id' => $studio->id,
-                'session_type_id' => $sessionType->id,
+                'meeting_type_id' => $meetingType->id,
                 'contact_id' => $contact->id,
                 'client_name' => $data['client_name'],
                 'client_email' => $data['client_email'],
                 'client_phone' => $data['client_phone'] ?? null,
                 'starts_at' => $starts,
-                'ends_at' => $starts->copy()->addMinutes($sessionType->duration_minutes),
-                'status' => $sessionType->manual_approve ? 'pending' : 'confirmed',
-                'price_cents' => $sessionType->price_cents,
-                'currency' => $sessionType->currency,
-                'location' => $sessionType->location,
+                'ends_at' => $starts->copy()->addMinutes($meetingType->duration_minutes),
+                'status' => $meetingType->manual_approve ? 'pending' : 'confirmed',
+                'price_cents' => $meetingType->price_cents,
+                'currency' => $meetingType->currency,
+                'location' => $meetingType->location,
                 'notes' => $data['notes'] ?? null,
             ]);
         });
 
-        // Auto-confirmed bookings sync to the studio's calendar immediately
+        // Auto-confirmed meetings sync to the studio's calendar immediately
         // (pending ones sync when the studio confirms them).
-        if ($booking->status === 'confirmed') {
-            app(GoogleCalendarService::class)->syncBooking($booking);
+        if ($meeting->status === 'confirmed') {
+            app(GoogleCalendarService::class)->syncMeeting($meeting);
         }
 
-        return redirect()->route('booking.confirmation', ['booking' => $booking->public_id]);
+        return redirect()->route('meetings.public.confirmation', ['meeting' => $meeting->public_id]);
     }
 
-    public function confirmation(string $booking): Response
+    public function confirmation(string $meeting): Response
     {
-        $record = Booking::withoutGlobalScopes()->where('public_id', $booking)->firstOrFail();
+        $record = Meeting::withoutGlobalScopes()->where('public_id', $meeting)->firstOrFail();
         $studio = Studio::findOrFail($record->studio_id);
 
-        return Inertia::render('Public/Booking/Confirmation', [
+        return Inertia::render('Public/Meeting/Confirmation', [
             'studio' => $this->studioPayload($studio),
-            'booking' => [
+            'meeting' => [
                 'client_name' => $record->client_name,
                 'starts_at' => $record->starts_at->toIso8601String(),
                 'ends_at' => $record->ends_at->toIso8601String(),
                 'status' => $record->status,
                 'location' => $record->location,
                 'meeting_url' => $record->meeting_url,
-                'session_type' => $record->sessionType?->name,
+                'meeting_type' => $record->meetingType?->name,
             ],
         ]);
     }
@@ -149,9 +149,9 @@ class PublicBookingController extends Controller
         return Studio::where('slug', $slug)->firstOrFail();
     }
 
-    private function resolveType(Studio $studio, string $slug): SessionType
+    private function resolveType(Studio $studio, string $slug): MeetingType
     {
-        return SessionType::withoutGlobalScopes()
+        return MeetingType::withoutGlobalScopes()
             ->where('studio_id', $studio->id)
             ->where('slug', $slug)
             ->where('active', true)
@@ -169,7 +169,7 @@ class PublicBookingController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function typePayload(SessionType $t): array
+    private function typePayload(MeetingType $t): array
     {
         return [
             'slug' => $t->slug,
@@ -180,6 +180,7 @@ class PublicBookingController extends Controller
             'currency' => $t->currency,
             'location_type' => $t->location_type,
             'location' => $t->location,
+            'video_provider' => $t->video_provider,
             'color' => $t->color,
         ];
     }

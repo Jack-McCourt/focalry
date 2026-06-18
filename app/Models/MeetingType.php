@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
-class SessionType extends Model
+class MeetingType extends Model
 {
     use BelongsToStudio, HasFactory;
 
@@ -22,6 +22,7 @@ class SessionType extends Model
         'currency',
         'location_type',
         'location',
+        'video_provider',
         'color',
         'buffer_minutes',
         'min_lead_hours',
@@ -46,7 +47,7 @@ class SessionType extends Model
     protected static function booted(): void
     {
         // Runs after BelongsToStudio's creating hook fills studio_id.
-        static::creating(function (SessionType $type) {
+        static::creating(function (MeetingType $type) {
             if (empty($type->slug)) {
                 $studioId = $type->studio_id ?? app('current.studio.id');
                 $type->slug = static::uniqueSlug((int) $studioId, $type->name);
@@ -57,7 +58,7 @@ class SessionType extends Model
     /** Build a slug unique within the studio. */
     public static function uniqueSlug(int $studioId, string $name): string
     {
-        $base = Str::slug($name) ?: 'session';
+        $base = Str::slug($name) ?: 'meeting';
         $slug = $base;
         $i = 2;
         while (static::withoutGlobalScopes()->where('studio_id', $studioId)->where('slug', $slug)->exists()) {
@@ -68,8 +69,8 @@ class SessionType extends Model
         return $slug;
     }
 
-    public function bookings(): HasMany
+    public function meetings(): HasMany
     {
-        return $this->hasMany(Booking::class);
+        return $this->hasMany(Meeting::class);
     }
 }

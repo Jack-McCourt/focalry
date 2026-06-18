@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\StudioManager;
 
 use App\Http\Controllers\Controller;
-use App\Models\SessionType;
+use App\Models\MeetingType;
 use App\Support\Currencies;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -11,38 +11,39 @@ use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
-class SessionTypeController extends Controller
+class MeetingTypeController extends Controller
 {
     public function index(): Response
     {
         $studio = auth()->user()->studio;
 
-        return Inertia::render('Bookings/SessionTypes', [
-            'sessionTypes' => SessionType::orderBy('name')->withCount('bookings')->get(),
+        return Inertia::render('Meetings/MeetingTypes', [
+            'meetingTypes' => MeetingType::orderBy('name')->withCount('meetings')->get(),
             'default_currency' => $studio?->default_currency ?? 'usd',
             'booking_base_url' => url('/book/'.($studio?->slug ?? '')),
+            'calendar_connected' => (bool) $studio?->googleCalendarConnected(),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
-        SessionType::create($this->validated($request));
+        MeetingType::create($this->validated($request));
 
-        return back()->with('success', 'Session type created.');
+        return back()->with('success', 'Meeting type created.');
     }
 
-    public function update(Request $request, SessionType $sessionType): RedirectResponse
+    public function update(Request $request, MeetingType $meetingType): RedirectResponse
     {
-        $sessionType->update($this->validated($request));
+        $meetingType->update($this->validated($request));
 
-        return back()->with('success', 'Session type updated.');
+        return back()->with('success', 'Meeting type updated.');
     }
 
-    public function destroy(SessionType $sessionType): RedirectResponse
+    public function destroy(MeetingType $meetingType): RedirectResponse
     {
-        $sessionType->delete();
+        $meetingType->delete();
 
-        return back()->with('success', 'Session type deleted.');
+        return back()->with('success', 'Meeting type deleted.');
     }
 
     /** @return array<string, mixed> */
@@ -54,8 +55,9 @@ class SessionTypeController extends Controller
             'duration_minutes' => 'required|integer|min:5|max:1440',
             'price_cents' => 'required|integer|min:0',
             'currency' => ['required', 'string', Rule::in(Currencies::codes())],
-            'location_type' => ['required', Rule::in(['in_person', 'phone', 'video'])],
+            'location_type' => ['required', Rule::in(['video', 'phone', 'in_person'])],
             'location' => 'nullable|string|max:255',
+            'video_provider' => ['required', Rule::in(['google_meet', 'zoom'])],
             'color' => 'nullable|string|max:20',
             'buffer_minutes' => 'required|integer|min:0|max:480',
             'min_lead_hours' => 'required|integer|min:0|max:8760',

@@ -1,11 +1,11 @@
-import BookingsSubNav from '@/Components/BookingsSubNav';
+import MeetingsSubNav from '@/Components/MeetingsSubNav';
 import StudioManagerNav from '@/Components/StudioManagerNav';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { formatMoney } from '@/lib/money';
 import { PageProps } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 
-interface BookingItem {
+interface MeetingItem {
     id: number;
     client_name: string;
     client_email: string;
@@ -18,7 +18,7 @@ interface BookingItem {
     location: string | null;
     notes: string | null;
     meeting_url: string | null;
-    session_type: { name: string; color: string | null } | null;
+    meeting_type: { name: string; color: string | null } | null;
     contact_id: number | null;
 }
 
@@ -39,20 +39,20 @@ function fmtRange(start: string, end: string) {
 }
 
 export default function Index({
-    bookings,
+    meetings,
     filters,
     counts,
 }: PageProps<{
-    bookings: BookingItem[];
+    meetings: MeetingItem[];
     filters: { status: string };
     counts: { pending: number; upcoming: number };
 }>) {
     const setStatus = (status: string) =>
-        router.get(route('bookings.index'), { status }, { preserveState: true, preserveScroll: true, replace: true });
+        router.get(route('meetings.index'), { status }, { preserveState: true, preserveScroll: true, replace: true });
 
-    const act = (b: BookingItem, action: 'confirm' | 'decline' | 'cancel') => {
-        if (action === 'cancel' && !confirm('Cancel this booking?')) return;
-        router.post(route(`bookings.${action}`, b.id), {}, { preserveScroll: true });
+    const act = (m: MeetingItem, action: 'confirm' | 'decline' | 'cancel') => {
+        if (action === 'cancel' && !confirm('Cancel this meeting?')) return;
+        router.post(route(`meetings.${action}`, m.id), {}, { preserveScroll: true });
     };
 
     const TABS = [
@@ -63,10 +63,10 @@ export default function Index({
     ];
 
     return (
-        <AuthenticatedLayout header={<h1 className="text-sm font-semibold text-neutral-900">Bookings</h1>}>
-            <Head title="Bookings" />
-            <StudioManagerNav active="bookings" />
-            <BookingsSubNav active="bookings" />
+        <AuthenticatedLayout header={<h1 className="text-sm font-semibold text-neutral-900">Meetings</h1>}>
+            <Head title="Meetings" />
+            <StudioManagerNav active="meetings" />
+            <MeetingsSubNav active="meetings" />
 
             <div className="px-4 py-6 sm:px-8">
                 <div className="mb-4 flex gap-1">
@@ -83,54 +83,54 @@ export default function Index({
                     ))}
                 </div>
 
-                {bookings.length === 0 ? (
+                {meetings.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-neutral-200 py-16 text-center">
-                        <p className="text-sm font-medium text-neutral-700">No bookings here</p>
+                        <p className="text-sm font-medium text-neutral-700">No meetings here</p>
                         <p className="mt-1 text-sm text-neutral-400">
-                            Share your booking page and new requests will land here.
+                            Share your booking link and new requests will land here.
                         </p>
                     </div>
                 ) : (
                     <div className="space-y-2">
-                        {bookings.map((b) => (
-                            <div key={b.id} className="rounded-xl border border-neutral-200 bg-white p-4">
+                        {meetings.map((m) => (
+                            <div key={m.id} className="rounded-xl border border-neutral-200 bg-white p-4">
                                 <div className="flex flex-wrap items-start justify-between gap-3">
                                     <div className="min-w-0">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-sm font-semibold text-neutral-900">{b.client_name}</span>
-                                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${STATUS_STYLE[b.status]}`}>{b.status}</span>
+                                            <span className="text-sm font-semibold text-neutral-900">{m.client_name}</span>
+                                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${STATUS_STYLE[m.status]}`}>{m.status}</span>
                                         </div>
                                         <p className="mt-0.5 text-xs text-neutral-500">
-                                            {b.session_type?.name ?? 'Session'}
-                                            {b.price_cents > 0 && <> · {formatMoney(b.price_cents, b.currency)}</>}
+                                            {m.meeting_type?.name ?? 'Meeting'}
+                                            {m.price_cents > 0 && <> · {formatMoney(m.price_cents, m.currency)}</>}
                                         </p>
-                                        <p className="mt-1 text-sm text-neutral-700">{fmtRange(b.starts_at, b.ends_at)}</p>
+                                        <p className="mt-1 text-sm text-neutral-700">{fmtRange(m.starts_at, m.ends_at)}</p>
                                         <p className="mt-0.5 text-xs text-neutral-400">
-                                            {b.client_email}
-                                            {b.client_phone ? ` · ${b.client_phone}` : ''}
-                                            {b.location ? ` · ${b.location}` : ''}
+                                            {m.client_email}
+                                            {m.client_phone ? ` · ${m.client_phone}` : ''}
+                                            {m.location ? ` · ${m.location}` : ''}
                                         </p>
-                                        {b.meeting_url && (
-                                            <a href={b.meeting_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-blue-600 hover:underline">
+                                        {m.meeting_url && (
+                                            <a href={m.meeting_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-blue-600 hover:underline">
                                                 Join video call
                                             </a>
                                         )}
-                                        {b.notes && <p className="mt-1 text-xs italic text-neutral-400">“{b.notes}”</p>}
+                                        {m.notes && <p className="mt-1 text-xs italic text-neutral-400">“{m.notes}”</p>}
                                     </div>
                                     <div className="flex shrink-0 items-center gap-2">
-                                        {b.contact_id && (
-                                            <Link href={route('contacts.show', b.contact_id)} className="text-xs font-medium text-neutral-500 hover:text-neutral-800">
+                                        {m.contact_id && (
+                                            <Link href={route('contacts.show', m.contact_id)} className="text-xs font-medium text-neutral-500 hover:text-neutral-800">
                                                 View contact
                                             </Link>
                                         )}
-                                        {b.status === 'pending' && (
+                                        {m.status === 'pending' && (
                                             <>
-                                                <button onClick={() => act(b, 'confirm')} className="btn-primary px-3 py-1.5 text-xs">Confirm</button>
-                                                <button onClick={() => act(b, 'decline')} className="btn-secondary px-3 py-1.5 text-xs">Decline</button>
+                                                <button onClick={() => act(m, 'confirm')} className="btn-primary px-3 py-1.5 text-xs">Confirm</button>
+                                                <button onClick={() => act(m, 'decline')} className="btn-secondary px-3 py-1.5 text-xs">Decline</button>
                                             </>
                                         )}
-                                        {b.status === 'confirmed' && (
-                                            <button onClick={() => act(b, 'cancel')} className="btn-secondary px-3 py-1.5 text-xs">Cancel</button>
+                                        {m.status === 'confirmed' && (
+                                            <button onClick={() => act(m, 'cancel')} className="btn-secondary px-3 py-1.5 text-xs">Cancel</button>
                                         )}
                                     </div>
                                 </div>

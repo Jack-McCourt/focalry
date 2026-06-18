@@ -12,25 +12,25 @@ use App\Http\Controllers\MessageTemplateController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public\ContractSigningController;
-use App\Http\Controllers\Public\PublicBookingController;
+use App\Http\Controllers\Public\PublicMeetingController;
 use App\Http\Controllers\Public\PublicSiteController;
 use App\Http\Controllers\Settings\GoogleCalendarController;
 use App\Http\Controllers\Settings\StudioSettingsController;
 use App\Http\Controllers\Stripe\ConnectController;
 use App\Http\Controllers\Stripe\PublicInvoiceController;
 use App\Http\Controllers\StudioManager\AvailabilityController;
-use App\Http\Controllers\StudioManager\BookingController;
 use App\Http\Controllers\StudioManager\ClientEmailController;
 use App\Http\Controllers\StudioManager\ContactController;
 use App\Http\Controllers\StudioManager\ContractController;
 use App\Http\Controllers\StudioManager\ContractTemplateController;
 use App\Http\Controllers\StudioManager\InvoiceController;
 use App\Http\Controllers\StudioManager\InvoiceSettingsController;
+use App\Http\Controllers\StudioManager\MeetingController;
+use App\Http\Controllers\StudioManager\MeetingTypeController;
 use App\Http\Controllers\StudioManager\ProjectController;
 use App\Http\Controllers\StudioManager\ProjectFieldController;
 use App\Http\Controllers\StudioManager\ProjectNoteController;
 use App\Http\Controllers\StudioManager\ProjectSettingsController;
-use App\Http\Controllers\StudioManager\SessionTypeController;
 use App\Http\Controllers\StudioManager\SiteController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -118,15 +118,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
 
     // Booking — session types, availability, and the bookings list
-    Route::get('bookings', [BookingController::class, 'index'])->name('bookings.index');
-    Route::post('bookings/{booking}/confirm', [BookingController::class, 'confirm'])->name('bookings.confirm');
-    Route::post('bookings/{booking}/decline', [BookingController::class, 'decline'])->name('bookings.decline');
-    Route::post('bookings/{booking}/cancel', [BookingController::class, 'cancel'])->name('bookings.cancel');
+    Route::get('meetings', [MeetingController::class, 'index'])->name('meetings.index');
+    Route::post('meetings/{meeting}/confirm', [MeetingController::class, 'confirm'])->name('meetings.confirm');
+    Route::post('meetings/{meeting}/decline', [MeetingController::class, 'decline'])->name('meetings.decline');
+    Route::post('meetings/{meeting}/cancel', [MeetingController::class, 'cancel'])->name('meetings.cancel');
 
-    Route::get('session-types', [SessionTypeController::class, 'index'])->name('session-types.index');
-    Route::post('session-types', [SessionTypeController::class, 'store'])->name('session-types.store');
-    Route::patch('session-types/{sessionType}', [SessionTypeController::class, 'update'])->name('session-types.update');
-    Route::delete('session-types/{sessionType}', [SessionTypeController::class, 'destroy'])->name('session-types.destroy');
+    Route::get('meeting-types', [MeetingTypeController::class, 'index'])->name('meeting-types.index');
+    Route::post('meeting-types', [MeetingTypeController::class, 'store'])->name('meeting-types.store');
+    Route::patch('meeting-types/{meetingType}', [MeetingTypeController::class, 'update'])->name('meeting-types.update');
+    Route::delete('meeting-types/{meetingType}', [MeetingTypeController::class, 'destroy'])->name('meeting-types.destroy');
 
     Route::get('availability', [AvailabilityController::class, 'edit'])->name('availability.edit');
     Route::patch('availability', [AvailabilityController::class, 'update'])->name('availability.update');
@@ -230,10 +230,10 @@ Route::get('/g/{slug}/download/{photoId}', [GalleryDownloadController::class, 's
     ->name('gallery.download.single');
 
 // Public booking site (no auth) — studio resolved by slug.
-Route::get('/book/{slug}', [PublicBookingController::class, 'index'])->name('booking.studio');
-Route::get('/book/{slug}/{type}', [PublicBookingController::class, 'show'])->name('booking.show');
-Route::post('/book/{slug}/{type}', [PublicBookingController::class, 'store'])->name('booking.store');
-Route::get('/booking/{booking}', [PublicBookingController::class, 'confirmation'])->name('booking.confirmation');
+Route::get('/book/{slug}', [PublicMeetingController::class, 'index'])->name('meetings.public.studio');
+Route::get('/book/{slug}/{type}', [PublicMeetingController::class, 'show'])->name('meetings.public.show');
+Route::post('/book/{slug}/{type}', [PublicMeetingController::class, 'store'])->name('meetings.public.store');
+Route::get('/booking/{meeting}', [PublicMeetingController::class, 'confirmation'])->name('meetings.public.confirmation');
 
 // Email open-tracking pixel (read receipts) — token-protected, no auth.
 Route::get('/e/o/{message}/{token}', MailOpenController::class)

@@ -1,14 +1,14 @@
 import { Link } from '@inertiajs/react';
 
-type Tab = 'bookings' | 'session-types' | 'availability';
+type Tab = 'meetings' | 'meeting-types' | 'availability';
 
 const TABS: { key: Tab; label: string; href: string }[] = [
-    { key: 'bookings', label: 'Bookings', href: '/bookings' },
-    { key: 'session-types', label: 'Session types', href: '/session-types' },
+    { key: 'meetings', label: 'Meetings', href: '/meetings' },
+    { key: 'meeting-types', label: 'Meeting types', href: '/meeting-types' },
     { key: 'availability', label: 'Availability', href: '/availability' },
 ];
 
-export default function BookingsSubNav({ active }: { active: Tab }) {
+export default function MeetingsSubNav({ active }: { active: Tab }) {
     return (
         <div className="flex items-center gap-1 px-4 pt-4 sm:px-8">
             {TABS.map((t) => (

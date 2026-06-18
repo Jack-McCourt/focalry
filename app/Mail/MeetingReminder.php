@@ -2,37 +2,37 @@
 
 namespace App\Mail;
 
-use App\Models\Booking;
+use App\Models\Meeting;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class BookingReminder extends Mailable
+class MeetingReminder extends Mailable
 {
     use Queueable, SerializesModels;
 
     public function __construct(
-        public Booking $booking,
+        public Meeting $meeting,
         public string $studioName,
     ) {}
 
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Reminder: '.($this->booking->sessionType?->name ?? 'your session').' with '.$this->studioName,
+            subject: 'Reminder: '.($this->meeting->meetingType?->name ?? 'your meeting').' with '.$this->studioName,
         );
     }
 
     public function content(): Content
     {
         return new Content(
-            markdown: 'mail.booking-reminder',
+            markdown: 'mail.meeting-reminder',
             with: [
-                'booking' => $this->booking,
+                'meeting' => $this->meeting,
                 'studioName' => $this->studioName,
-                'sessionName' => $this->booking->sessionType?->name ?? 'Session',
+                'meetingName' => $this->meeting->meetingType?->name ?? 'Meeting',
             ],
         );
     }
