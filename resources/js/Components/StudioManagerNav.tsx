@@ -7,7 +7,7 @@ const SECTIONS: { key: Section; label: string; href: string | null }[] = [
     { key: 'projects', label: 'Projects', href: '/projects' },
     { key: 'invoices', label: 'Invoices', href: '/invoices' },
     { key: 'contracts', label: 'Contracts', href: '/contracts' },
-    { key: 'bookings', label: 'Bookings', href: null },
+    { key: 'bookings', label: 'Bookings', href: '/bookings' },
 ];
 
 export default function StudioManagerNav({ active }: { active: Section }) {

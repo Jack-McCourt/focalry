@@ -12,10 +12,13 @@ use App\Http\Controllers\MessageTemplateController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public\ContractSigningController;
+use App\Http\Controllers\Public\PublicBookingController;
 use App\Http\Controllers\Public\PublicSiteController;
 use App\Http\Controllers\Settings\StudioSettingsController;
 use App\Http\Controllers\Stripe\ConnectController;
 use App\Http\Controllers\Stripe\PublicInvoiceController;
+use App\Http\Controllers\StudioManager\AvailabilityController;
+use App\Http\Controllers\StudioManager\BookingController;
 use App\Http\Controllers\StudioManager\ClientEmailController;
 use App\Http\Controllers\StudioManager\ContactController;
 use App\Http\Controllers\StudioManager\ContractController;
@@ -26,6 +29,7 @@ use App\Http\Controllers\StudioManager\ProjectController;
 use App\Http\Controllers\StudioManager\ProjectFieldController;
 use App\Http\Controllers\StudioManager\ProjectNoteController;
 use App\Http\Controllers\StudioManager\ProjectSettingsController;
+use App\Http\Controllers\StudioManager\SessionTypeController;
 use App\Http\Controllers\StudioManager\SiteController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -111,6 +115,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // In-app notifications (bell)
     Route::post('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
     Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
+
+    // Booking — session types, availability, and the bookings list
+    Route::get('bookings', [BookingController::class, 'index'])->name('bookings.index');
+    Route::post('bookings/{booking}/confirm', [BookingController::class, 'confirm'])->name('bookings.confirm');
+    Route::post('bookings/{booking}/decline', [BookingController::class, 'decline'])->name('bookings.decline');
+    Route::post('bookings/{booking}/cancel', [BookingController::class, 'cancel'])->name('bookings.cancel');
+
+    Route::get('session-types', [SessionTypeController::class, 'index'])->name('session-types.index');
+    Route::post('session-types', [SessionTypeController::class, 'store'])->name('session-types.store');
+    Route::patch('session-types/{sessionType}', [SessionTypeController::class, 'update'])->name('session-types.update');
+    Route::delete('session-types/{sessionType}', [SessionTypeController::class, 'destroy'])->name('session-types.destroy');
+
+    Route::get('availability', [AvailabilityController::class, 'edit'])->name('availability.edit');
+    Route::patch('availability', [AvailabilityController::class, 'update'])->name('availability.update');
 
     // Website builder (studio's marketing site + lead capture)
     Route::get('website', [SiteController::class, 'edit'])->name('website.edit');
@@ -204,6 +222,12 @@ Route::get('/g/{slug}/download', [GalleryDownloadController::class, 'all'])
 Route::get('/g/{slug}/download/{photoId}', [GalleryDownloadController::class, 'single'])
     ->whereNumber('photoId')
     ->name('gallery.download.single');
+
+// Public booking site (no auth) — studio resolved by slug.
+Route::get('/book/{slug}', [PublicBookingController::class, 'index'])->name('booking.studio');
+Route::get('/book/{slug}/{type}', [PublicBookingController::class, 'show'])->name('booking.show');
+Route::post('/book/{slug}/{type}', [PublicBookingController::class, 'store'])->name('booking.store');
+Route::get('/booking/{booking}', [PublicBookingController::class, 'confirmation'])->name('booking.confirmation');
 
 // Email open-tracking pixel (read receipts) — token-protected, no auth.
 Route::get('/e/o/{message}/{token}', MailOpenController::class)
