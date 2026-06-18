@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
+use App\Models\Package;
 use App\Models\Project;
 use App\Models\ProjectStatus;
 use App\Models\ProjectType;
@@ -36,6 +37,7 @@ class PublicSiteController extends Controller
             'studio_logo' => $site->studio?->logoUrl(),
             'pages' => $this->topNav($site),
             'posts' => $this->postCards($site),
+            'packages' => $this->packageCards($site),
             'page' => [
                 'title' => $current->title,
                 'slug' => $current->slug,
@@ -62,6 +64,7 @@ class PublicSiteController extends Controller
             'studio_logo' => $site->studio?->logoUrl(),
             'pages' => $this->topNav($site),
             'posts' => $this->postCards($site),
+            'packages' => $this->packageCards($site),
             // Keep the blog page highlighted in the nav while viewing a post.
             'page' => [
                 'title' => $entry->title,
@@ -179,6 +182,26 @@ class PublicSiteController extends Controller
             'slug' => $p->slug,
             'is_home' => $p->is_home,
         ])->values();
+    }
+
+    /** Active packages as cards for the `packages` block. */
+    private function packageCards(Site $site): Collection
+    {
+        return Package::withoutGlobalScopes()
+            ->where('studio_id', $site->studio_id)
+            ->where('active', true)
+            ->orderBy('sort_order')->orderBy('name')
+            ->get()
+            ->map(fn (Package $p) => [
+                'slug' => $p->slug,
+                'name' => $p->name,
+                'description' => $p->description,
+                'image_url' => $p->imageUrl(),
+                'price_cents' => $p->price_cents,
+                'deposit_cents' => $p->offersDeposit() ? $p->deposit_cents : null,
+                'currency' => $p->currency,
+                'url' => route('packages.public', $site->studio->slug ?? $site->slug),
+            ])->values();
     }
 
     /** Published posts under the blog page, as cards for the `blog` block. */

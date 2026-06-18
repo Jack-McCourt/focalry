@@ -241,6 +241,7 @@ export type SiteBlockType =
     | 'text'
     | 'image'
     | 'grid'
+    | 'packages'
     | 'footer';
 
 export interface BlockSettings {
@@ -262,6 +263,17 @@ export interface BlogPostCard {
     excerpt: string | null;
     cover_image: string | null;
     published_at: string | null;
+    url?: string;
+}
+
+export interface PackageCard {
+    slug: string;
+    name: string;
+    description: string | null;
+    image_url: string | null;
+    price_cents: number;
+    deposit_cents: number | null;
+    currency: string;
     url?: string;
 }
 

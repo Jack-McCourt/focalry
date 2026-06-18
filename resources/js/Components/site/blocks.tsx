@@ -1,4 +1,5 @@
-import { BlogPostCard, SiteBlock, SiteBlockType, SiteTheme } from '@/types';
+import { BlogPostCard, PackageCard, SiteBlock, SiteBlockType, SiteTheme } from '@/types';
+import { formatMoney } from '@/lib/money';
 import { useForm } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -46,6 +47,12 @@ export const BLOCK_LIBRARY: BlockMeta[] = [
         label: 'Blog posts',
         hint: 'A grid of your latest blog posts',
         make: () => ({ heading: 'From the journal', columns: 3, limit: 0 }),
+    },
+    {
+        type: 'packages',
+        label: 'Packages',
+        hint: 'A grid of your bookable packages with a Book button',
+        make: () => ({ heading: 'Packages', subheading: '', columns: 3 }),
     },
     {
         type: 'text',
@@ -169,11 +176,13 @@ interface BlockViewProps {
     interactive: boolean;
     /** Published blog posts, injected for `blog` blocks. */
     posts?: BlogPostCard[];
+    /** Active packages, injected for `packages` blocks. */
+    packages?: PackageCard[];
     /** Builder-only editing affordances (click-to-select, chrome, nesting). */
     editing?: BlockEditing;
 }
 
-function BlockInner({ block, theme, slug, interactive, posts, editing }: BlockViewProps) {
+function BlockInner({ block, theme, slug, interactive, posts, packages, editing }: BlockViewProps) {
     // Block data is intentionally loose (modular/extensible), read with fallbacks.
     const d = block.data as Record<string, any>;
     const primary = theme.primary_color;
@@ -286,6 +295,48 @@ function BlockInner({ block, theme, slug, interactive, posts, editing }: BlockVi
             );
         }
 
+        case 'packages': {
+            const list = packages ?? [];
+            const cols = Number(d.columns) === 2 ? 'sm:grid-cols-2' : Number(d.columns) === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-2 lg:grid-cols-3';
+
+            return (
+                <section className="mx-auto max-w-6xl px-6 py-20 sm:px-10">
+                    {d.heading && <h2 className="text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
+                    {d.subheading && <p className="mx-auto mt-3 max-w-2xl text-center text-neutral-500">{d.subheading}</p>}
+                    {list.length === 0 ? (
+                        <p className="mt-12 text-center text-sm text-neutral-400">No packages available yet.</p>
+                    ) : (
+                        <div className={`mt-12 grid grid-cols-1 gap-8 ${cols}`}>
+                            {list.map((p) => (
+                                <div key={p.slug} className="flex flex-col overflow-hidden rounded-2xl border border-neutral-200">
+                                    {p.image_url ? (
+                                        <img src={p.image_url} alt="" className="aspect-[3/2] w-full object-cover" />
+                                    ) : (
+                                        <div className="flex aspect-[3/2] w-full items-center justify-center bg-neutral-100 text-xs text-neutral-300">{p.name}</div>
+                                    )}
+                                    <div className="flex flex-1 flex-col p-5">
+                                        <h3 className="text-lg font-semibold text-neutral-900">{p.name}</h3>
+                                        {p.description && <p className="mt-1 line-clamp-3 text-sm text-neutral-500">{p.description}</p>}
+                                        <div className="mt-4 flex items-end justify-between pt-2">
+                                            <div>
+                                                <p className="text-lg font-semibold text-neutral-900">{formatMoney(p.price_cents, p.currency)}</p>
+                                                {p.deposit_cents ? <p className="text-xs text-neutral-500">or {formatMoney(p.deposit_cents, p.currency)} deposit</p> : null}
+                                            </div>
+                                            {interactive && p.url ? (
+                                                <a href={p.url} className="rounded-full px-4 py-2 text-sm font-medium text-white" style={{ background: primary }}>Book</a>
+                                            ) : (
+                                                <span className="rounded-full px-4 py-2 text-sm font-medium text-white" style={{ background: primary }}>Book</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </section>
+            );
+        }
+
         case 'text': {
             const align = d.align === 'center' ? 'text-center' : d.align === 'right' ? 'text-right' : 'text-left';
             const heading = (d.heading ?? '').trim();
@@ -325,7 +376,7 @@ function BlockInner({ block, theme, slug, interactive, posts, editing }: BlockVi
                         {Array.from({ length: cols }).map((_, col) => (
                             <div key={col} className="min-w-0">
                                 {(children[col] ?? []).map((child) => (
-                                    <BlockView key={child.id} block={child} theme={theme} slug={slug} interactive={interactive} posts={posts} editing={editing} />
+                                    <BlockView key={child.id} block={child} theme={theme} slug={slug} interactive={interactive} posts={posts} packages={packages} editing={editing} />
                                 ))}
                                 {editing && <GridCellAdder onAdd={(type) => editing.onAddChild(block.id, col, type)} />}
                             </div>

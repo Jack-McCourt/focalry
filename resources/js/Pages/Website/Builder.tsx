@@ -3,7 +3,7 @@ import SiteShell from '@/Components/site/SiteShell';
 import { addChildToGrid, BLOCK_LIBRARY, blockLabel, findBlock, makeBlock, moveBlockInTree, removeBlockFromTree, updateBlockInTree } from '@/Components/site/blocks';
 import { BlockEditor, ImageField, NavEditor } from '@/Components/site/editors';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { BlockSettings, BlogPostCard, PageProps, SiteBlock, SiteBlockType, SiteData, SiteNavItem, SitePageData, SiteTemplateMeta, SiteTheme } from '@/types';
+import { BlockSettings, BlogPostCard, PackageCard, PageProps, SiteBlock, SiteBlockType, SiteData, SiteNavItem, SitePageData, SiteTemplateMeta, SiteTheme } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 
@@ -12,6 +12,13 @@ const SAMPLE_POSTS: BlogPostCard[] = [
     { title: 'A spring wedding at the coast', slug: 'sample-1', excerpt: 'A radiant day by the sea full of colour and joy.', cover_image: null, published_at: new Date().toISOString(), url: '#' },
     { title: 'Golden hour portraits', slug: 'sample-2', excerpt: 'Why the last hour of light is my favourite.', cover_image: null, published_at: new Date().toISOString(), url: '#' },
     { title: 'Behind the scenes', slug: 'sample-3', excerpt: 'A peek at how a shoot really comes together.', cover_image: null, published_at: new Date().toISOString(), url: '#' },
+];
+
+// Placeholder packages so the packages block shows something in the preview.
+const SAMPLE_PACKAGES: PackageCard[] = [
+    { slug: 'sample-1', name: 'Half-day shoot', description: 'Up to 4 hours of coverage and edited gallery.', image_url: null, price_cents: 80000, deposit_cents: 20000, currency: 'usd', url: '#' },
+    { slug: 'sample-2', name: 'Full-day wedding', description: 'Full coverage from prep to first dance.', image_url: null, price_cents: 250000, deposit_cents: 50000, currency: 'usd', url: '#' },
+    { slug: 'sample-3', name: 'Mini session', description: '30-minute portrait session.', image_url: null, price_cents: 15000, deposit_cents: null, currency: 'usd', url: '#' },
 ];
 
 export default function Builder({
@@ -331,6 +338,7 @@ export default function Builder({
                                 activeSlug={page?.slug ?? ''}
                                 interactive={false}
                                 posts={SAMPLE_POSTS}
+                                packages={SAMPLE_PACKAGES}
                                 editing={{ selectedId: selectedBlockId, onSelect: selectBlock, onDelete: removeBlock, onAddChild: addChild }}
                             />
                         </div>

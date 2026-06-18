@@ -1,4 +1,4 @@
-import { BlogPostCard, SiteBlock, SiteNavItem, SiteTheme } from '@/types';
+import { BlogPostCard, PackageCard, SiteBlock, SiteNavItem, SiteTheme } from '@/types';
 import { Link } from '@inertiajs/react';
 import { ReactNode } from 'react';
 import { BlockEditing, BlockView, fontClass } from './blocks';
@@ -21,6 +21,7 @@ interface SiteShellProps {
     activeSlug: string;
     interactive: boolean;
     posts?: BlogPostCard[];
+    packages?: PackageCard[];
     /** Builder-only: makes blocks clickable/editable in the preview. */
     editing?: BlockEditing;
     /** Custom main content (e.g. a blog post), rendered instead of blocks. */
@@ -36,7 +37,7 @@ interface ResolvedLink {
 
 /** Renders a full public page: managed global header, the page's blocks, and a
  *  managed global footer. Shared by the live public site and the builder preview. */
-export default function SiteShell({ siteName, siteSlug, theme, studioLogo, pages, headerNav, footerNav, blocks = [], activeSlug, interactive, posts, editing, children }: SiteShellProps) {
+export default function SiteShell({ siteName, siteSlug, theme, studioLogo, pages, headerNav, footerNav, blocks = [], activeSlug, interactive, posts, packages, editing, children }: SiteShellProps) {
     const resolve = (item: SiteNavItem): ResolvedLink => {
         if (item.kind === 'url') {
             const target = item.target || '#';
@@ -90,7 +91,7 @@ export default function SiteShell({ siteName, siteSlug, theme, studioLogo, pages
                 ) : blocks.length === 0 ? (
                     <div className="flex min-h-[50vh] items-center justify-center text-sm text-neutral-400">This page has no content yet.</div>
                 ) : (
-                    blocks.map((block) => <BlockView key={block.id} block={block} theme={theme} slug={siteSlug} interactive={interactive} posts={posts} editing={editing} />)
+                    blocks.map((block) => <BlockView key={block.id} block={block} theme={theme} slug={siteSlug} interactive={interactive} posts={posts} packages={packages} editing={editing} />)
                 )}
             </main>
 

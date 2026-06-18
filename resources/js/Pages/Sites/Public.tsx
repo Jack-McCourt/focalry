@@ -1,5 +1,5 @@
 import SiteShell from '@/Components/site/SiteShell';
-import { BlogPostCard, SiteBlock, SiteNavItem, SiteTheme } from '@/types';
+import { BlogPostCard, PackageCard, SiteBlock, SiteNavItem, SiteTheme } from '@/types';
 import { Head } from '@inertiajs/react';
 
 interface PageRef {
@@ -13,12 +13,14 @@ export default function Public({
     studio_logo,
     pages,
     posts,
+    packages,
     page,
 }: {
     site: { name: string; slug: string; theme: SiteTheme; header_nav: SiteNavItem[]; footer_nav: SiteNavItem[]; seo_title: string; seo_description: string | null };
     studio_logo: string | null;
     pages: PageRef[];
     posts: BlogPostCard[];
+    packages: PackageCard[];
     page: { title: string; slug: string; blocks: SiteBlock[] };
 }) {
     return (
@@ -38,6 +40,7 @@ export default function Public({
                 activeSlug={page.slug}
                 interactive
                 posts={posts}
+                packages={packages}
             />
         </>
     );

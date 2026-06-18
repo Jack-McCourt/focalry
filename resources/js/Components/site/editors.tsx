@@ -275,6 +275,18 @@ function ContentFields({ block, onChange }: { block: SiteBlock; onChange: (data:
                 </div>
             );
 
+        case 'packages':
+            return (
+                <div className="space-y-4">
+                    <Text label="Heading" value={d.heading} onChange={(v) => set('heading', v)} />
+                    <Text label="Subheading" value={d.subheading} onChange={(v) => set('subheading', v)} />
+                    <Select label="Columns" value={String(d.columns ?? 3)} onChange={(v) => set('columns', Number(v))} options={[{ value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' }]} />
+                    <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                        Packages are managed from the <strong>Bookings</strong> tab. Only active packages appear here, and the Book button links to your packages page.
+                    </p>
+                </div>
+            );
+
         case 'text':
             return <TextBlockFields d={d} set={set} />;
 
