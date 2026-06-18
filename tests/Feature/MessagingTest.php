@@ -7,8 +7,10 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Studio;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
     config(['services.messaging.inbound_address' => 'reply@inbound.example.com']);
@@ -61,6 +63,73 @@ it('queues the outbound send on the Horizon queue', function () {
     Queue::assertPushed(SendConversationMessage::class);
     // Recorded as queued; the job (faked here) flips it to sent when it runs.
     $this->assertDatabaseHas('messages', ['direction' => 'outbound', 'body' => 'Queued hello', 'status' => 'queued']);
+});
+
+it('stores outbound attachments and attaches them to the email', function () {
+    Mail::fake();
+    Storage::fake('public');
+    [$studio, $user] = studioUser();
+    $contact = Contact::withoutGlobalScopes()->create([
+        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com', 'status' => 'client',
+    ]);
+
+    $this->actingAs($user)->post(route('messages.store'), [
+        'contact_id' => $contact->id,
+        'subject' => 'Proofs',
+        'body' => 'Here is the contract.',
+        'attachments' => [UploadedFile::fake()->create('contract.pdf', 12, 'application/pdf')],
+    ])->assertRedirect();
+
+    $message = Message::withoutGlobalScopes()->where('direction', 'outbound')->firstOrFail();
+    $attachment = $message->attachments()->withoutGlobalScopes()->firstOrFail();
+
+    expect($attachment->name)->toBe('contract.pdf');
+    Storage::disk('public')->assertExists($attachment->path);
+
+    Mail::assertSent(StudioMessageMail::class, fn (StudioMessageMail $m) => count($m->files) === 1 && $m->files[0]['name'] === 'contract.pdf');
+});
+
+it('allows an attachment-only message with no body', function () {
+    Mail::fake();
+    Storage::fake('public');
+    [$studio, $user] = studioUser();
+    $contact = Contact::withoutGlobalScopes()->create([
+        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com', 'status' => 'client',
+    ]);
+
+    $this->actingAs($user)->post(route('messages.store'), [
+        'contact_id' => $contact->id,
+        'subject' => 'Photo',
+        'attachments' => [UploadedFile::fake()->image('shot.jpg')],
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect(Message::withoutGlobalScopes()->where('direction', 'outbound')->count())->toBe(1);
+});
+
+it('captures inbound Postmark attachments into the thread', function () {
+    Storage::fake('public');
+    [$studio] = studioUser();
+    $conv = Conversation::withoutGlobalScopes()->create([
+        'studio_id' => $studio->id, 'subject' => 'Your wedding', 'reply_token' => 'att-tok',
+    ]);
+
+    $this->postJson('/api/mail/inbound/topsecret', [
+        'MailboxHash' => 'att-tok',
+        'MessageID' => 'msg-att',
+        'From' => 'jane@example.com',
+        'StrippedTextReply' => 'See attached.',
+        'Attachments' => [[
+            'Name' => 'photo.jpg',
+            'Content' => base64_encode('fake-image-bytes'),
+            'ContentType' => 'image/jpeg',
+        ]],
+    ])->assertOk();
+
+    $message = Message::withoutGlobalScopes()->where('conversation_id', $conv->id)->firstOrFail();
+    $attachment = $message->attachments()->withoutGlobalScopes()->firstOrFail();
+
+    expect($attachment->name)->toBe('photo.jpg')->and($attachment->mime)->toBe('image/jpeg');
+    Storage::disk('public')->assertExists($attachment->path);
 });
 
 it('ingests a Postmark inbound reply into the conversation thread', function () {

@@ -20,6 +20,12 @@ interface ConversationItem {
     preview: string | null;
 }
 
+interface Attachment {
+    name: string;
+    url: string;
+    size: number;
+}
+
 interface MessageItem {
     id: number;
     direction: 'outbound' | 'inbound';
@@ -28,6 +34,7 @@ interface MessageItem {
     status: string;
     error: string | null;
     created_at: string;
+    attachments: Attachment[];
 }
 
 interface Selected {
@@ -36,6 +43,47 @@ interface Selected {
     status: 'open' | 'archived';
     contact: { id: number; name: string; email: string | null; phone: string | null } | null;
     messages: MessageItem[];
+}
+
+function fmtSize(bytes: number) {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function IconPaperclip({ className }: { className?: string }) {
+    return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" /></svg>
+    );
+}
+
+function AttachButton({ onAdd, className, label }: { onAdd: (files: File[]) => void; className?: string; label?: string }) {
+    const ref = useRef<HTMLInputElement>(null);
+    return (
+        <>
+            <button type="button" onClick={() => ref.current?.click()} className={className ?? 'rounded-md p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700'} title="Attach files">
+                <IconPaperclip className="h-4 w-4" />
+                {label && <span>{label}</span>}
+            </button>
+            <input ref={ref} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); if (f.length) onAdd(f); e.target.value = ''; }} />
+        </>
+    );
+}
+
+function AttachChips({ files, onRemove }: { files: File[]; onRemove: (i: number) => void }) {
+    if (files.length === 0) return null;
+    return (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+            {files.map((f, i) => (
+                <span key={i} className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-1 text-xs text-neutral-600">
+                    <IconPaperclip className="h-3 w-3" />
+                    <span className="max-w-[160px] truncate">{f.name}</span>
+                    <button type="button" onClick={() => onRemove(i)} className="text-neutral-400 hover:text-red-600">✕</button>
+                </span>
+            ))}
+        </div>
+    );
 }
 
 function fmtTime(d: string | null) {
@@ -87,11 +135,11 @@ export default function Index({
 
     const setStatus = (status: string) => router.get(route('messages.index'), { status, search: search || undefined }, { preserveState: true, preserveScroll: true, replace: true });
 
-    const reply = useForm({ body: '' });
+    const reply = useForm<{ body: string; attachments: File[] }>({ body: '', attachments: [] });
     const sendReply = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selected || !reply.data.body.trim()) return;
-        reply.post(route('messages.reply', selected.id), { preserveScroll: true, onSuccess: () => reply.reset() });
+        if (!selected || (!reply.data.body.trim() && reply.data.attachments.length === 0)) return;
+        reply.post(route('messages.reply', selected.id), { preserveScroll: true, forceFormData: true, onSuccess: () => reply.reset() });
     };
 
     return (
@@ -192,7 +240,18 @@ export default function Index({
                                     return (
                                         <div key={m.id} className={`flex ${out ? 'justify-end' : 'justify-start'}`}>
                                             <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${out ? 'bg-neutral-900 text-white' : 'border border-neutral-200 bg-white text-neutral-800'}`}>
-                                                <p className="whitespace-pre-line leading-relaxed">{m.body}</p>
+                                                {m.body && m.body !== '(no text content)' && <p className="whitespace-pre-line leading-relaxed">{m.body}</p>}
+                                                {m.attachments.length > 0 && (
+                                                    <div className={`space-y-1 ${m.body && m.body !== '(no text content)' ? 'mt-2' : ''}`}>
+                                                        {m.attachments.map((a, i) => (
+                                                            <a key={i} href={a.url} target="_blank" rel="noreferrer" className={`flex items-center gap-1.5 text-xs hover:underline ${out ? 'text-white/90' : 'text-blue-700'}`}>
+                                                                <IconPaperclip className="h-3.5 w-3.5 shrink-0" />
+                                                                <span className="truncate">{a.name}</span>
+                                                                {a.size > 0 && <span className="shrink-0 opacity-60">({fmtSize(a.size)})</span>}
+                                                            </a>
+                                                        ))}
+                                                    </div>
+                                                )}
                                                 <p className={`mt-1 text-[10px] ${out ? 'text-white/50' : 'text-neutral-400'}`}>
                                                     {m.author_name} · {fmtTime(m.created_at)}
                                                     {m.status === 'queued' && <span> · sending…</span>}
@@ -207,7 +266,9 @@ export default function Index({
                             </div>
 
                             <form onSubmit={sendReply} className="border-t border-neutral-200 bg-white p-3">
+                                <AttachChips files={reply.data.attachments} onRemove={(i) => reply.setData('attachments', reply.data.attachments.filter((_, idx) => idx !== i))} />
                                 <div className="flex items-end gap-2">
+                                    <AttachButton onAdd={(f) => reply.setData('attachments', [...reply.data.attachments, ...f])} />
                                     <textarea
                                         value={reply.data.body}
                                         onChange={(e) => reply.setData('body', e.target.value)}
@@ -216,7 +277,7 @@ export default function Index({
                                         placeholder="Write a reply…  (⌘/Ctrl + Enter to send)"
                                         className="input flex-1 resize-none"
                                     />
-                                    <button type="submit" disabled={reply.processing || !reply.data.body.trim()} className="btn-primary">
+                                    <button type="submit" disabled={reply.processing || (!reply.data.body.trim() && reply.data.attachments.length === 0)} className="btn-primary">
                                         {reply.processing ? 'Sending…' : 'Send'}
                                     </button>
                                 </div>
@@ -232,11 +293,11 @@ export default function Index({
 }
 
 function NewMessageModal({ show, onClose, contacts }: { show: boolean; onClose: () => void; contacts: ContactRef[] }) {
-    const form = useForm({ contact_id: '', subject: '', body: '' });
+    const form = useForm<{ contact_id: string; subject: string; body: string; attachments: File[] }>({ contact_id: '', subject: '', body: '', attachments: [] });
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-        form.post(route('messages.store'), { onSuccess: () => { form.reset(); onClose(); } });
+        form.post(route('messages.store'), { forceFormData: true, onSuccess: () => { form.reset(); onClose(); } });
     };
 
     return (
@@ -271,6 +332,11 @@ function NewMessageModal({ show, onClose, contacts }: { show: boolean; onClose: 
                     <span className="label mb-1.5 block">Message</span>
                     <textarea className="input" rows={6} value={form.data.body} onChange={(e) => form.setData('body', e.target.value)} />
                     {form.errors.body && <p className="mt-1 text-xs text-red-600">{form.errors.body}</p>}
+                </div>
+
+                <div>
+                    <AttachChips files={form.data.attachments} onRemove={(i) => form.setData('attachments', form.data.attachments.filter((_, idx) => idx !== i))} />
+                    <AttachButton onAdd={(f) => form.setData('attachments', [...form.data.attachments, ...f])} className="btn-secondary px-3 py-1.5 text-xs" label="Attach files" />
                 </div>
 
                 <div className="flex justify-end gap-2">
