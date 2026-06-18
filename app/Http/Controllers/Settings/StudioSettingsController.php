@@ -25,6 +25,7 @@ class StudioSettingsController extends Controller
             'postal_code' => 'nullable|string|max:20',
             'country' => ['nullable', 'string', Rule::in(array_keys(Currencies::COUNTRY_CURRENCY))],
             'default_currency' => ['required', 'string', Rule::in(Currencies::codes())],
+            'email_signature' => 'nullable|string|max:5000',
         ]);
 
         $studio->update($validated);

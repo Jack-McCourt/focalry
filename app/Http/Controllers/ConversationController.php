@@ -6,6 +6,8 @@ use App\Jobs\SendConversationMessage;
 use App\Models\Contact;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Models\MessageTemplate;
+use App\Models\Studio;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -56,8 +58,66 @@ class ConversationController extends Controller
             'contacts' => Contact::whereNotNull('email')->orderBy('first_name')->orderBy('last_name')
                 ->get(['id', 'first_name', 'last_name', 'company', 'email'])
                 ->map(fn (Contact $c) => ['id' => $c->id, 'name' => $c->name, 'email' => $c->email]),
+            'templates' => MessageTemplate::orderBy('name')->get(['id', 'name', 'body']),
+            'all_tags' => $this->studioTags(),
+            'compose_contact_id' => $request->integer('compose') ?: null,
             'inbound_configured' => (bool) config('services.messaging.inbound_address'),
         ]);
+    }
+
+    /** Distinct tags used across the studio's conversations, for reuse/autocomplete. */
+    private function studioTags(): array
+    {
+        return Conversation::whereNotNull('tags')
+            ->pluck('tags')
+            ->flatten()
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+    }
+
+    public function note(Request $request, Conversation $conversation): RedirectResponse
+    {
+        $data = $request->validate(['body' => 'required|string|max:20000']);
+
+        $conversation->messages()->create([
+            'studio_id' => $conversation->studio_id,
+            'direction' => 'outbound',
+            'is_internal' => true,
+            'user_id' => $request->user()?->id,
+            'body' => $data['body'],
+            'status' => 'sent',
+        ]);
+
+        return redirect()->route('messages.show', $conversation)->with('success', 'Note added.');
+    }
+
+    public function markUnread(Conversation $conversation): RedirectResponse
+    {
+        $conversation->update(['unread' => true]);
+
+        return redirect()->route('messages.index')->with('success', 'Marked as unread.');
+    }
+
+    public function updateTags(Request $request, Conversation $conversation): RedirectResponse
+    {
+        $data = $request->validate([
+            'tags' => 'nullable|array|max:20',
+            'tags.*' => 'nullable|string|max:40',
+        ]);
+
+        $tags = collect($data['tags'] ?? [])
+            ->map(fn ($t) => trim((string) $t))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $conversation->update(['tags' => $tags ?: null]);
+
+        return back()->with('success', 'Labels updated.');
     }
 
     public function store(Request $request): RedirectResponse
@@ -173,6 +233,7 @@ class ConversationController extends Controller
             'unread' => $c->unread,
             'status' => $c->status,
             'last_message_at' => $c->last_message_at?->toIso8601String(),
+            'tags' => $c->tags ?? [],
             'contact' => $c->contact ? ['id' => $c->contact->id, 'name' => $c->contact->name] : null,
             'preview' => $c->latestMessage ? str($c->latestMessage->body)->limit(80)->value() : null,
         ];
@@ -187,6 +248,7 @@ class ConversationController extends Controller
             'id' => $c->id,
             'subject' => $c->subject,
             'status' => $c->status,
+            'tags' => $c->tags ?? [],
             'contact' => $c->contact ? [
                 'id' => $c->contact->id,
                 'name' => $c->contact->name,
@@ -196,9 +258,11 @@ class ConversationController extends Controller
             'messages' => $c->messages->map(fn (Message $m) => [
                 'id' => $m->id,
                 'direction' => $m->direction,
+                'is_internal' => $m->is_internal,
                 'body' => $m->body,
                 'author_name' => $m->direction === 'inbound' ? ($m->author_name ?: $m->author_email) : ($m->user?->name ?? 'You'),
                 'status' => $m->status,
+                'opened_at' => $m->opened_at?->toIso8601String(),
                 'error' => $m->error,
                 'created_at' => $m->created_at->toIso8601String(),
                 'attachments' => $m->attachments->map(fn ($a) => [

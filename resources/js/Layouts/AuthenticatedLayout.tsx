@@ -1,6 +1,16 @@
 import { Auth, Flash } from '@/types';
-import { Link, usePage } from '@inertiajs/react';
-import { PropsWithChildren, ReactNode, useState } from 'react';
+import { Link, router, usePage } from '@inertiajs/react';
+import { PropsWithChildren, ReactNode, useEffect, useRef, useState } from 'react';
+
+interface NotificationItem {
+    id: string;
+    conversation_id: number | null;
+    from_name: string | null;
+    subject: string | null;
+    preview: string | null;
+    read: boolean;
+    created_at: string | null;
+}
 
 // ─── Nav icons ────────────────────────────────────────────────────────────────
 
@@ -108,6 +118,109 @@ function SidebarLink({
                 </span>
             )}
         </Link>
+    );
+}
+
+// ─── Notification bell ──────────────────────────────────────────────────────
+
+function IconBell({ className }: { className?: string }) {
+    return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+        </svg>
+    );
+}
+
+function NotificationBell() {
+    const { notifications = [], unread_notifications = 0 } = usePage<{
+        auth: Auth;
+        flash: Flash;
+        notifications: NotificationItem[];
+        unread_notifications: number;
+    }>().props;
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const onClick = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener('mousedown', onClick);
+        return () => document.removeEventListener('mousedown', onClick);
+    }, [open]);
+
+    const openNotification = (n: NotificationItem) => {
+        setOpen(false);
+        router.post(
+            route('notifications.read', n.id),
+            {},
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onFinish: () => {
+                    if (n.conversation_id) router.visit(route('messages.show', n.conversation_id));
+                },
+            },
+        );
+    };
+
+    const markAll = () =>
+        router.post(route('notifications.read-all'), {}, { preserveScroll: true, preserveState: true });
+
+    return (
+        <div className="relative" ref={ref}>
+            <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                className="relative rounded-md p-2 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700"
+                aria-label="Notifications"
+            >
+                <IconBell className="h-5 w-5" />
+                {unread_notifications > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+                        {unread_notifications > 9 ? '9+' : unread_notifications}
+                    </span>
+                )}
+            </button>
+
+            {open && (
+                <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-lg">
+                    <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-2.5">
+                        <span className="text-sm font-semibold text-neutral-900">Notifications</span>
+                        {unread_notifications > 0 && (
+                            <button onClick={markAll} className="text-xs font-medium text-blue-600 hover:text-blue-800">
+                                Mark all read
+                            </button>
+                        )}
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                        {notifications.length === 0 ? (
+                            <p className="px-4 py-8 text-center text-sm text-neutral-400">You're all caught up.</p>
+                        ) : (
+                            notifications.map((n) => (
+                                <button
+                                    key={n.id}
+                                    onClick={() => openNotification(n)}
+                                    className={`block w-full border-b border-neutral-50 px-4 py-3 text-left transition hover:bg-neutral-50 ${n.read ? '' : 'bg-blue-50/50'}`}
+                                >
+                                    <div className="flex items-start gap-2">
+                                        {!n.read && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600" />}
+                                        <div className="min-w-0">
+                                            <p className="truncate text-sm font-medium text-neutral-900">
+                                                New reply from {n.from_name ?? 'a client'}
+                                            </p>
+                                            {n.subject && <p className="truncate text-xs text-neutral-500">{n.subject}</p>}
+                                            {n.preview && <p className="mt-0.5 line-clamp-2 text-xs text-neutral-400">{n.preview}</p>}
+                                        </div>
+                                    </div>
+                                </button>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -289,9 +402,9 @@ export default function AuthenticatedLayout({
 
             {/* ── Main ── */}
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-                {/* Top bar — always present on mobile (for the menu button), and on
-                    desktop only when the page provides a header. */}
-                <div className={`flex h-14 shrink-0 items-center gap-2 border-b border-neutral-200 bg-white px-4 sm:px-6 lg:px-8 ${header ? '' : 'lg:hidden'}`}>
+                {/* Top bar — always present: holds the mobile menu button, the page
+                    header (when provided), and the global notification bell. */}
+                <div className="flex h-14 shrink-0 items-center gap-2 border-b border-neutral-200 bg-white px-4 sm:px-6 lg:px-8">
                     <button
                         type="button"
                         onClick={() => setSidebarOpen(true)}
@@ -302,7 +415,8 @@ export default function AuthenticatedLayout({
                             <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
                         </svg>
                     </button>
-                    {header && <div className="min-w-0 flex-1">{header}</div>}
+                    <div className="min-w-0 flex-1">{header}</div>
+                    <NotificationBell />
                 </div>
 
                 {/* Flash */}

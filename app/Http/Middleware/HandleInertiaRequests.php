@@ -41,6 +41,17 @@ class HandleInertiaRequests extends Middleware
                 'error' => fn () => $request->session()->get('error'),
             ],
             'unread_messages' => fn () => $user ? Conversation::where('unread', true)->count() : 0,
+            'notifications' => fn () => $user ? $user->notifications()->latest()->limit(15)->get()
+                ->map(fn ($n) => [
+                    'id' => $n->id,
+                    'conversation_id' => $n->data['conversation_id'] ?? null,
+                    'from_name' => $n->data['from_name'] ?? null,
+                    'subject' => $n->data['subject'] ?? null,
+                    'preview' => $n->data['preview'] ?? null,
+                    'read' => $n->read_at !== null,
+                    'created_at' => $n->created_at?->toIso8601String(),
+                ]) : [],
+            'unread_notifications' => fn () => $user ? $user->unreadNotifications()->count() : 0,
         ];
     }
 }

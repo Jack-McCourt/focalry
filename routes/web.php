@@ -7,6 +7,9 @@ use App\Http\Controllers\Gallery\FavouriteListDownloadController;
 use App\Http\Controllers\Gallery\GalleryController;
 use App\Http\Controllers\Gallery\GalleryDownloadController;
 use App\Http\Controllers\Gallery\SetController;
+use App\Http\Controllers\Mail\MailOpenController;
+use App\Http\Controllers\MessageTemplateController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public\ContractSigningController;
 use App\Http\Controllers\Public\PublicSiteController;
@@ -94,8 +97,20 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('messages', [ConversationController::class, 'store'])->name('messages.store');
     Route::get('messages/{conversation}', [ConversationController::class, 'index'])->name('messages.show');
     Route::post('messages/{conversation}/reply', [ConversationController::class, 'reply'])->name('messages.reply');
+    Route::post('messages/{conversation}/note', [ConversationController::class, 'note'])->name('messages.note');
+    Route::post('messages/{conversation}/unread', [ConversationController::class, 'markUnread'])->name('messages.unread');
+    Route::patch('messages/{conversation}/tags', [ConversationController::class, 'updateTags'])->name('messages.tags');
     Route::post('messages/{conversation}/archive', [ConversationController::class, 'archive'])->name('messages.archive');
     Route::delete('messages/{conversation}', [ConversationController::class, 'destroy'])->name('messages.destroy');
+
+    // Canned reply templates
+    Route::post('message-templates', [MessageTemplateController::class, 'store'])->name('message-templates.store');
+    Route::patch('message-templates/{template}', [MessageTemplateController::class, 'update'])->name('message-templates.update');
+    Route::delete('message-templates/{template}', [MessageTemplateController::class, 'destroy'])->name('message-templates.destroy');
+
+    // In-app notifications (bell)
+    Route::post('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+    Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
 
     // Website builder (studio's marketing site + lead capture)
     Route::get('website', [SiteController::class, 'edit'])->name('website.edit');
@@ -189,5 +204,10 @@ Route::get('/g/{slug}/download', [GalleryDownloadController::class, 'all'])
 Route::get('/g/{slug}/download/{photoId}', [GalleryDownloadController::class, 'single'])
     ->whereNumber('photoId')
     ->name('gallery.download.single');
+
+// Email open-tracking pixel (read receipts) — token-protected, no auth.
+Route::get('/e/o/{message}/{token}', MailOpenController::class)
+    ->whereNumber('message')
+    ->name('mail.open');
 
 require __DIR__.'/auth.php';

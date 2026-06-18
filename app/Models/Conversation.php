@@ -20,6 +20,7 @@ class Conversation extends Model
         'subject',
         'reply_token',
         'status',
+        'tags',
         'unread',
         'last_message_at',
     ];
@@ -28,6 +29,7 @@ class Conversation extends Model
     {
         return [
             'unread' => 'boolean',
+            'tags' => 'array',
             'last_message_at' => 'datetime',
         ];
     }

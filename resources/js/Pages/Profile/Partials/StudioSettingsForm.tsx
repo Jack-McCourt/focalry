@@ -16,6 +16,7 @@ export interface StudioSettings {
     postal_code: string | null;
     country: string | null;
     default_currency: string;
+    email_signature: string | null;
     stripe_connect_status: string | null;
     logo_url: string | null;
 }
@@ -39,6 +40,7 @@ export default function StudioSettingsForm({
         postal_code: studio.postal_code ?? '',
         country: studio.country ?? '',
         default_currency: studio.default_currency ?? 'usd',
+        email_signature: studio.email_signature ?? '',
     });
 
     const submit: FormEventHandler = (e) => {
@@ -209,6 +211,22 @@ export default function StudioSettingsForm({
                     </select>
                     <InputError message={errors.default_currency} className="mt-2" />
                     <p className="mt-1 text-sm text-gray-500">Used for new invoices. You can override it per invoice.</p>
+                </div>
+
+                <div>
+                    <InputLabel htmlFor="email_signature" value="Message signature" />
+                    <textarea
+                        id="email_signature"
+                        value={data.email_signature}
+                        rows={4}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                        onChange={(e) => setData('email_signature', e.target.value)}
+                        placeholder={'— ' + (data.name || 'Your studio')}
+                    />
+                    <InputError message={errors.email_signature} className="mt-2" />
+                    <p className="mt-1 text-sm text-gray-500">
+                        Appended to the bottom of client messages. Supports basic Markdown (**bold**, *italic*, links).
+                    </p>
                 </div>
 
                 <div className="flex items-center gap-4">

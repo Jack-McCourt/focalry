@@ -32,6 +32,7 @@ class ProfileController extends Controller
                 'postal_code' => $studio->postal_code,
                 'country' => $studio->country,
                 'default_currency' => $studio->default_currency,
+                'email_signature' => $studio->email_signature,
                 'stripe_connect_status' => $studio->stripe_connect_status,
                 'logo_url' => $studio->logoUrl(),
             ] : null,

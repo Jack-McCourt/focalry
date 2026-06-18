@@ -25,6 +25,8 @@ class StudioMessageMail extends Mailable
         public string $replyToAddress,
         public string $threadReference,
         public array $files = [],
+        public ?string $signature = null,
+        public ?string $trackingUrl = null,
     ) {}
 
     public function envelope(): Envelope
@@ -49,6 +51,8 @@ class StudioMessageMail extends Mailable
             with: [
                 'studioName' => $this->studioName,
                 'bodyText' => $this->bodyText,
+                'signature' => $this->signature,
+                'trackingUrl' => $this->trackingUrl,
             ],
         );
     }

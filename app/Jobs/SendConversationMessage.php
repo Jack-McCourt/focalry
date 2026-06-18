@@ -58,6 +58,8 @@ class SendConversationMessage implements ShouldQueue
             replyToAddress: $replyTo,
             threadReference: $conversation->threadReference(),
             files: $attachments,
+            signature: $studio?->email_signature,
+            trackingUrl: $message->openTrackingUrl(),
         ));
 
         $message->update(['status' => 'sent', 'error' => null]);

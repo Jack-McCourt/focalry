@@ -5,8 +5,10 @@ use App\Mail\StudioMessageMail;
 use App\Models\Contact;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Models\MessageTemplate;
 use App\Models\Studio;
 use App\Models\User;
+use App\Notifications\NewClientReply;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
@@ -173,6 +175,108 @@ it('is idempotent on duplicate inbound delivery', function () {
 
 it('rejects the inbound webhook with a wrong secret', function () {
     $this->postJson('/api/mail/inbound/wrong', ['MailboxHash' => 'x'])->assertNotFound();
+});
+
+it('adds an internal note without emailing the client', function () {
+    Mail::fake();
+    [$studio, $user] = studioUser();
+    $contact = Contact::withoutGlobalScopes()->create([
+        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com', 'status' => 'client',
+    ]);
+    $conv = Conversation::withoutGlobalScopes()->create([
+        'studio_id' => $studio->id, 'contact_id' => $contact->id, 'subject' => 'Hi', 'reply_token' => 'note-tok',
+    ]);
+
+    $this->actingAs($user)->post(route('messages.note', $conv), ['body' => 'Client wants outdoor shots'])->assertRedirect();
+
+    $this->assertDatabaseHas('messages', [
+        'conversation_id' => $conv->id, 'is_internal' => true, 'body' => 'Client wants outdoor shots', 'status' => 'sent',
+    ]);
+    Mail::assertNothingSent();
+});
+
+it('marks a conversation unread again', function () {
+    [$studio, $user] = studioUser();
+    $conv = Conversation::withoutGlobalScopes()->create([
+        'studio_id' => $studio->id, 'subject' => 'Hi', 'reply_token' => 'mu-tok', 'unread' => false,
+    ]);
+
+    $this->actingAs($user)->post(route('messages.unread', $conv))->assertRedirect();
+
+    expect($conv->refresh()->unread)->toBeTrue();
+});
+
+it('updates conversation labels', function () {
+    [$studio, $user] = studioUser();
+    $conv = Conversation::withoutGlobalScopes()->create([
+        'studio_id' => $studio->id, 'subject' => 'Hi', 'reply_token' => 'tag-tok',
+    ]);
+
+    $this->actingAs($user)->patch(route('messages.tags', $conv), ['tags' => ['VIP', 'Wedding', 'VIP', ' ']])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect();
+
+    expect(Conversation::withoutGlobalScopes()->find($conv->id)->tags)->toBe(['VIP', 'Wedding']);
+});
+
+it('stores and deletes a canned reply template', function () {
+    [$studio, $user] = studioUser();
+
+    $this->actingAs($user)->post(route('message-templates.store'), ['name' => 'Welcome', 'body' => 'Thanks for booking!'])->assertRedirect();
+    $this->assertDatabaseHas('message_templates', ['studio_id' => $studio->id, 'name' => 'Welcome']);
+
+    $template = MessageTemplate::withoutGlobalScopes()->firstOrFail();
+    $this->actingAs($user)->delete(route('message-templates.destroy', $template))->assertRedirect();
+    $this->assertDatabaseMissing('message_templates', ['id' => $template->id]);
+});
+
+it('records a database notification when a client replies', function () {
+    [$studio, $user] = studioUser();
+    $conv = Conversation::withoutGlobalScopes()->create([
+        'studio_id' => $studio->id, 'subject' => 'Hi', 'reply_token' => 'notif-tok',
+    ]);
+
+    $this->postJson('/api/mail/inbound/topsecret', [
+        'MailboxHash' => 'notif-tok', 'MessageID' => 'm-notif', 'From' => 'jane@example.com',
+        'FromFull' => ['Email' => 'jane@example.com', 'Name' => 'Jane'], 'StrippedTextReply' => 'Hello back',
+    ])->assertOk();
+
+    $this->assertDatabaseHas('notifications', [
+        'notifiable_type' => User::class, 'notifiable_id' => $user->id, 'type' => NewClientReply::class,
+    ]);
+});
+
+it('records an open via the tracking pixel and ignores a bad token', function () {
+    [$studio] = studioUser();
+    $conv = Conversation::withoutGlobalScopes()->create([
+        'studio_id' => $studio->id, 'subject' => 'Hi', 'reply_token' => 'open-tok',
+    ]);
+    $message = $conv->messages()->create([
+        'studio_id' => $studio->id, 'direction' => 'outbound', 'body' => 'hello', 'status' => 'sent',
+    ]);
+
+    $this->get(route('mail.open', ['message' => $message->id, 'token' => 'wrong']))->assertOk();
+    expect(Message::withoutGlobalScopes()->find($message->id)->opened_at)->toBeNull();
+
+    $this->get($message->openTrackingUrl())
+        ->assertOk()
+        ->assertHeader('Content-Type', 'image/gif');
+    expect(Message::withoutGlobalScopes()->find($message->id)->opened_at)->not->toBeNull();
+});
+
+it('appends the studio signature to outbound mail', function () {
+    Mail::fake();
+    $studio = Studio::factory()->create(['email_signature' => '— The Studio Team']);
+    $user = User::factory()->for($studio)->create();
+    $contact = Contact::withoutGlobalScopes()->create([
+        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com', 'status' => 'client',
+    ]);
+
+    $this->actingAs($user)->post(route('messages.store'), [
+        'contact_id' => $contact->id, 'subject' => 'Hi', 'body' => 'Hello',
+    ])->assertRedirect();
+
+    Mail::assertSent(StudioMessageMail::class, fn (StudioMessageMail $m) => $m->signature === '— The Studio Team' && str_contains($m->trackingUrl ?? '', '/e/o/'));
 });
 
 it('marks a conversation read when opened', function () {

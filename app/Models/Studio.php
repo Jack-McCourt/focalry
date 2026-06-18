@@ -28,6 +28,7 @@ class Studio extends Model
         'custom_domain',
         'default_currency',
         'invoice_settings',
+        'email_signature',
         'plan',
         'commission_rate',
         'storage_used',

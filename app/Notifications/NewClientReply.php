@@ -21,7 +21,18 @@ class NewClientReply extends Notification implements ShouldQueue
     /** @return array<int, string> */
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return ['mail', 'database'];
+    }
+
+    /** @return array<string, mixed> */
+    public function toArray(object $notifiable): array
+    {
+        return [
+            'conversation_id' => $this->conversationId,
+            'from_name' => $this->fromName,
+            'subject' => $this->subject,
+            'preview' => $this->preview,
+        ];
     }
 
     public function toMail(object $notifiable): MailMessage
