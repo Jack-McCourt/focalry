@@ -131,34 +131,73 @@ end
 
 function provider.getCollectionBehaviorInfo(publishSettings)
     return {
+        -- A Collection Set = a gallery; the Published Collections inside it = its
+        -- sets. A top-level Published Collection is a simple single-set gallery.
         defaultCollectionName = 'New Gallery',
         defaultCollectionCanBeDeleted = true,
         canAddCollection = true,
-        maxCollectionSetDepth = 0, -- flat list of galleries
+        maxCollectionSetDepth = 1,
     }
 end
 
--- Map this published collection to a remote gallery, creating one on first use.
-local function ensureRemoteCollection(exportContext, settings)
-    local info = exportContext.publishedCollectionInfo
-    local remoteId = info.remoteId
-
-    if remoteId then return remoteId end
-
-    local status, data = API.createCollection(settings.serverUrl, settings.token, info.name)
+local function createGallery(settings, name, createDefaultSet)
+    local status, data = API.createCollection(settings.serverUrl, settings.token, name, createDefaultSet)
     if status ~= 201 or not data or not data.collection then
-        LrErrors.throwUserError('Could not create the gallery on the server (HTTP ' .. tostring(status) .. ').')
+        LrErrors.throwUserError('Could not create the gallery "' .. tostring(name) .. '" (HTTP ' .. tostring(status) .. ').')
+    end
+    return data.collection.id
+end
+
+-- Resolve the remote gallery id + set id for the collection being published,
+-- creating whatever doesn't exist yet and caching the ids back onto Lightroom.
+--   • collection inside a set →  set's parent = gallery, collection = a set
+--   • top-level collection    →  the collection itself = a gallery (no set)
+local function ensureGalleryAndSet(exportContext, settings)
+    local info = exportContext.publishedCollectionInfo
+    local publishedCollection = exportContext.publishedCollection
+    local catalog = LrApplication.activeCatalog()
+
+    local parentInfo = info.parents and info.parents[#info.parents] or nil
+
+    if not parentInfo then
+        -- Top-level published collection → a gallery with the default set.
+        local galleryId = info.remoteId
+        if not galleryId then
+            galleryId = createGallery(settings, info.name, true)
+            catalog:withWriteAccessDo('Link Wedding App gallery', function()
+                publishedCollection:setRemoteId(galleryId)
+                publishedCollection:setRemoteUrl(settings.serverUrl .. '/collections/' .. tostring(galleryId))
+            end, { timeout = 30 })
+        end
+        return galleryId, nil
     end
 
-    remoteId = data.collection.id
+    -- Nested: parent collection set = gallery, this collection = a set in it.
+    local galleryId = parentInfo.remoteCollectionId
+    if not galleryId then
+        galleryId = createGallery(settings, parentInfo.name, false)
+        local parentSet = publishedCollection:getParent()
+        if parentSet then
+            catalog:withWriteAccessDo('Link Wedding App gallery', function()
+                parentSet:setRemoteId(galleryId)
+                parentSet:setRemoteUrl(settings.serverUrl .. '/collections/' .. tostring(galleryId))
+            end, { timeout = 30 })
+        end
+    end
 
-    local catalog = LrApplication.activeCatalog()
-    catalog:withWriteAccessDo('Link Wedding App gallery', function()
-        exportContext.publishedCollection:setRemoteId(remoteId)
-        exportContext.publishedCollection:setRemoteUrl(settings.serverUrl .. '/collections/' .. tostring(remoteId))
-    end, { timeout = 30 })
+    local setId = info.remoteId
+    if not setId then
+        local status, data = API.createSet(settings.serverUrl, settings.token, galleryId, info.name)
+        if status ~= 201 or not data or not data.set then
+            LrErrors.throwUserError('Could not create the set "' .. tostring(info.name) .. '" (HTTP ' .. tostring(status) .. ').')
+        end
+        setId = data.set.id
+        catalog:withWriteAccessDo('Link Wedding App set', function()
+            publishedCollection:setRemoteId(setId)
+        end, { timeout = 30 })
+    end
 
-    return remoteId
+    return galleryId, setId
 end
 
 function provider.processRenderedPhotos(functionContext, exportContext)
@@ -168,7 +207,7 @@ function provider.processRenderedPhotos(functionContext, exportContext)
         LrErrors.throwUserError('Please sign in to Wedding App in the publish service settings first.')
     end
 
-    local remoteCollectionId = ensureRemoteCollection(exportContext, settings)
+    local galleryId, setId = ensureGalleryAndSet(exportContext, settings)
 
     local nPhotos = exportContext.exportSession:countRenditions()
     local progress = exportContext:configureProgress({
@@ -186,7 +225,7 @@ function provider.processRenderedPhotos(functionContext, exportContext)
             local fileSize = attrs and attrs.fileSize or nil
 
             -- 1. Ask the app for a presigned Wasabi URL.
-            local pStatus, pData = API.presign(settings.serverUrl, settings.token, remoteCollectionId, filename, 'image/jpeg', fileSize)
+            local pStatus, pData = API.presign(settings.serverUrl, settings.token, galleryId, filename, 'image/jpeg', fileSize)
             if pStatus ~= 200 or not pData or not pData.url then
                 local msg = (pData and pData.message) or ('presign failed (HTTP ' .. tostring(pStatus) .. ')')
                 rendition:uploadFailed(msg)
@@ -196,8 +235,8 @@ function provider.processRenderedPhotos(functionContext, exportContext)
                 if uStatus < 200 or uStatus >= 300 then
                     rendition:uploadFailed('upload to storage failed (HTTP ' .. tostring(uStatus) .. ')')
                 else
-                    -- 3. Register the photo so the app queues derivatives.
-                    local rStatus, rData = API.registerPhoto(settings.serverUrl, settings.token, remoteCollectionId, filename, pData.key, fileSize)
+                    -- 3. Register the photo (into its set) so the app queues derivatives.
+                    local rStatus, rData = API.registerPhoto(settings.serverUrl, settings.token, galleryId, filename, pData.key, fileSize, setId)
                     if rStatus ~= 201 or not rData or not rData.photo then
                         local msg = (rData and rData.message) or ('register failed (HTTP ' .. tostring(rStatus) .. ')')
                         rendition:uploadFailed(msg)

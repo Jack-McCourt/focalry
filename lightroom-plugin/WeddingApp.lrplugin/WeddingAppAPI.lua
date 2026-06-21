@@ -65,8 +65,19 @@ function API.listCollections(serverUrl, token)
     return get(serverUrl .. '/api/lightroom/collections', token)
 end
 
-function API.createCollection(serverUrl, token, title)
-    return send('POST', serverUrl .. '/api/lightroom/collections', token, { title = title })
+-- createDefaultSet defaults to true; pass false when the caller (a gallery
+-- mapped from a Lightroom collection set) will create its own named sets.
+function API.createCollection(serverUrl, token, title, createDefaultSet)
+    return send('POST', serverUrl .. '/api/lightroom/collections', token, {
+        title = title,
+        create_default_set = createDefaultSet ~= false,
+    })
+end
+
+function API.createSet(serverUrl, token, collectionId, name)
+    return send('POST', serverUrl .. '/api/lightroom/collections/' .. tostring(collectionId) .. '/sets', token, {
+        name = name,
+    })
 end
 
 -- ── Photos ────────────────────────────────────────────────────────────────
@@ -115,13 +126,17 @@ function API.uploadToWasabi(signedUrl, signedHeaders, filePath, contentType)
     return (respHeaders and tonumber(respHeaders.status)) or 0
 end
 
-function API.registerPhoto(serverUrl, token, collectionId, filename, wasabiKey, fileSize)
-    return send('POST', serverUrl .. '/api/photos', token, {
+function API.registerPhoto(serverUrl, token, collectionId, filename, wasabiKey, fileSize, setId)
+    local body = {
         collection_id = collectionId,
         filename = filename,
         wasabi_key = wasabiKey,
         file_size = fileSize,
-    })
+    }
+    if setId then
+        body.set_id = setId
+    end
+    return send('POST', serverUrl .. '/api/photos', token, body)
 end
 
 function API.deletePhoto(serverUrl, token, photoId)

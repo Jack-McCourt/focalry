@@ -40,6 +40,8 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
         ->name('lightroom.collections');
     Route::post('lightroom/collections', [LightroomController::class, 'createCollection'])
         ->name('lightroom.collections.store');
+    Route::post('lightroom/collections/{collection}/sets', [LightroomController::class, 'createSet'])
+        ->name('lightroom.sets.store');
 
     Route::post('uploads/presign', [PresignedUploadController::class, 'store'])
         ->name('uploads.presign');

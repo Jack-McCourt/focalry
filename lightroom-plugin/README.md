@@ -42,8 +42,23 @@ sent as `Authorization: Bearer <token>` on every request.
    **Set Up…** next to *Wedding App*.
 4. Confirm the **Server** URL, enter your **Email** and **Password**, click
    **Sign in**, then **Save**.
-5. Right-click *Wedding App → Create Published Collection*, name it, drag photos
-   in, and click **Publish**.
+5. Create galleries and publish (see mapping below), then click **Publish**.
+
+## Galleries and sets
+
+The plugin mirrors your Lightroom structure into the app:
+
+| In Lightroom                                   | In the app            |
+| ---------------------------------------------- | --------------------- |
+| Published **Collection Set** (e.g. "Smith Wedding") | a **gallery**    |
+| Published **Collection** inside that set (e.g. "Ceremony", "Reception") | a **set** in that gallery |
+| A plain top-level Published **Collection**     | a simple gallery (single default set) |
+
+So to build a gallery with multiple sets entirely from Lightroom:
+*Wedding App → Create Published Collection Set* ("Smith Wedding") → inside it
+*Create Published Collection* for each set ("Ceremony", "Reception"…), drag the
+right photos into each, and **Publish**. The gallery, its sets and the photos
+are all created on the server.
 
 > The **Server** field defaults to `https://wedding-app.jackonthe.net`. Point it
 > at a local/staging URL for testing.

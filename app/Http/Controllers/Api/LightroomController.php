@@ -91,26 +91,31 @@ class LightroomController extends Controller
 
     /**
      * Create a new gallery (mirrors the web CollectionController: unique slug,
-     * draft status, and a default "Highlights" set so photos always land in one).
+     * draft status). A default "Highlights" set is added unless the caller will
+     * create its own sets (Lightroom collection-set → gallery → named sets).
      */
     public function createCollection(Request $request): JsonResponse
     {
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'event_date' => 'nullable|date',
+            'create_default_set' => 'nullable|boolean',
         ]);
 
         $collection = Collection::create([
-            ...$validated,
+            'title' => $validated['title'],
+            'event_date' => $validated['event_date'] ?? null,
             'slug' => $this->uniqueSlug($validated['title']),
             'status' => 'draft',
         ]);
 
-        $collection->sets()->create([
-            'name' => 'Highlights',
-            'position' => 1,
-            'visible' => true,
-        ]);
+        if ($request->boolean('create_default_set', true)) {
+            $collection->sets()->create([
+                'name' => 'Highlights',
+                'position' => 1,
+                'visible' => true,
+            ]);
+        }
 
         return response()->json([
             'collection' => [
@@ -118,6 +123,29 @@ class LightroomController extends Controller
                 'title' => $collection->title,
                 'status' => $collection->status,
             ],
+        ], 201);
+    }
+
+    /**
+     * Create a set within a gallery (Lightroom maps each published collection
+     * inside a collection set to a set here).
+     */
+    public function createSet(Request $request, Collection $collection): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+        ]);
+
+        $position = (int) $collection->sets()->max('position') + 1;
+
+        $set = $collection->sets()->create([
+            'name' => $validated['name'],
+            'position' => $position,
+            'visible' => true,
+        ]);
+
+        return response()->json([
+            'set' => ['id' => $set->id, 'name' => $set->name],
         ], 201);
     }
 

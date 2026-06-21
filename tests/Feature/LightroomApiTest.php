@@ -92,3 +92,37 @@ it('creates a gallery with a unique slug and a default set', function () {
     expect($collection->slug)->toStartWith('jones-engagement-');
     expect($collection->sets()->where('name', 'Highlights')->exists())->toBeTrue();
 });
+
+it('skips the default set when the caller will create its own', function () {
+    [$studio, $user] = lightroomStudio();
+    Sanctum::actingAs($user);
+
+    $this->postJson(route('lightroom.collections.store'), [
+        'title' => 'Smith Wedding',
+        'create_default_set' => false,
+    ])->assertCreated();
+
+    $collection = Collection::where('studio_id', $studio->id)->firstOrFail();
+    expect($collection->sets()->count())->toBe(0);
+});
+
+it('creates a set inside a gallery', function () {
+    [$studio, $user] = lightroomStudio();
+    $collection = Collection::create(['studio_id' => $studio->id, 'title' => 'Smith Wedding', 'slug' => 'smith-set123', 'status' => 'draft']);
+    Sanctum::actingAs($user);
+
+    $res = $this->postJson(route('lightroom.sets.store', $collection->id), ['name' => 'Ceremony']);
+
+    $res->assertCreated()->assertJsonPath('set.name', 'Ceremony');
+    expect($collection->sets()->where('name', 'Ceremony')->exists())->toBeTrue();
+});
+
+it('does not let one studio add a set to another studio\'s gallery', function () {
+    [$studio, $user] = lightroomStudio();
+    $other = Studio::factory()->create();
+    $foreign = Collection::create(['studio_id' => $other->id, 'title' => 'Other', 'slug' => 'other-set456', 'status' => 'draft']);
+    Sanctum::actingAs($user);
+
+    $this->postJson(route('lightroom.sets.store', $foreign->id), ['name' => 'Sneaky'])
+        ->assertNotFound();
+});
