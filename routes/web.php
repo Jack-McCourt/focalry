@@ -16,6 +16,7 @@ use App\Http\Controllers\Gallery\FavouriteListDownloadController;
 use App\Http\Controllers\Gallery\GalleryController;
 use App\Http\Controllers\Gallery\GalleryDownloadController;
 use App\Http\Controllers\Gallery\SetController;
+use App\Http\Controllers\LightroomPluginController;
 use App\Http\Controllers\Mail\MailOpenController;
 use App\Http\Controllers\MessageTemplateController;
 use App\Http\Controllers\NotificationController;
@@ -56,11 +57,11 @@ use App\Http\Controllers\StudioManager\ProposalController;
 use App\Http\Controllers\StudioManager\QuestionnaireController;
 use App\Http\Controllers\StudioManager\QuestionnaireTemplateController;
 use App\Http\Controllers\StudioManager\SiteController;
+use App\Http\Controllers\StudioManager\StoreOrderController;
+use App\Http\Controllers\StudioManager\StoreSettingsController;
 use App\Http\Controllers\StudioManager\TaskController;
 use App\Http\Controllers\StudioManager\TaskTemplateController;
 use App\Http\Controllers\StudioManager\WorkflowController;
-use App\Http\Controllers\StudioManager\StoreOrderController;
-use App\Http\Controllers\StudioManager\StoreSettingsController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -106,6 +107,10 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
 
     // Collections (Client Galleries)
     Route::resource('collections', CollectionController::class)->except(['edit']);
+
+    // Lightroom Classic publish plugin download
+    Route::get('lightroom-plugin', [LightroomPluginController::class, 'download'])
+        ->name('lightroom.plugin.download');
 
     // Studio Manager — Contacts (CRM)
     Route::resource('contacts', ContactController::class)->except(['create', 'edit'])
