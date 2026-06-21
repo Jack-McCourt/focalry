@@ -20,6 +20,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'is_super_admin',
     ];
 
     protected $hidden = [
@@ -32,7 +33,22 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_super_admin' => 'boolean',
         ];
+    }
+
+    /**
+     * Platform super admin — either flagged in the DB or present in the
+     * configured allowlist (env SUPER_ADMIN_EMAILS), so access can be
+     * bootstrapped without a DB write.
+     */
+    public function isSuperAdmin(): bool
+    {
+        $flagged = array_key_exists('is_super_admin', $this->getAttributes())
+            && (bool) $this->is_super_admin;
+
+        return $flagged
+            || in_array(strtolower($this->email), config('admin.emails', []), true);
     }
 
     public function studio(): BelongsTo
