@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\LightroomController;
 use App\Http\Controllers\Gallery\PhotoController;
 use App\Http\Controllers\Gallery\PresignedUploadController;
 use App\Http\Controllers\Mail\InboundMailController;
@@ -25,8 +26,21 @@ Route::post('mail/inbound/{secret}', [InboundMailController::class, 'handle'])
 Route::post('prodigi/callback/{secret}', ProdigiCallbackController::class)
     ->name('prodigi.callback');
 
+// Lightroom plugin login — public, throttled (email + password → Sanctum token)
+Route::post('lightroom/login', [LightroomController::class, 'login'])
+    ->middleware('throttle:10,1')
+    ->name('lightroom.login');
+
 // Authenticated studio API routes
 Route::middleware(['auth:sanctum', 'verified'])->group(function () {
+    // Lightroom plugin: account + gallery helpers (uploads reuse presign/photos below)
+    Route::get('lightroom/account', [LightroomController::class, 'account'])
+        ->name('lightroom.account');
+    Route::get('lightroom/collections', [LightroomController::class, 'collections'])
+        ->name('lightroom.collections');
+    Route::post('lightroom/collections', [LightroomController::class, 'createCollection'])
+        ->name('lightroom.collections.store');
+
     Route::post('uploads/presign', [PresignedUploadController::class, 'store'])
         ->name('uploads.presign');
 
