@@ -1,5 +1,6 @@
 import Modal from '@/Components/Modal';
 import SendEmailModal from '@/Components/SendEmailModal';
+import Lightbox from '@/Components/gallery/Lightbox';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import {
     Collection,
@@ -1044,6 +1045,7 @@ function PhotoTile({
     onDelete,
     onSetChange,
     onSetCover,
+    onOpen,
 }: {
     photo: Photo;
     sets: GallerySet[];
@@ -1052,6 +1054,7 @@ function PhotoTile({
     onDelete: (id: number) => void;
     onSetChange: (photoId: number, setId: number | null) => void;
     onSetCover: (photoId: number) => void;
+    onOpen: (photoId: number) => void;
 }) {
     const [confirm, setConfirm] = useState(false);
     const [loaded, setLoaded] = useState(false);
@@ -1107,13 +1110,16 @@ function PhotoTile({
     return (
         <div
             data-pid={photo.id}
-            className={`group relative aspect-square select-none ${showMenu ? 'z-30' : ''}`}
+            className={`group relative mb-2 block break-inside-avoid select-none ${showMenu ? 'z-30' : ''}`}
         >
-            {/* Image surface — clipped/rounded; kept separate so menus can escape */}
+            {/* Image surface — clipped/rounded; kept separate so menus can escape.
+                Aspect ratio comes from the photo's real dimensions so the masonry
+                columns reserve the right height (square fallback while processing). */}
             <div
-                className={`absolute inset-0 overflow-hidden rounded-lg bg-neutral-100 ${
+                className={`relative overflow-hidden rounded-lg bg-neutral-100 ${
                     selected ? 'ring-2 ring-blue-500 ring-offset-2' : ''
                 }`}
+                style={{ aspectRatio: photo.width && photo.height ? `${photo.width} / ${photo.height}` : '1 / 1' }}
             >
                 {photo.thumb_url && (
                     <img
@@ -1176,6 +1182,16 @@ function PhotoTile({
                         </button>
                         {showMenu && (
                             <div className="absolute right-0 top-full z-30 mt-1 w-40 rounded-lg border border-neutral-100 bg-white py-1 shadow-lg text-xs">
+                                <button
+                                    onClick={() => { setShowMenu(false); onOpen(photo.id); }}
+                                    className="flex w-full items-center gap-2 px-3 py-1.5 text-neutral-700 hover:bg-neutral-50"
+                                >
+                                    <svg className="h-3.5 w-3.5 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    </svg>
+                                    Open
+                                </button>
                                 <button
                                     onClick={setCover}
                                     className="flex w-full items-center gap-2 px-3 py-1.5 text-neutral-700 hover:bg-neutral-50"
@@ -1499,6 +1515,7 @@ export default function Show({
     const [dropHoverSetId, setDropHoverSetId] = useState<number | null>(null);
     const [dragChip, setDragChip] = useState<{ x: number; y: number; count: number } | null>(null);
     const gridRef = useRef<HTMLDivElement>(null);
+    const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
     const dragRef = useRef<{
         x: number;
         y: number;
@@ -1828,7 +1845,7 @@ export default function Show({
                                         onPointerMove={onGridPointerMove}
                                         onPointerUp={onGridPointerUp}
                                         onPointerCancel={() => { dragRef.current = null; setMarqueeRect(null); setDragChip(null); setDropHoverSetId(null); }}
-                                        className="relative grid touch-none grid-cols-4 gap-2 sm:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8"
+                                        className="relative touch-none columns-2 gap-2 sm:columns-3 lg:columns-4 xl:columns-6"
                                     >
                                         {visiblePhotos.map((photo) => (
                                             <PhotoTile
@@ -1840,6 +1857,7 @@ export default function Show({
                                                 onDelete={handleDelete}
                                                 onSetChange={handleSetChange}
                                                 onSetCover={(id) => router.reload({ only: ['collection'] })}
+                                                onOpen={(id) => setLightboxIndex(visiblePhotos.findIndex((p) => p.id === id))}
                                             />
                                         ))}
 
@@ -1856,6 +1874,22 @@ export default function Show({
                                             />
                                         )}
                                     </div>
+                                )}
+
+                                {lightboxIndex !== null && visiblePhotos[lightboxIndex] && (
+                                    <Lightbox
+                                        photos={visiblePhotos}
+                                        index={lightboxIndex}
+                                        onClose={() => setLightboxIndex(null)}
+                                        onIndex={setLightboxIndex}
+                                        canFavourite={false}
+                                        isFavourited={false}
+                                        onToggleFavourite={() => {}}
+                                        canDownload={false}
+                                        onDownload={() => {}}
+                                        storeEnabled={false}
+                                        onBuy={() => {}}
+                                    />
                                 )}
                             </div>
                         )}
