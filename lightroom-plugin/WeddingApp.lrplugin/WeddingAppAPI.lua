@@ -80,16 +80,36 @@ function API.presign(serverUrl, token, collectionId, filename, contentType, file
     })
 end
 
+-- LrHttp requires every header value to be a string. The presign response may
+-- encode a value as a JSON array (a Lua table after decoding), so coerce it.
+local function headerValueToString(value)
+    if type(value) == 'table' then
+        value = value[1]
+    end
+    if type(value) ~= 'string' then
+        value = tostring(value)
+    end
+    return value
+end
+
 -- Upload the rendered file straight to Wasabi using the presigned URL.
 -- `signedHeaders` is the header map returned by /uploads/presign and must be
--- replayed verbatim, otherwise the signature check fails.
-function API.uploadToWasabi(signedUrl, signedHeaders, filePath)
+-- replayed (the signed Content-Type especially), otherwise the upload fails.
+function API.uploadToWasabi(signedUrl, signedHeaders, filePath, contentType)
     local data = LrFileUtils.readFile(filePath)
     local headers = {}
+    local hasContentType = false
     if signedHeaders then
         for field, value in pairs(signedHeaders) do
-            headers[#headers + 1] = { field = field, value = value }
+            if tostring(field):lower() == 'content-type' then
+                hasContentType = true
+            end
+            headers[#headers + 1] = { field = field, value = headerValueToString(value) }
         end
+    end
+    -- Wasabi signs Content-Type; make sure it is sent even if it wasn't echoed back.
+    if not hasContentType and contentType then
+        headers[#headers + 1] = { field = 'Content-Type', value = contentType }
     end
     local _, respHeaders = LrHttp.post(signedUrl, data, headers, 'PUT', 300)
     return (respHeaders and tonumber(respHeaders.status)) or 0

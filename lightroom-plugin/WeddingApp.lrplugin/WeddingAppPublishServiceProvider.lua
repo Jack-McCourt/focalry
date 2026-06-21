@@ -192,7 +192,7 @@ function provider.processRenderedPhotos(functionContext, exportContext)
                 rendition:uploadFailed(msg)
             else
                 -- 2. PUT the file directly to Wasabi.
-                local uStatus = API.uploadToWasabi(pData.url, pData.headers, filePath)
+                local uStatus = API.uploadToWasabi(pData.url, pData.headers, filePath, 'image/jpeg')
                 if uStatus < 200 or uStatus >= 300 then
                     rendition:uploadFailed('upload to storage failed (HTTP ' .. tostring(uStatus) .. ')')
                 else
