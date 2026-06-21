@@ -29,6 +29,14 @@ local provider = {}
 -- Publish-only service (no plain "Export to disk" entry).
 provider.supportsIncrementalPublish = 'only'
 
+-- Pixieset-style naming in the Publish panel: a "Collection" is the gallery
+-- (Lightroom collection set) and the "Sets" inside it are its sets (Lightroom
+-- published collections). This drives the right-click "Create …" menu labels.
+provider.titleForPublishedCollection = 'Set'
+provider.titleForPublishedSmartCollection = 'Smart Set'
+provider.titleForPublishedCollectionSet = 'Collection'
+provider.titleForGoToPublishedCollection = 'Show Set in Wedding App'
+
 -- We only ever push web-sized sRGB JPEGs; the gallery makes its own derivatives.
 provider.hideSections = { 'exportLocation', 'video' }
 provider.allowFileFormats = { 'JPEG' }
@@ -131,9 +139,10 @@ end
 
 function provider.getCollectionBehaviorInfo(publishSettings)
     return {
-        -- A Collection Set = a gallery; the Published Collections inside it = its
-        -- sets. A top-level Published Collection is a simple single-set gallery.
-        defaultCollectionName = 'New Gallery',
+        -- A "Collection" (Lightroom collection set) = a gallery; the "Sets"
+        -- (published collections) inside it = its sets. A top-level Set with no
+        -- parent Collection is treated as a simple single-set gallery.
+        defaultCollectionName = 'Untitled Set',
         defaultCollectionCanBeDeleted = true,
         canAddCollection = true,
         maxCollectionSetDepth = 1,

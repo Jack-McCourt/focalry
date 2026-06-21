@@ -44,21 +44,27 @@ sent as `Authorization: Bearer <token>` on every request.
    **Sign in**, then **Save**.
 5. Create galleries and publish (see mapping below), then click **Publish**.
 
-## Galleries and sets
+## Collections and sets
 
-The plugin mirrors your Lightroom structure into the app:
+The Publish panel uses Pixieset-style names: right-clicking the **Wedding App**
+service (or a Collection) offers **Create Set**, **Create Smart Set** and
+**Create Collection**. They map to the app like this:
 
-| In Lightroom                                   | In the app            |
-| ---------------------------------------------- | --------------------- |
-| Published **Collection Set** (e.g. "Smith Wedding") | a **gallery**    |
-| Published **Collection** inside that set (e.g. "Ceremony", "Reception") | a **set** in that gallery |
-| A plain top-level Published **Collection**     | a simple gallery (single default set) |
+| In the plugin (Publish panel) | In the app            |
+| ----------------------------- | --------------------- |
+| **Collection** (e.g. "Smith Wedding") | a **gallery**  |
+| **Set** inside a Collection (e.g. "Ceremony", "Reception") | a **set** in that gallery |
+| **Smart Set** inside a Collection | a **set** auto-populated by Lightroom rules |
+| A **Set** created at the top level (no Collection) | a simple gallery (single default set) |
 
 So to build a gallery with multiple sets entirely from Lightroom:
-*Wedding App → Create Published Collection Set* ("Smith Wedding") → inside it
-*Create Published Collection* for each set ("Ceremony", "Reception"…), drag the
-right photos into each, and **Publish**. The gallery, its sets and the photos
-are all created on the server.
+
+1. Right-click **Wedding App → Create Collection** ("Smith Wedding").
+2. Right-click that Collection → **Create Set** for each set ("Ceremony",
+   "Reception"…). The set is created inside the Collection.
+3. Drag the right photos into each Set and click **Publish**.
+
+The gallery, its sets and the photos are all created on the server.
 
 > The **Server** field defaults to `https://wedding-app.jackonthe.net`. Point it
 > at a local/staging URL for testing.
