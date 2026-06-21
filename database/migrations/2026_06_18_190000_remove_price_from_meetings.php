@@ -21,12 +21,12 @@ return new class extends Migration
     {
         Schema::table('meeting_types', function (Blueprint $table) {
             $table->unsignedBigInteger('price_cents')->default(0);
-            $table->string('currency', 3)->default('usd');
+            $table->string('currency', 3)->default('gbp');
         });
 
         Schema::table('meetings', function (Blueprint $table) {
             $table->unsignedBigInteger('price_cents')->default(0);
-            $table->string('currency', 3)->default('usd');
+            $table->string('currency', 3)->default('gbp');
         });
     }
 };

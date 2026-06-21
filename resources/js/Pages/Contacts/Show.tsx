@@ -113,7 +113,7 @@ export default function Show({
                                 {projects.map((p) => (
                                     <Link
                                         key={p.id}
-                                        href={`/projects?client=${contact.id}`}
+                                        href={`/projects?open=${p.id}`}
                                         className="block rounded-lg border border-neutral-200 bg-white px-4 py-3 transition hover:border-neutral-300"
                                     >
                                         <div className="flex items-center justify-between gap-2">

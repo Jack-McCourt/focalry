@@ -8,7 +8,11 @@ import { useEffect, useRef, useState } from 'react';
 interface Filters {
     search: string;
     status: string | null;
+    sort: string | null;
+    dir: 'asc' | 'desc';
 }
+
+type SortKey = 'number' | 'client' | 'issue_date' | 'due_date' | 'status' | 'total' | 'balance';
 
 interface Summary {
     outstanding_cents: number;
@@ -36,6 +40,40 @@ function fmtDate(d: string | null) {
     return d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
 }
 
+function SortHeader({
+    label,
+    sortKey,
+    filters,
+    onSort,
+    align = 'left',
+    className = '',
+}: {
+    label: string;
+    sortKey: SortKey;
+    filters: Filters;
+    onSort: (key: SortKey) => void;
+    align?: 'left' | 'right';
+    className?: string;
+}) {
+    const active = filters.sort === sortKey;
+    return (
+        <th className={`px-4 py-3 ${align === 'right' ? 'text-right' : ''} ${className}`}>
+            <button
+                type="button"
+                onClick={() => onSort(sortKey)}
+                className={`group inline-flex items-center gap-1 font-medium transition hover:text-neutral-700 ${
+                    align === 'right' ? 'flex-row-reverse' : ''
+                } ${active ? 'text-neutral-900' : 'text-neutral-400'}`}
+            >
+                {label}
+                <span className="text-[10px] leading-none">
+                    {active ? (filters.dir === 'asc' ? '▲' : '▼') : <span className="opacity-0 group-hover:opacity-40">▼</span>}
+                </span>
+            </button>
+        </th>
+    );
+}
+
 export default function Index({
     invoices,
     filters,
@@ -45,36 +83,49 @@ export default function Index({
     const [search, setSearch] = useState(filters.search);
     const firstRender = useRef(true);
 
+    const navigate = (params: { search?: string; status?: string | null; sort?: string | null; dir?: 'asc' | 'desc' }) => {
+        const next = {
+            search: 'search' in params ? params.search : search,
+            status: 'status' in params ? params.status : filters.status,
+            sort: 'sort' in params ? params.sort : filters.sort,
+            dir: 'dir' in params ? params.dir : filters.dir,
+        };
+        router.get(
+            route('invoices.index'),
+            {
+                search: next.search || undefined,
+                status: next.status ?? undefined,
+                sort: next.sort ?? undefined,
+                dir: next.sort ? next.dir : undefined,
+            },
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
+    };
+
     useEffect(() => {
         if (firstRender.current) {
             firstRender.current = false;
             return;
         }
-        const t = setTimeout(() => {
-            router.get(
-                route('invoices.index'),
-                { search, status: filters.status ?? undefined },
-                { preserveState: true, preserveScroll: true, replace: true },
-            );
-        }, 300);
+        const t = setTimeout(() => navigate({ search }), 300);
         return () => clearTimeout(t);
     }, [search]);
 
-    const setStatus = (status: string | null) => {
-        router.get(
-            route('invoices.index'),
-            { search: search || undefined, status: status ?? undefined },
-            { preserveState: true, preserveScroll: true, replace: true },
-        );
+    const setStatus = (status: string | null) => navigate({ status });
+
+    const toggleSort = (key: SortKey) => {
+        // Same column → flip direction; new column → default desc.
+        const dir: 'asc' | 'desc' = filters.sort === key && filters.dir === 'desc' ? 'asc' : 'desc';
+        navigate({ sort: key, dir });
     };
 
     const statusTabs: { key: string | null; label: string }[] = [
         { key: null, label: 'All' },
         { key: 'draft', label: 'Draft' },
-        { key: 'sent', label: 'Sent' },
-        { key: 'partial', label: 'Partial' },
+        { key: 'upcoming', label: 'Upcoming' },
+        { key: 'past_due', label: 'Past Due' },
         { key: 'paid', label: 'Paid' },
-        { key: 'void', label: 'Void' },
+        { key: 'cancelled', label: 'Cancelled' },
     ];
 
     return (
@@ -163,13 +214,13 @@ export default function Index({
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-neutral-100 text-left text-xs font-medium text-neutral-400">
-                                    <th className="px-4 py-3">Number</th>
-                                    <th className="px-4 py-3">Client</th>
-                                    <th className="hidden px-4 py-3 sm:table-cell">Issued</th>
-                                    <th className="hidden px-4 py-3 md:table-cell">Due</th>
-                                    <th className="px-4 py-3">Status</th>
-                                    <th className="px-4 py-3 text-right">Total</th>
-                                    <th className="px-4 py-3 text-right">Balance</th>
+                                    <SortHeader label="Number" sortKey="number" filters={filters} onSort={toggleSort} />
+                                    <SortHeader label="Client" sortKey="client" filters={filters} onSort={toggleSort} />
+                                    <SortHeader label="Issued" sortKey="issue_date" filters={filters} onSort={toggleSort} className="hidden sm:table-cell" />
+                                    <SortHeader label="Due" sortKey="due_date" filters={filters} onSort={toggleSort} className="hidden md:table-cell" />
+                                    <SortHeader label="Status" sortKey="status" filters={filters} onSort={toggleSort} />
+                                    <SortHeader label="Total" sortKey="total" filters={filters} onSort={toggleSort} align="right" />
+                                    <SortHeader label="Balance" sortKey="balance" filters={filters} onSort={toggleSort} align="right" />
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-neutral-50">

@@ -10,7 +10,7 @@ use App\Services\PackageFulfillment;
 
 function packageStudio(): array
 {
-    $studio = Studio::factory()->create(['slug' => 'lens-studio']);
+    $studio = Studio::factory()->onPaidPlan()->create(['slug' => 'lens-studio']);
     $user = User::factory()->for($studio)->create();
     app()->instance('current.studio.id', $studio->id);
 

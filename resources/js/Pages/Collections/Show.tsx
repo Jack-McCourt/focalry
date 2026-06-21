@@ -29,6 +29,7 @@ interface UploadItem {
     file: File;
     progress: number;
     status: 'queued' | 'uploading' | 'registering' | 'done' | 'error';
+    error?: string;
 }
 
 interface ShowProps extends Record<string, unknown> {
@@ -37,6 +38,8 @@ interface ShowProps extends Record<string, unknown> {
     sets: GallerySet[];
     activity: FavouriteActivity[];
     email_defaults: EmailDefaults;
+    price_sheets: { id: number; name: string }[];
+    projects: { id: number; name: string; client: string | null }[];
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -335,6 +338,92 @@ function PrivacyPanel({ collection }: { collection: Collection }) {
                     {saving ? 'Saving…' : 'Save privacy settings'}
                 </button>
             )}
+        </div>
+    );
+}
+
+// ─── Store (price sheet) settings panel ───────────────────────────────────────
+
+function StorePanel({ collection, priceSheets }: { collection: Collection; priceSheets: { id: number; name: string }[] }) {
+    const current = (collection as { price_sheet_id?: number | null }).price_sheet_id ?? null;
+    const [sheetId, setSheetId] = useState<number | null>(current);
+    const [saving, setSaving] = useState(false);
+
+    const save = (value: number | null) => {
+        setSheetId(value);
+        setSaving(true);
+        router.patch(
+            route('collections.update', collection.id),
+            { price_sheet_id: value },
+            { preserveScroll: true, onFinish: () => setSaving(false) },
+        );
+    };
+
+    if (priceSheets.length === 0) {
+        return (
+            <p className="text-sm text-neutral-500">
+                Create a <a href={route('store.products.index')} className="text-blue-600 hover:underline">price sheet</a> first, then assign it here to sell prints and downloads in this gallery.
+            </p>
+        );
+    }
+
+    return (
+        <div className="space-y-2">
+            <p className="text-xs text-neutral-500">Choose the catalogue of products clients can buy from this gallery.</p>
+            <select
+                value={sheetId ?? ''}
+                onChange={(e) => save(e.target.value ? Number(e.target.value) : null)}
+                disabled={saving}
+                className="block w-full max-w-xs rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900"
+            >
+                <option value="">Not for sale</option>
+                {priceSheets.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+            </select>
+        </div>
+    );
+}
+
+// ─── Project assignment panel ─────────────────────────────────────────────────
+
+function ProjectPanel({ collection, projects }: { collection: Collection; projects: { id: number; name: string; client: string | null }[] }) {
+    const current = (collection as { project_id?: number | null }).project_id ?? null;
+    const [projectId, setProjectId] = useState<number | null>(current);
+    const [saving, setSaving] = useState(false);
+
+    const save = (value: number | null) => {
+        setProjectId(value);
+        setSaving(true);
+        router.patch(
+            route('collections.update', collection.id),
+            { project_id: value },
+            { preserveScroll: true, onFinish: () => setSaving(false) },
+        );
+    };
+
+    if (projects.length === 0) {
+        return (
+            <p className="text-sm text-neutral-500">
+                Create a <a href="/projects" className="text-blue-600 hover:underline">project</a> first, then attach this gallery to it. The gallery's client comes from the project.
+            </p>
+        );
+    }
+
+    return (
+        <div className="space-y-2">
+            <p className="text-xs text-neutral-500">Galleries belong to a project — the client is taken from the project.</p>
+            <select
+                value={projectId ?? ''}
+                onChange={(e) => save(e.target.value ? Number(e.target.value) : null)}
+                disabled={saving}
+                className="block w-full max-w-xs rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900"
+            >
+                <option value="">Not linked to a project</option>
+                {projects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}{p.client ? ` — ${p.client}` : ''}</option>
+                ))}
+            </select>
         </div>
     );
 }
@@ -821,8 +910,12 @@ function UploadZone({
 
                     update(item.id, { status: 'done' });
                     onUploadsComplete([reg.data.photo]);
-                } catch {
-                    update(item.id, { status: 'error' });
+                } catch (e) {
+                    // Surface server messages such as the plan storage-limit (422).
+                    const msg =
+                        (e as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+                        undefined;
+                    update(item.id, { status: 'error', error: msg });
                 }
             };
 
@@ -923,6 +1016,18 @@ function UploadZone({
                             {errorCount > 0 && <span className="text-red-500">{errorCount} failed</span>}
                         </p>
                     )}
+                    {errorCount > 0 &&
+                        (() => {
+                            const firstError = uploads.find((u) => u.status === 'error' && u.error)?.error;
+                            return firstError ? (
+                                <p className="mt-1 text-xs text-red-500">
+                                    {firstError}{' '}
+                                    <Link href={route('billing.index')} className="font-medium underline">
+                                        View plans
+                                    </Link>
+                                </p>
+                            ) : null;
+                        })()}
                 </div>
             )}
         </div>
@@ -1360,12 +1465,14 @@ export default function Show({
     sets: initialSets,
     activity,
     email_defaults,
+    price_sheets,
+    projects,
 }: PageProps<ShowProps>) {
     const [photos, setPhotos] = useState<Photo[]>(initialPhotos);
     const [sets, setSets] = useState<GallerySet[]>(initialSets);
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const [activeTab, setActiveTab] = useState<'photos' | 'settings' | 'activity'>('photos');
-    const [settingsSection, setSettingsSection] = useState<'details' | 'cover' | 'privacy'>('details');
+    const [settingsSection, setSettingsSection] = useState<'details' | 'cover' | 'privacy' | 'store'>('details');
     const [activeSetId, setActiveSetId] = useState<number | null>(initialSets[0]?.id ?? null);
     const [showShare, setShowShare] = useState(false);
     const [emailOpen, setEmailOpen] = useState(false);
@@ -1761,6 +1868,7 @@ export default function Show({
                                         { key: 'details', label: 'Gallery details' },
                                         { key: 'cover', label: 'Cover' },
                                         { key: 'privacy', label: 'Privacy' },
+                                        { key: 'store', label: 'Store' },
                                     ] as const).map((s) => (
                                         <button
                                             key={s.key}
@@ -1783,6 +1891,11 @@ export default function Show({
                                             <section>
                                                 <h3 className="mb-4 text-sm font-semibold text-neutral-900">Gallery details</h3>
                                                 <SettingsPanel collection={collection} />
+                                            </section>
+
+                                            <section>
+                                                <h3 className="mb-4 text-sm font-semibold text-neutral-900">Project</h3>
+                                                <ProjectPanel collection={collection} projects={projects} />
                                             </section>
 
                                             <section>
@@ -1833,6 +1946,13 @@ export default function Show({
                                                 <DownloadsPanel collection={collection} />
                                             </section>
                                         </div>
+                                    )}
+
+                                    {settingsSection === 'store' && (
+                                        <section>
+                                            <h3 className="mb-4 text-sm font-semibold text-neutral-900">Store</h3>
+                                            <StorePanel collection={collection} priceSheets={price_sheets} />
+                                        </section>
                                     )}
                                 </div>
                             </div>

@@ -15,7 +15,7 @@ return new class extends Migration
             $table->string('number');
             // draft → sent → partial → paid ; or void
             $table->string('status')->default('draft');
-            $table->string('currency', 3)->default('usd');
+            $table->string('currency', 3)->default('gbp');
             $table->date('issue_date')->nullable();
             $table->date('due_date')->nullable();
             // All money in integer minor units (cents). Stripe is source of truth for paid amounts.

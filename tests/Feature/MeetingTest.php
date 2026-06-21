@@ -23,7 +23,7 @@ afterEach(function () {
 /** Create a studio + owner and bind it as the current tenant. */
 function meetingStudio(): array
 {
-    $studio = Studio::factory()->create(['slug' => 'lens-studio']);
+    $studio = Studio::factory()->onPaidPlan()->create(['slug' => 'lens-studio']);
     $user = User::factory()->for($studio)->create();
     app()->instance('current.studio.id', $studio->id);
 

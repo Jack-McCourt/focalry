@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\Project;
 use App\Models\Studio;
+use App\Services\WorkflowEngine;
 use App\Support\ClientEmailContent;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,12 +22,26 @@ class InvoiceController extends Controller
     {
         $search = trim((string) $request->input('search', ''));
         $status = $request->input('status');
+        $today = now()->toDateString();
 
-        $invoices = Invoice::query()
+        // Whitelisted sortable columns → DB expression. 'client' and 'balance'
+        // are handled specially below (join / computed column).
+        $sortColumns = [
+            'number' => 'invoices.number',
+            'issue_date' => 'invoices.issue_date',
+            'due_date' => 'invoices.due_date',
+            'status' => 'invoices.status',
+            'total' => 'invoices.total_cents',
+        ];
+        $sort = (string) $request->input('sort', '');
+        $dir = $request->input('dir') === 'asc' ? 'asc' : 'desc';
+
+        $query = Invoice::query()
+            ->select('invoices.*')
             ->with('contact:id,first_name,last_name,company,email')
             ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
-                    $q->where('number', 'like', "%{$search}%")
+                    $q->where('invoices.number', 'like', "%{$search}%")
                         ->orWhereHas('contact', function ($c) use ($search) {
                             $c->where('first_name', 'like', "%{$search}%")
                                 ->orWhere('last_name', 'like', "%{$search}%")
@@ -34,15 +49,33 @@ class InvoiceController extends Controller
                         });
                 });
             })
-            ->when(in_array($status, ['draft', 'sent', 'partial', 'paid', 'void'], true), fn ($q) => $q->where('status', $status))
-            ->latest()
-            ->paginate(30)
-            ->withQueryString();
+            ->when($status === 'draft', fn ($q) => $q->where('invoices.status', 'draft'))
+            ->when($status === 'paid', fn ($q) => $q->where('invoices.status', 'paid'))
+            ->when($status === 'cancelled', fn ($q) => $q->where('invoices.status', 'void'))
+            ->when($status === 'upcoming', fn ($q) => $q
+                ->whereIn('invoices.status', ['sent', 'partial'])
+                ->where(fn ($w) => $w->whereNull('invoices.due_date')->orWhereDate('invoices.due_date', '>=', $today)))
+            ->when($status === 'past_due', fn ($q) => $q
+                ->whereIn('invoices.status', ['sent', 'partial'])
+                ->whereDate('invoices.due_date', '<', $today));
+
+        if ($sort === 'client') {
+            $query->leftJoin('contacts', 'invoices.contact_id', '=', 'contacts.id')
+                ->orderByRaw("COALESCE(NULLIF(contacts.company, ''), contacts.last_name, contacts.first_name) {$dir}");
+        } elseif ($sort === 'balance') {
+            $query->orderByRaw("(invoices.total_cents - invoices.amount_paid_cents) {$dir}");
+        } elseif (isset($sortColumns[$sort])) {
+            $query->orderBy($sortColumns[$sort], $dir);
+        } else {
+            $query->latest('invoices.created_at');
+        }
+
+        $invoices = $query->paginate(30)->withQueryString();
 
         return Inertia::render('Invoices/Index', [
             'invoices' => $invoices,
             'currency' => $this->studioCurrency(),
-            'filters' => ['search' => $search, 'status' => $status],
+            'filters' => ['search' => $search, 'status' => $status, 'sort' => $sort ?: null, 'dir' => $dir],
             'summary' => [
                 'outstanding_cents' => (int) Invoice::whereIn('status', ['sent', 'partial'])
                     ->sum(DB::raw('total_cents - amount_paid_cents')),
@@ -61,7 +94,7 @@ class InvoiceController extends Controller
             'projects' => $this->projectOptions(),
             'next_number' => $this->nextNumber(),
             'preselect_project_id' => request()->integer('project') ?: null,
-            'default_currency' => $studio->default_currency ?? 'usd',
+            'default_currency' => $studio->default_currency ?? 'gbp',
             'defaults' => [
                 'payment_methods' => $settings['payment_methods'],
                 'tax_rate' => $settings['default_tax_rate'],
@@ -187,6 +220,8 @@ class InvoiceController extends Controller
             'paid_on' => 'nullable|date',
         ]);
 
+        $wasPaid = $invoice->status === 'paid';
+
         $invoice->payments()->create([
             'amount_cents' => $validated['amount_cents'],
             'method' => $validated['method'] ?? 'manual',
@@ -195,6 +230,10 @@ class InvoiceController extends Controller
         ]);
 
         $invoice->syncPaymentState();
+
+        if (! $wasPaid && $invoice->status === 'paid' && $invoice->project_id) {
+            app(WorkflowEngine::class)->dispatch('invoice_paid', $invoice->project);
+        }
 
         return back()->with('success', 'Payment recorded.');
     }
@@ -296,7 +335,7 @@ class InvoiceController extends Controller
 
     private function studioCurrency(): string
     {
-        return Studio::find(app('current.studio.id'))?->default_currency ?? 'usd';
+        return Studio::find(app('current.studio.id'))?->default_currency ?? 'gbp';
     }
 
     private function nextNumber(): string

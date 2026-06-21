@@ -54,6 +54,12 @@ class Project extends Model
         return $this->belongsTo(Collection::class);
     }
 
+    /** Galleries that belong to this project. */
+    public function collections(): HasMany
+    {
+        return $this->hasMany(Collection::class)->latest();
+    }
+
     public function invoices(): HasMany
     {
         return $this->hasMany(Invoice::class);

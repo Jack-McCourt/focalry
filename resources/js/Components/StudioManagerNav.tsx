@@ -1,12 +1,26 @@
 import { Link } from '@inertiajs/react';
 
-type Section = 'contacts' | 'projects' | 'invoices' | 'contracts' | 'meetings' | 'bookings';
+type Section =
+    | 'contacts'
+    | 'projects'
+    | 'tasks'
+    | 'proposals'
+    | 'invoices'
+    | 'contracts'
+    | 'questionnaires'
+    | 'workflows'
+    | 'meetings'
+    | 'bookings';
 
 const SECTIONS: { key: Section; label: string; href: string | null }[] = [
     { key: 'contacts', label: 'Contacts', href: '/contacts' },
     { key: 'projects', label: 'Projects', href: '/projects' },
+    { key: 'tasks', label: 'Tasks', href: '/tasks' },
+    { key: 'proposals', label: 'Proposals', href: '/proposals' },
     { key: 'invoices', label: 'Invoices', href: '/invoices' },
     { key: 'contracts', label: 'Contracts', href: '/contracts' },
+    { key: 'questionnaires', label: 'Questionnaires', href: '/questionnaires' },
+    { key: 'workflows', label: 'Workflows', href: '/workflows' },
     { key: 'meetings', label: 'Meetings', href: '/meetings' },
     { key: 'bookings', label: 'Bookings', href: '/packages' },
 ];

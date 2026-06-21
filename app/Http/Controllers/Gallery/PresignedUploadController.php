@@ -33,6 +33,15 @@ class PresignedUploadController extends Controller
         // BelongsToStudio global scope ensures 404 if not this studio's collection
         Collection::findOrFail($validated['collection_id']);
 
+        // Enforce the studio's plan storage quota before handing out an upload URL.
+        $studio = $request->user()->studio;
+        if (! $studio->hasStorageFor($validated['file_size'])) {
+            return response()->json([
+                'message' => 'Storage limit reached for your plan. Upgrade to upload more.',
+                'upgrade_url' => route('billing.index'),
+            ], 422);
+        }
+
         $studioId = $request->user()->studio_id;
         $collectionId = $validated['collection_id'];
         $extension = strtolower(pathinfo($validated['filename'], PATHINFO_EXTENSION));

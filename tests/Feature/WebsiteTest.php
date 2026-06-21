@@ -25,7 +25,7 @@ function publishedSite(Studio $studio): Site
 }
 
 it('seeds a multi-page starter site with managed nav on first visit', function () {
-    $studio = Studio::factory()->create();
+    $studio = Studio::factory()->onPaidPlan()->create();
     $user = User::factory()->for($studio)->create();
 
     $this->actingAs($user)->get('/website')->assertOk();
@@ -40,7 +40,7 @@ it('seeds a multi-page starter site with managed nav on first visit', function (
 });
 
 it('seeds example blog posts as child pages of the blog page', function () {
-    $studio = Studio::factory()->create();
+    $studio = Studio::factory()->onPaidPlan()->create();
     $user = User::factory()->for($studio)->create();
 
     $this->actingAs($user)->get('/website')->assertOk();
@@ -55,7 +55,7 @@ it('seeds example blog posts as child pages of the blog page', function () {
 });
 
 it('creates a contact, project lead and lead log from a website enquiry', function () {
-    $studio = Studio::factory()->create();
+    $studio = Studio::factory()->onPaidPlan()->create();
     $site = publishedSite($studio);
 
     $this->post("/site/{$site->slug}/contact", [
@@ -90,7 +90,7 @@ it('creates a contact, project lead and lead log from a website enquiry', functi
 });
 
 it('reuses an existing contact by email instead of duplicating', function () {
-    $studio = Studio::factory()->create();
+    $studio = Studio::factory()->onPaidPlan()->create();
     $site = publishedSite($studio);
 
     $existing = Contact::withoutGlobalScopes()->create([
@@ -112,7 +112,7 @@ it('reuses an existing contact by email instead of duplicating', function () {
 });
 
 it('does not expose an unpublished site', function () {
-    $studio = Studio::factory()->create();
+    $studio = Studio::factory()->onPaidPlan()->create();
     $site = Site::withoutGlobalScopes()->create([
         'studio_id' => $studio->id,
         'name' => 'Hidden',
@@ -129,7 +129,7 @@ it('does not expose an unpublished site', function () {
 });
 
 it('shows a published post and hides drafts (posts are child pages)', function () {
-    $studio = Studio::factory()->create();
+    $studio = Studio::factory()->onPaidPlan()->create();
     $site = publishedSite($studio);
 
     $blog = SitePage::withoutGlobalScopes()->create([
@@ -150,7 +150,7 @@ it('shows a published post and hides drafts (posts are child pages)', function (
 });
 
 it('saves a blog post as a child of the blog page via the builder', function () {
-    $studio = Studio::factory()->create();
+    $studio = Studio::factory()->onPaidPlan()->create();
     $user = User::factory()->for($studio)->create();
     $this->actingAs($user)->get('/website')->assertOk();
 
@@ -177,7 +177,7 @@ it('saves a blog post as a child of the blog page via the builder', function () 
 });
 
 it('persists nested grid blocks and per-block style settings through a save', function () {
-    $studio = Studio::factory()->create();
+    $studio = Studio::factory()->onPaidPlan()->create();
     $user = User::factory()->for($studio)->create();
     $this->actingAs($user)->get('/website')->assertOk();
 
@@ -217,7 +217,7 @@ it('imports a chosen gallery photo into the site as a permanent public image', f
     Storage::fake('wasabi');
     Storage::fake('public');
 
-    $studio = Studio::factory()->create();
+    $studio = Studio::factory()->onPaidPlan()->create();
     $user = User::factory()->for($studio)->create();
 
     $collection = Collection::withoutGlobalScopes()->create([
@@ -240,7 +240,7 @@ it('imports a chosen gallery photo into the site as a permanent public image', f
 });
 
 it('requires a name and email to submit an enquiry', function () {
-    $studio = Studio::factory()->create();
+    $studio = Studio::factory()->onPaidPlan()->create();
     $site = publishedSite($studio);
     $site->pages()->create([
         'studio_id' => $studio->id,

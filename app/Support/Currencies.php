@@ -60,7 +60,7 @@ class Currencies
 
     public static function forCountry(?string $countryCode): string
     {
-        return self::COUNTRY_CURRENCY[strtoupper((string) $countryCode)] ?? 'usd';
+        return self::COUNTRY_CURRENCY[strtoupper((string) $countryCode)] ?? 'gbp';
     }
 
     /**

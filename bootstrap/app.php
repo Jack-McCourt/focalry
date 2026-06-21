@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Middleware\EnsurePlanFeature;
+use App\Http\Middleware\EnsureStudioNotSuspended;
+use App\Http\Middleware\EnsureSuperAdmin;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SetCurrentStudio;
 use Illuminate\Foundation\Application;
@@ -7,6 +10,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -23,11 +27,17 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->api(prepend: [
-            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+            EnsureFrontendRequestsAreStateful::class,
         ]);
 
         $middleware->api(append: [
             SetCurrentStudio::class,
+        ]);
+
+        $middleware->alias([
+            'plan' => EnsurePlanFeature::class,
+            'admin' => EnsureSuperAdmin::class,
+            'studio.active' => EnsureStudioNotSuspended::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

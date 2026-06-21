@@ -3,9 +3,12 @@
 namespace App\Http\Controllers\Stripe;
 
 use App\Models\Invoice;
+use App\Models\Order;
 use App\Models\PackageBooking;
 use App\Models\Studio;
 use App\Services\PackageFulfillment;
+use App\Services\Store\OrderFulfillment;
+use App\Services\WorkflowEngine;
 use Laravel\Cashier\Http\Controllers\WebhookController as CashierWebhookController;
 
 class WebhookController extends CashierWebhookController
@@ -30,6 +33,20 @@ class WebhookController extends CashierWebhookController
         $session = $payload['data']['object'] ?? [];
 
         if (($session['payment_status'] ?? null) !== 'paid') {
+            return;
+        }
+
+        // A store order was paid → mark it paid and drive fulfilment.
+        if ($orderId = $session['metadata']['order_id'] ?? null) {
+            $order = Order::withoutGlobalScopes()->with('items', 'studio')->find($orderId);
+            if ($order) {
+                app(OrderFulfillment::class)->markPaid(
+                    $order,
+                    $session['payment_intent'] ?? null,
+                    (int) ($session['amount_total'] ?? 0),
+                );
+            }
+
             return;
         }
 
@@ -69,6 +86,8 @@ class WebhookController extends CashierWebhookController
             return;
         }
 
+        $wasPaid = $invoice->status === 'paid';
+
         $invoice->payments()->create([
             'amount_cents' => $amount,
             'method' => 'stripe',
@@ -77,6 +96,43 @@ class WebhookController extends CashierWebhookController
         ]);
 
         $invoice->syncPaymentState();
+
+        if (! $wasPaid && $invoice->status === 'paid' && $invoice->project_id) {
+            app(WorkflowEngine::class)->dispatch('invoice_paid', $invoice->project);
+        }
+    }
+
+    protected function handleCustomerSubscriptionCreated(array $payload): void
+    {
+        parent::handleCustomerSubscriptionCreated($payload);
+        $this->syncStudioPlan($payload);
+    }
+
+    protected function handleCustomerSubscriptionUpdated(array $payload): void
+    {
+        parent::handleCustomerSubscriptionUpdated($payload);
+        $this->syncStudioPlan($payload);
+    }
+
+    protected function handleCustomerSubscriptionDeleted(array $payload): void
+    {
+        parent::handleCustomerSubscriptionDeleted($payload);
+        $this->syncStudioPlan($payload);
+    }
+
+    /**
+     * After Cashier updates the local subscription record, re-resolve the
+     * studio's cached `plan` column from its active subscription's price.
+     */
+    private function syncStudioPlan(array $payload): void
+    {
+        $customerId = $payload['data']['object']['customer'] ?? null;
+
+        if (! $customerId) {
+            return;
+        }
+
+        Studio::where('stripe_id', $customerId)->first()?->syncPlanFromSubscription();
     }
 
     protected function handleAccountUpdated(array $payload): void

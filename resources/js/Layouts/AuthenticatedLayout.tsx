@@ -81,6 +81,30 @@ function IconLogout({ className }: { className?: string }) {
 
 // ─── Sidebar link ─────────────────────────────────────────────────────────────
 
+function IconLock({ className }: { className?: string }) {
+    return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 0h10.5a2.25 2.25 0 012.25 2.25v6a2.25 2.25 0 01-2.25 2.25H6.75a2.25 2.25 0 01-2.25-2.25v-6a2.25 2.25 0 012.25-2.25z" />
+        </svg>
+    );
+}
+
+function IconShield({ className }: { className?: string }) {
+    return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+        </svg>
+    );
+}
+
+function IconBilling({ className }: { className?: string }) {
+    return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z" />
+        </svg>
+    );
+}
+
 function SidebarLink({
     href,
     icon: Icon,
@@ -88,6 +112,7 @@ function SidebarLink({
     active,
     soon,
     badge,
+    locked,
 }: {
     href: string;
     icon: React.FC<{ className?: string }>;
@@ -95,24 +120,28 @@ function SidebarLink({
     active: boolean;
     soon?: boolean;
     badge?: number;
+    locked?: boolean;
 }) {
+    // Locked items aren't disabled — they route to billing so the user can upgrade.
     return (
         <Link
-            href={soon ? '#' : href}
+            href={soon ? '#' : locked ? route('billing.index') : href}
             className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all ${
                 active
                     ? 'bg-sidebar-active text-sidebar-text-active'
                     : 'text-sidebar-text hover:bg-sidebar-hover hover:text-white'
-            } ${soon ? 'pointer-events-none' : ''}`}
+            } ${soon ? 'pointer-events-none' : ''} ${locked ? 'opacity-60' : ''}`}
+            title={locked ? `Upgrade your plan to unlock ${label}` : undefined}
         >
             <Icon className="h-[18px] w-[18px] shrink-0" />
             <span className="flex-1 font-medium">{label}</span>
+            {locked && <IconLock className="h-3.5 w-3.5 shrink-0 text-zinc-500" />}
             {soon && (
                 <span className="rounded bg-zinc-700 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-zinc-400">
                     Soon
                 </span>
             )}
-            {!soon && !!badge && badge > 0 && (
+            {!soon && !locked && !!badge && badge > 0 && (
                 <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-600 px-1.5 text-[11px] font-semibold text-white">
                     {badge > 99 ? '99+' : badge}
                 </span>
@@ -259,10 +288,19 @@ export default function AuthenticatedLayout({
     header,
     children,
 }: PropsWithChildren<{ header?: ReactNode }>) {
-    const { auth, unread_messages } = usePage<{ auth: Auth; flash: Flash; unread_messages: number }>().props;
+    const { auth, unread_messages, impersonation } = usePage<{
+        auth: Auth;
+        flash: Flash;
+        unread_messages: number;
+        impersonation: { user_name: string; studio_name: string | null } | null;
+    }>().props;
     const user = auth.user!;
     const studio = auth.studio;
     const [sidebarOpen, setSidebarOpen] = useState(false);
+
+    // A nav item is "locked" when its product area isn't part of the studio's plan.
+    const features = studio?.features ?? [];
+    const has = (feature?: string) => !feature || features.includes(feature as never);
 
     const navItems = [
         {
@@ -278,13 +316,15 @@ export default function AuthenticatedLayout({
             icon: IconGalleries,
             active: route().current('collections.*'),
             soon: false,
+            feature: 'galleries',
         },
         {
             label: 'Store',
-            href: '#',
+            href: route('store.orders.index'),
             icon: IconStore,
-            active: false,
-            soon: true,
+            active: route().current('store.*'),
+            soon: false,
+            feature: 'store',
         },
         {
             label: 'Studio Manager',
@@ -292,6 +332,7 @@ export default function AuthenticatedLayout({
             icon: IconStudio,
             active: route().current('contacts.*'),
             soon: false,
+            feature: 'studio_manager',
         },
         {
             label: 'Messages',
@@ -307,8 +348,9 @@ export default function AuthenticatedLayout({
             icon: IconWebsite,
             active: route().current('website.*'),
             soon: false,
+            feature: 'website',
         },
-    ];
+    ].map((item) => ({ ...item, locked: !has((item as { feature?: string }).feature) }));
 
     const initials = user.name
         .split(' ')
@@ -367,6 +409,21 @@ export default function AuthenticatedLayout({
 
                 {/* Bottom */}
                 <div className="border-t border-sidebar-border px-2 py-3 space-y-0.5">
+                    {user.is_super_admin && (
+                        <Link
+                            href={route('admin.dashboard')}
+                            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-rose-300 transition hover:bg-sidebar-hover hover:text-rose-200"
+                        >
+                            <IconShield className="h-[18px] w-[18px] shrink-0" />
+                            <span className="flex-1">Super Admin</span>
+                        </Link>
+                    )}
+                    <SidebarLink
+                        href={route('billing.index')}
+                        icon={IconBilling}
+                        label="Plans & Billing"
+                        active={route().current('billing.*')}
+                    />
                     <SidebarLink
                         href={route('profile.edit')}
                         icon={IconSettings}
@@ -402,6 +459,24 @@ export default function AuthenticatedLayout({
 
             {/* ── Main ── */}
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                {/* Impersonation banner — shown while a super admin is viewing as a user. */}
+                {impersonation && (
+                    <div className="flex shrink-0 items-center justify-center gap-3 bg-rose-600 px-4 py-2 text-center text-sm text-white">
+                        <span>
+                            Viewing as <strong>{impersonation.user_name}</strong>
+                            {impersonation.studio_name ? ` · ${impersonation.studio_name}` : ''}
+                        </span>
+                        <Link
+                            href={route('impersonate.stop')}
+                            method="post"
+                            as="button"
+                            className="rounded-md bg-white/20 px-3 py-1 text-xs font-semibold hover:bg-white/30"
+                        >
+                            Stop impersonating
+                        </Link>
+                    </div>
+                )}
+
                 {/* Top bar — always present: holds the mobile menu button, the page
                     header (when provided), and the global notification bell. */}
                 <div className="flex h-14 shrink-0 items-center gap-2 border-b border-neutral-200 bg-white px-4 sm:px-6 lg:px-8">

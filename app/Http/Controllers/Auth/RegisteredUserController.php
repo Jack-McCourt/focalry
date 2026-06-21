@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Fulfilment\Prodigi\StoreDefaults;
 use App\Http\Controllers\Controller;
 use App\Models\Studio;
 use App\Models\User;
@@ -53,6 +54,9 @@ class RegisteredUserController extends Controller
                 // Currency is inferred from the country — no picker on sign-up.
                 'default_currency' => Currencies::forCountry($validated['country']),
             ]);
+
+            // Seed a ready-to-sell store (default Prodigi lab price sheet + products).
+            app(StoreDefaults::class)->seedFor($studio);
 
             return User::create([
                 'studio_id' => $studio->id,

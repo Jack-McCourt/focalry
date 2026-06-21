@@ -59,6 +59,44 @@ class GalleryDownloadController extends Controller
     }
 
     /**
+     * Download a chosen subset of photos (favourites or a multi-selection) as a ZIP.
+     * Photo ids are passed as a comma-separated `ids` query param.
+     */
+    public function selection(Request $request, string $slug, PhotoArchive $archive): BinaryFileResponse
+    {
+        $collection = $this->resolveCollection($slug);
+        $this->ensureDownloadable($collection);
+
+        $ids = collect(explode(',', (string) $request->query('ids')))
+            ->map(fn ($id) => (int) trim($id))
+            ->filter()
+            ->unique()
+            ->take(500)
+            ->all();
+
+        abort_if(empty($ids), 404, 'No photos selected.');
+
+        $original = (bool) ($collection->download_settings['allow_original'] ?? false);
+
+        $items = $collection->photos()
+            ->where('status', 'ready')
+            ->whereIn('id', $ids)
+            ->orderBy('position')
+            ->get()
+            ->map(fn (Photo $photo) => [
+                'key' => $this->resolveKey($photo, $original),
+                'filename' => $photo->filename,
+            ])
+            ->filter(fn ($item) => ! empty($item['key']))
+            ->values()
+            ->all();
+
+        abort_if(empty($items), 404, 'No downloadable photos.');
+
+        return $archive->zip($items, Str::slug($collection->title).'-selection.zip');
+    }
+
+    /**
      * Download a single photo.
      */
     public function single(Request $request, string $slug, int $photoId, PhotoArchive $archive): BinaryFileResponse

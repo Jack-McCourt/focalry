@@ -4,7 +4,11 @@ namespace App\Http\Controllers\Gallery;
 
 use App\Http\Controllers\Controller;
 use App\Models\Collection;
+use App\Models\Coupon;
 use App\Models\GalleryVisitor;
+use App\Models\Product;
+use App\Models\ShippingMethod;
+use App\Models\Studio;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -120,7 +124,70 @@ class GalleryController extends Controller
                 'require_pin' => ($downloadSettings['require_pin'] ?? false) && ! empty($downloadSettings['pin']),
                 'pin_verified' => (bool) session("gallery_download_pin_{$collection->id}"),
             ],
+            'store' => $this->storePayload($collection),
         ]);
+    }
+
+    /**
+     * Store data for the in-gallery shop: products on the assigned price sheet,
+     * shipping methods, and any coupon banner. Null when the gallery isn't selling.
+     */
+    private function storePayload(Collection $collection): ?array
+    {
+        $sheet = $collection->effectivePriceSheet();
+        if (! $sheet) {
+            return null;
+        }
+
+        $studio = Studio::find($collection->studio_id);
+
+        $products = Product::withoutGlobalScopes()
+            ->where('studio_id', $collection->studio_id)
+            ->where('price_sheet_id', $sheet->id)
+            ->where('active', true)
+            ->with(['options' => fn ($q) => $q->where('active', true)->orderBy('position'), 'category'])
+            ->orderBy('position')
+            ->get()
+            ->filter(fn (Product $p) => $p->options->isNotEmpty())
+            ->map(fn (Product $p) => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'type' => $p->type,
+                'description' => $p->description,
+                'image_url' => $p->imageUrl(),
+                'category' => $p->category?->name,
+                'is_digital' => $p->isDigital(),
+                'photo_specific' => in_array($p->type, ['print', 'digital'], true),
+                'options' => $p->options->map(fn ($o) => [
+                    'id' => $o->id,
+                    'name' => $o->name,
+                    'price_cents' => $o->price_cents,
+                ])->values(),
+            ])->values();
+
+        if ($products->isEmpty()) {
+            return null;
+        }
+
+        $shipping = ShippingMethod::withoutGlobalScopes()
+            ->where('studio_id', $collection->studio_id)->where('active', true)
+            ->orderBy('position')
+            ->get(['id', 'name', 'price_cents', 'is_pickup']);
+
+        $banner = Coupon::withoutGlobalScopes()
+            ->where('studio_id', $collection->studio_id)
+            ->where('active', true)->where('show_banner', true)
+            ->whereNotNull('banner_text')
+            ->value('banner_text');
+
+        return [
+            'enabled' => true,
+            'currency' => $sheet->currency ?? $studio?->default_currency ?? 'gbp',
+            'can_pay' => $studio?->stripe_connect_status === 'active',
+            'products' => $products,
+            'shipping_methods' => $shipping,
+            'coupon_banner' => $banner,
+        ];
     }
 
     private function publicCollectionData(Collection $collection): array

@@ -47,6 +47,12 @@ interface NoteEntry {
     created_at: string;
 }
 
+interface GalleryLite {
+    id: number;
+    title: string;
+    status: string;
+}
+
 function csrf(): string {
     const m = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
     return m ? decodeURIComponent(m[1]) : '';
@@ -90,6 +96,7 @@ export default function ProjectDrawer({
 }) {
     const [invoices, setInvoices] = useState<InvoiceLite[]>([]);
     const [contracts, setContracts] = useState<ContractLite[]>([]);
+    const [galleries, setGalleries] = useState<GalleryLite[]>([]);
     const [loading, setLoading] = useState(false);
     const [name, setName] = useState('');
     const [notes, setNotes] = useState<NoteEntry[]>([]);
@@ -105,7 +112,7 @@ export default function ProjectDrawer({
         setLoading(true);
         axios
             .get(route('projects.show', project.id))
-            .then((r) => { setInvoices(r.data.invoices ?? []); setContracts(r.data.contracts ?? []); setNotes(r.data.notes ?? []); })
+            .then((r) => { setInvoices(r.data.invoices ?? []); setContracts(r.data.contracts ?? []); setNotes(r.data.notes ?? []); setGalleries(r.data.galleries ?? []); })
             .finally(() => setLoading(false));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [project?.id]);
@@ -325,6 +332,41 @@ export default function ProjectDrawer({
                                     >
                                         <span className="truncate text-sm font-medium text-neutral-900">{c.title}</span>
                                         <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${CON_STATUS[c.status]}`}>{c.status}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </Section>
+                    {/* Galleries */}
+                    <Section
+                        title="Galleries"
+                        action={
+                            <button
+                                type="button"
+                                onClick={() => router.visit(route('collections.create'))}
+                                className="text-xs font-medium text-neutral-600 hover:text-neutral-900"
+                            >
+                                + New gallery
+                            </button>
+                        }
+                    >
+                        {loading ? (
+                            <p className="text-sm text-neutral-400">Loading…</p>
+                        ) : galleries.length === 0 ? (
+                            <p className="text-sm text-neutral-400">No galleries yet. Attach one from its settings.</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {galleries.map((g) => (
+                                    <button
+                                        type="button"
+                                        key={g.id}
+                                        onClick={() => router.visit(route('collections.show', g.id))}
+                                        className="flex w-full items-center justify-between rounded-lg border border-neutral-200 px-3 py-2 text-left transition hover:border-neutral-300"
+                                    >
+                                        <span className="truncate text-sm font-medium text-neutral-900">{g.title}</span>
+                                        <span className={`ml-2 shrink-0 text-[11px] font-medium ${g.status === 'published' ? 'text-emerald-600' : 'text-neutral-400'}`}>
+                                            {g.status === 'published' ? 'Published' : 'Draft'}
+                                        </span>
                                     </button>
                                 ))}
                             </div>

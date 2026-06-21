@@ -16,9 +16,9 @@ const SAMPLE_POSTS: BlogPostCard[] = [
 
 // Placeholder packages so the packages block shows something in the preview.
 const SAMPLE_PACKAGES: PackageCard[] = [
-    { slug: 'sample-1', name: 'Half-day shoot', description: 'Up to 4 hours of coverage and edited gallery.', image_url: null, price_cents: 80000, deposit_cents: 20000, currency: 'usd', url: '#' },
-    { slug: 'sample-2', name: 'Full-day wedding', description: 'Full coverage from prep to first dance.', image_url: null, price_cents: 250000, deposit_cents: 50000, currency: 'usd', url: '#' },
-    { slug: 'sample-3', name: 'Mini session', description: '30-minute portrait session.', image_url: null, price_cents: 15000, deposit_cents: null, currency: 'usd', url: '#' },
+    { slug: 'sample-1', name: 'Half-day shoot', description: 'Up to 4 hours of coverage and edited gallery.', image_url: null, price_cents: 80000, deposit_cents: 20000, currency: 'gbp', url: '#' },
+    { slug: 'sample-2', name: 'Full-day wedding', description: 'Full coverage from prep to first dance.', image_url: null, price_cents: 250000, deposit_cents: 50000, currency: 'gbp', url: '#' },
+    { slug: 'sample-3', name: 'Mini session', description: '30-minute portrait session.', image_url: null, price_cents: 15000, deposit_cents: null, currency: 'gbp', url: '#' },
 ];
 
 export default function Builder({

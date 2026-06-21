@@ -146,7 +146,6 @@ export default function Index({
     const [search, setSearch] = useState(filters.search);
     const [composing, setComposing] = useState(!!compose_contact_id);
     const [managingTemplates, setManagingTemplates] = useState(false);
-    const [mode, setMode] = useState<'reply' | 'note'>('reply');
     const [threadSearch, setThreadSearch] = useState('');
     const firstRender = useRef(true);
     const threadEnd = useRef<HTMLDivElement>(null);
@@ -168,7 +167,6 @@ export default function Index({
     useEffect(() => {
         threadEnd.current?.scrollIntoView();
         setThreadSearch('');
-        setMode('reply');
     }, [selected?.id]);
 
     useEffect(() => {
@@ -178,18 +176,11 @@ export default function Index({
     const setStatus = (status: string) => router.get(route('messages.index'), { status, search: search || undefined }, { preserveState: true, preserveScroll: true, replace: true });
 
     const reply = useForm<{ body: string; attachments: File[] }>({ body: '', attachments: [] });
-    const note = useForm<{ body: string }>({ body: '' });
 
     const sendReply = (e: React.FormEvent) => {
         e.preventDefault();
         if (!selected || (!reply.data.body.trim() && reply.data.attachments.length === 0)) return;
         reply.post(route('messages.reply', selected.id), { preserveScroll: true, forceFormData: true, onSuccess: () => reply.reset() });
-    };
-
-    const sendNote = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selected || !note.data.body.trim()) return;
-        note.post(route('messages.note', selected.id), { preserveScroll: true, onSuccess: () => note.reset() });
     };
 
     // Wrap the current textarea selection with Markdown markers.
@@ -357,20 +348,6 @@ export default function Index({
                                     <p className="py-6 text-center text-sm text-neutral-400">No messages match “{threadSearch}”.</p>
                                 )}
                                 {visibleMessages.map((m) => {
-                                    if (m.is_internal) {
-                                        return (
-                                            <div key={m.id} className="flex justify-center">
-                                                <div className="max-w-[80%] rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                                                    <p className="mb-0.5 flex items-center gap-1 font-medium">
-                                                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
-                                                        Internal note · {m.author_name}
-                                                    </p>
-                                                    <p className="whitespace-pre-line leading-relaxed">{m.body}</p>
-                                                    <p className="mt-1 text-[10px] text-amber-700/70">{fmtTime(m.created_at)}</p>
-                                                </div>
-                                            </div>
-                                        );
-                                    }
                                     const out = m.direction === 'outbound';
                                     const hasBody = m.body && m.body !== NO_TEXT;
                                     return (
@@ -404,19 +381,6 @@ export default function Index({
 
                             {/* ── Composer ── */}
                             <div className="border-t border-neutral-200 bg-white">
-                                <div className="flex items-center gap-1 px-3 pt-2">
-                                    {(['reply', 'note'] as const).map((m) => (
-                                        <button
-                                            key={m}
-                                            onClick={() => setMode(m)}
-                                            className={`rounded-md px-3 py-1 text-xs font-medium capitalize transition ${mode === m ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:bg-neutral-100'}`}
-                                        >
-                                            {m === 'note' ? 'Internal note' : 'Reply'}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {mode === 'reply' ? (
                                     <form onSubmit={sendReply} className="p-3 pt-2">
                                         <AttachChips files={reply.data.attachments} onRemove={(i) => reply.setData('attachments', reply.data.attachments.filter((_, idx) => idx !== i))} />
                                         <div className="mb-1.5 flex items-center gap-1">
@@ -448,23 +412,6 @@ export default function Index({
                                             </button>
                                         </div>
                                     </form>
-                                ) : (
-                                    <form onSubmit={sendNote} className="p-3 pt-2">
-                                        <div className="flex items-end gap-2">
-                                            <textarea
-                                                value={note.data.body}
-                                                onChange={(e) => note.setData('body', e.target.value)}
-                                                onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendNote(e); }}
-                                                rows={2}
-                                                placeholder="Add an internal note — only your team sees this, the client is not emailed."
-                                                className="input flex-1 resize-none border-amber-200 bg-amber-50/40 focus:border-amber-300"
-                                            />
-                                            <button type="submit" disabled={note.processing || !note.data.body.trim()} className="btn-secondary">
-                                                {note.processing ? 'Saving…' : 'Add note'}
-                                            </button>
-                                        </div>
-                                    </form>
-                                )}
                             </div>
                         </>
                     )}

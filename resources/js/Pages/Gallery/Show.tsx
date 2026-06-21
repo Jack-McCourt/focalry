@@ -1,7 +1,10 @@
 import { GallerySet, PageProps } from '@/types';
+import GalleryStore, { GalleryStoreHandle, StoreData } from '@/Components/gallery/GalleryStore';
+import Lightbox from '@/Components/gallery/Lightbox';
 import { CoverHero } from '@/lib/coverStyle';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
+import { Check, Download, Heart, ShoppingBag } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface PublicPhoto {
@@ -46,6 +49,7 @@ interface GalleryShowProps extends Record<string, unknown> {
     favourites_enabled: boolean;
     favourites_show_notes: boolean;
     downloads: DownloadSettings;
+    store: StoreData | null;
 }
 
 function getCsrfToken(): string {
@@ -337,11 +341,19 @@ function ListSelector({
     activeListId,
     onSelect,
     onCreate,
+    favouriteCount,
+    canDownload,
+    onViewFavourites,
+    onDownloadAll,
 }: {
     lists: VisitorList[];
     activeListId: number | null;
     onSelect: (id: number) => void;
     onCreate: (name: string) => Promise<void>;
+    favouriteCount: number;
+    canDownload: boolean;
+    onViewFavourites: () => void;
+    onDownloadAll: () => void;
 }) {
     const [open, setOpen] = useState(false);
     const [creating, setCreating] = useState(false);
@@ -392,6 +404,31 @@ function ListSelector({
                     className="absolute left-1/2 top-full z-40 mt-2 w-56 -translate-x-1/2 rounded-lg border py-1.5 text-left shadow-xl"
                     style={{ background: '#1a1a1a', borderColor: '#2a2a2a' }}
                 >
+                    {favouriteCount > 0 && (
+                        <>
+                            <button
+                                onClick={() => { onViewFavourites(); setOpen(false); }}
+                                className="flex w-full items-center gap-2 px-4 py-2 text-xs transition hover:bg-white/5"
+                                style={{ color: '#ddd' }}
+                            >
+                                <svg className="h-3.5 w-3.5 text-rose-400" fill="currentColor" viewBox="0 0 24 24"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0z" /></svg>
+                                View favourites tab
+                            </button>
+                            {canDownload && (
+                                <button
+                                    onClick={() => { onDownloadAll(); setOpen(false); }}
+                                    className="flex w-full items-center gap-2 px-4 py-2 text-xs transition hover:bg-white/5"
+                                    style={{ color: '#ddd' }}
+                                >
+                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                                    </svg>
+                                    Download all favourites
+                                </button>
+                            )}
+                            <div className="my-1 border-t" style={{ borderColor: '#2a2a2a' }} />
+                        </>
+                    )}
                     {lists.map((l) => (
                         <button
                             key={l.id}
@@ -456,9 +493,15 @@ function GalleryPhoto({
     showDownload,
     showNote,
     hasNote,
+    showBuy,
+    selected,
+    selectionActive,
     onToggle,
     onDownload,
     onNote,
+    onOpen,
+    onBuy,
+    onSelect,
 }: {
     photo: PublicPhoto;
     isFavourited: boolean;
@@ -466,14 +509,35 @@ function GalleryPhoto({
     showDownload: boolean;
     showNote: boolean;
     hasNote: boolean;
+    showBuy: boolean;
+    selected: boolean;
+    selectionActive: boolean;
     onToggle: (photoId: number) => void;
     onDownload: (photoId: number) => void;
     onNote: (photoId: number) => void;
+    onOpen: (photoId: number) => void;
+    onBuy: (photoId: number) => void;
+    onSelect: (photoId: number) => void;
 }) {
     const [loaded, setLoaded] = useState(false);
 
     return (
-        <div className="group relative mb-1.5 break-inside-avoid overflow-hidden rounded-sm">
+        <div
+            className={`group relative mb-1.5 cursor-zoom-in break-inside-avoid overflow-hidden rounded-sm ${selected ? 'ring-2 ring-offset-2 ring-offset-[#0e0e0e] ring-white' : ''}`}
+            onClick={() => onOpen(photo.id)}
+        >
+            {/* Multi-select checkbox */}
+            <button
+                onClick={(e) => { e.stopPropagation(); onSelect(photo.id); }}
+                className={`absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border backdrop-blur-sm transition-all duration-200
+                    ${selected
+                        ? 'border-white bg-white text-neutral-900 opacity-100'
+                        : `border-white/60 bg-black/20 text-transparent hover:bg-black/40 ${selectionActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`
+                    }`}
+                title={selected ? 'Deselect' : 'Select'}
+            >
+                <Check className="h-4 w-4" strokeWidth={3} />
+            </button>
             {photo.thumb_url ? (
                 <img
                     src={photo.web_url ?? photo.thumb_url}
@@ -490,6 +554,16 @@ function GalleryPhoto({
                 />
             ) : (
                 <div className="w-full bg-neutral-800" style={{ aspectRatio: '3/2' }} />
+            )}
+
+            {showBuy && (
+                <button
+                    onClick={(e) => { e.stopPropagation(); onBuy(photo.id); }}
+                    className="absolute right-2 top-2 rounded-full bg-black/20 p-1.5 text-white/70 opacity-0 backdrop-blur-sm transition-all duration-200 hover:bg-black/40 hover:text-white group-hover:opacity-100"
+                    title="Buy prints"
+                >
+                    <ShoppingBag className="h-5 w-5" />
+                </button>
             )}
 
             {showDownload && (
@@ -559,6 +633,7 @@ export default function GalleryShow({
     favourites_enabled,
     favourites_show_notes,
     downloads,
+    store,
 }: PageProps<GalleryShowProps>) {
     const [activeSet, setActiveSet] = useState<number | null>(sets[0]?.id ?? null);
     const [visitorName, setVisitorName] = useState<string | null>(visitor?.name ?? null);
@@ -570,20 +645,39 @@ export default function GalleryShow({
     const [pinVerified, setPinVerified] = useState(downloads.pin_verified);
     const [pinModalOpen, setPinModalOpen] = useState(false);
     // What to download once the PIN is satisfied: 'all' or a photo id.
-    const [pendingDownload, setPendingDownload] = useState<'all' | number | null>(null);
+    const [pendingDownload, setPendingDownload] = useState<'all' | number | number[] | null>(null);
 
     // Photo whose note is being edited
     const [notePhotoId, setNotePhotoId] = useState<number | null>(null);
 
+    // Lightbox (index into the currently visible photos) + store handle
+    const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+    const storeRef = useRef<GalleryStoreHandle>(null);
+
+    // Favourites tab + multi-select
+    const [showingFavourites, setShowingFavourites] = useState(false);
+    const [selected, setSelected] = useState<Set<number>>(new Set());
+
     const canFavourite = favourites_enabled && !!visitor_token;
     const canDownload = downloads.enabled;
+    const storeEnabled = !!store?.enabled;
     const slug = collection.slug;
 
+    const toggleSelect = useCallback((id: number) => {
+        setSelected((prev) => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    }, []);
+
     const triggerDownload = useCallback(
-        (target: 'all' | number) => {
+        (target: 'all' | number | number[]) => {
             const url =
                 target === 'all'
                     ? `/g/${slug}/download`
+                    : Array.isArray(target)
+                    ? `/g/${slug}/download-selection?ids=${target.join(',')}`
                     : `/g/${slug}/download/${target}`;
             window.location.href = url;
         },
@@ -591,7 +685,8 @@ export default function GalleryShow({
     );
 
     const requestDownload = useCallback(
-        (target: 'all' | number) => {
+        (target: 'all' | number | number[]) => {
+            if (Array.isArray(target) && target.length === 0) return;
             if (downloads.require_pin && !pinVerified) {
                 setPendingDownload(target);
                 setPinModalOpen(true);
@@ -728,18 +823,69 @@ export default function GalleryShow({
         [slug],
     );
 
+    // Photos in the active visitor list, for the Favourites tab.
+    const favouritePhotos = photos.filter((p) => favouritedSet.has(p.id));
+    const onFavView = showingFavourites && favouritePhotos.length > 0;
+
     // Photos always live in a set — render only the active set so large galleries
-    // never paint every image at once.
-    const visiblePhotos = sets.length === 0
+    // never paint every image at once. The Favourites tab cuts across all sets.
+    const visiblePhotos = onFavView
+        ? favouritePhotos
+        : sets.length === 0
         ? photos
         : activeSet !== null
         ? photos.filter((p) => p.set_id === activeSet)
         : [];
     const totalFavourites = lists.reduce((sum, l) => sum + l.photo_ids.length, 0);
+    const showFavTab = canFavourite && favouritePhotos.length > 0;
 
     return (
         <>
             <Head title={collection.title} />
+
+            {store?.enabled && <GalleryStore ref={storeRef} slug={collection.slug} store={store} photos={photos} />}
+
+            {lightboxIndex !== null && visiblePhotos[lightboxIndex] && (
+                <Lightbox
+                    photos={visiblePhotos}
+                    index={lightboxIndex}
+                    onClose={() => setLightboxIndex(null)}
+                    onIndex={setLightboxIndex}
+                    canFavourite={canFavourite}
+                    isFavourited={favouritedSet.has(visiblePhotos[lightboxIndex].id)}
+                    onToggleFavourite={handleHeart}
+                    canDownload={canDownload}
+                    onDownload={requestDownload}
+                    storeEnabled={storeEnabled}
+                    onBuy={(photoId) => { setLightboxIndex(null); storeRef.current?.shopFor(photoId); }}
+                />
+            )}
+
+            {/* Bulk action bar for multi-selected photos */}
+            {selected.size > 0 && (
+                <div className="fixed bottom-5 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full bg-neutral-900 px-3 py-2 shadow-xl ring-1 ring-white/10">
+                    <span className="px-2 text-sm font-medium text-white">{selected.size} selected</span>
+                    {storeEnabled && (
+                        <button
+                            onClick={() => storeRef.current?.shopForMany([...selected])}
+                            className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-neutral-900 hover:bg-neutral-100"
+                        >
+                            <ShoppingBag className="h-3.5 w-3.5" /> Add to cart
+                        </button>
+                    )}
+                    {canDownload && (
+                        <button
+                            onClick={() => requestDownload([...selected])}
+                            className="flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20"
+                        >
+                            <Download className="h-3.5 w-3.5" /> Download
+                        </button>
+                    )}
+                    <button onClick={() => setSelected(new Set())} className="rounded-full px-2 py-1.5 text-xs text-white/60 hover:text-white">
+                        Clear
+                    </button>
+                </div>
+            )}
 
             <NameModal
                 open={nameModalOpen}
@@ -787,6 +933,10 @@ export default function GalleryShow({
                                         activeListId={activeListId}
                                         onSelect={setActiveListId}
                                         onCreate={createList}
+                                        favouriteCount={favouritePhotos.length}
+                                        canDownload={canDownload}
+                                        onViewFavourites={() => setShowingFavourites(true)}
+                                        onDownloadAll={() => requestDownload(favouritePhotos.map((p) => p.id))}
                                     />
                                 )}
                                 {canDownload && (
@@ -811,22 +961,36 @@ export default function GalleryShow({
                     </header>
                 )}
 
-                {/* Set tabs — Pixieset-style sticky navigation */}
-                {sets.length > 0 && (
+                {/* Set tabs — Pixieset-style sticky navigation (+ Favourites tab) */}
+                {(sets.length > 0 || showFavTab) && (
                     <nav
                         className="sticky top-0 z-30 mb-2 border-b backdrop-blur"
                         style={{ borderColor: '#1d1d1d', background: 'rgba(14,14,14,0.88)' }}
                     >
                         <div className="flex flex-nowrap items-center justify-start gap-7 overflow-x-auto px-6 pt-4 sm:justify-center">
+                            {/* When there are no sets, an All tab lets visitors leave the Favourites view. */}
+                            {sets.length === 0 && showFavTab && (
+                                <TabButton active={!onFavView} onClick={() => setShowingFavourites(false)}>
+                                    All Photos
+                                </TabButton>
+                            )}
                             {sets.map((s) => (
                                 <TabButton
                                     key={s.id}
-                                    active={activeSet === s.id}
-                                    onClick={() => setActiveSet(s.id)}
+                                    active={!onFavView && activeSet === s.id}
+                                    onClick={() => { setShowingFavourites(false); setActiveSet(s.id); }}
                                 >
                                     {s.name}
                                 </TabButton>
                             ))}
+                            {showFavTab && (
+                                <TabButton active={onFavView} onClick={() => setShowingFavourites(true)}>
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <Heart className="h-3.5 w-3.5" color="#fb7185" fill="#fb7185" />
+                                        Favourites ({favouritePhotos.length})
+                                    </span>
+                                </TabButton>
+                            )}
                         </div>
                     </nav>
                 )}
@@ -839,7 +1003,7 @@ export default function GalleryShow({
                         </div>
                     ) : (
                         <div className="columns-2 gap-1.5 sm:columns-3 md:columns-4 lg:columns-5">
-                            {visiblePhotos.map((photo) => (
+                            {visiblePhotos.map((photo, i) => (
                                 <GalleryPhoto
                                     key={photo.id}
                                     photo={photo}
@@ -848,9 +1012,15 @@ export default function GalleryShow({
                                     showDownload={canDownload}
                                     showNote={canFavourite && favourites_show_notes}
                                     hasNote={!!activeNotes[photo.id]}
+                                    showBuy={storeEnabled}
+                                    selected={selected.has(photo.id)}
+                                    selectionActive={selected.size > 0}
                                     onToggle={handleHeart}
                                     onDownload={requestDownload}
                                     onNote={setNotePhotoId}
+                                    onOpen={() => setLightboxIndex(i)}
+                                    onBuy={(photoId) => storeRef.current?.shopFor(photoId)}
+                                    onSelect={toggleSelect}
                                 />
                             ))}
                         </div>

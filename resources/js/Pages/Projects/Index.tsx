@@ -29,6 +29,7 @@ type ProjectsProps = {
     filters: Filters;
     view: View;
     preselect_contact_id: number | null;
+    open_project_id: number | null;
 };
 
 function NewProjectModal({
@@ -114,11 +115,11 @@ function NewProjectModal({
     );
 }
 
-export default function Index({ projects, statuses, types, fields, contacts, filters, view, preselect_contact_id }: PageProps<ProjectsProps>) {
+export default function Index({ projects, statuses, types, fields, contacts, filters, view, preselect_contact_id, open_project_id }: PageProps<ProjectsProps>) {
     const [rows, setRows] = useState<Project[]>(projects);
     const [showNew, setShowNew] = useState(!!preselect_contact_id);
     const [showAddField, setShowAddField] = useState(false);
-    const [openId, setOpenId] = useState<number | null>(null);
+    const [openId, setOpenId] = useState<number | null>(open_project_id);
     const [search, setSearch] = useState(filters.search);
     const firstRender = useRef(true);
 

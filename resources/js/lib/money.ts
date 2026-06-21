@@ -1,7 +1,7 @@
 // All money is stored as integer minor units (cents). These helpers convert
 // to/from the major-unit values shown in the UI.
 
-export function formatMoney(cents: number, currency = 'usd'): string {
+export function formatMoney(cents: number, currency = 'gbp'): string {
     return new Intl.NumberFormat(undefined, {
         style: 'currency',
         currency: currency.toUpperCase(),
@@ -20,14 +20,14 @@ export function centsToInput(cents: number): string {
 }
 
 /** The currency symbol for a code, e.g. "gbp" → "£", "usd" → "$", "eur" → "€". */
-export function currencySymbol(currency = 'usd'): string {
+export function currencySymbol(currency = 'gbp'): string {
     try {
         const parts = new Intl.NumberFormat(undefined, {
             style: 'currency',
             currency: currency.toUpperCase(),
         }).formatToParts(0);
-        return parts.find((p) => p.type === 'currency')?.value ?? '$';
+        return parts.find((p) => p.type === 'currency')?.value ?? '£';
     } catch {
-        return '$';
+        return '£';
     }
 }

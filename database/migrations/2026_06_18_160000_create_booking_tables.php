@@ -16,7 +16,7 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->unsignedInteger('duration_minutes')->default(60);
             $table->unsignedBigInteger('price_cents')->default(0);
-            $table->string('currency', 3)->default('usd');
+            $table->string('currency', 3)->default('gbp');
             $table->string('location_type')->default('in_person'); // in_person | phone | video
             $table->string('location')->nullable();
             $table->string('color')->nullable();
@@ -54,7 +54,7 @@ return new class extends Migration
             $table->dateTime('ends_at');
             $table->string('status')->default('pending'); // pending|confirmed|declined|cancelled|completed
             $table->unsignedBigInteger('price_cents')->default(0);
-            $table->string('currency', 3)->default('usd');
+            $table->string('currency', 3)->default('gbp');
             $table->string('location')->nullable();
             $table->text('notes')->nullable();
             $table->string('meeting_url')->nullable();        // video-call link (Phase B)

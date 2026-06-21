@@ -18,7 +18,7 @@ return new class extends Migration
             $table->string('image_path')->nullable();
             $table->unsignedBigInteger('price_cents')->default(0);
             $table->unsignedBigInteger('deposit_cents')->nullable(); // null = full payment only
-            $table->string('currency', 3)->default('usd');
+            $table->string('currency', 3)->default('gbp');
             $table->boolean('active')->default(true);
             $table->unsignedInteger('sort_order')->default(0);
             $table->timestamps();
@@ -39,7 +39,7 @@ return new class extends Migration
             $table->text('notes')->nullable();
             $table->unsignedBigInteger('amount_cents')->default(0); // what was charged
             $table->string('payment_type')->default('full');        // full | deposit
-            $table->string('currency', 3)->default('usd');
+            $table->string('currency', 3)->default('gbp');
             $table->string('status')->default('pending');            // pending | paid | cancelled
             $table->string('stripe_session_id')->nullable();
             $table->string('stripe_payment_intent')->nullable();

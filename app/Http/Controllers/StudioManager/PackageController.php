@@ -35,7 +35,7 @@ class PackageController extends Controller
                     'project_id' => $b->project_id,
                     'created_at' => $b->created_at->toIso8601String(),
                 ]),
-            'default_currency' => $studio?->default_currency ?? 'usd',
+            'default_currency' => $studio?->default_currency ?? 'gbp',
             'currencies' => collect(Currencies::CURRENCIES)->map(fn ($label, $code) => ['code' => $code, 'label' => $label])->values(),
             'public_url' => $publicUrl,
             'embed_code' => $publicUrl ? '<iframe src="'.$publicUrl.'?embed=1" style="width:100%;border:0;min-height:900px" title="Packages"></iframe>' : '',

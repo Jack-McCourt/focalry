@@ -15,3 +15,7 @@ Schedule::command('pulse:check')->everyMinute();
 Schedule::command('invoices:send-payment-reminders')->dailyAt('08:00');
 // Hourly so the 1-hour-before meeting reminder lands on time.
 Schedule::command('meetings:send-reminders')->hourly();
+// Release store orders whose review/delay window has passed.
+Schedule::command('store:release-orders')->everyFifteenMinutes();
+// Run delayed workflow steps whose scheduled time has arrived.
+Schedule::command('workflows:run')->everyFifteenMinutes();

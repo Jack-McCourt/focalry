@@ -62,6 +62,15 @@ return [
         'connect_client_id' => env('STRIPE_CONNECT_CLIENT_ID'),
     ],
 
+    // Prodigi — the print-lab partner for "lab" (auto) fulfilment.
+    'prodigi' => [
+        'key' => env('PRODIGI_API_KEY'),
+        'sandbox' => env('PRODIGI_SANDBOX', true),
+        'shipping_method' => env('PRODIGI_SHIPPING_METHOD', 'Standard'),
+        // Shared secret embedded in the per-order callback URL to authenticate Prodigi's webhooks.
+        'callback_secret' => env('PRODIGI_CALLBACK_SECRET'),
+    ],
+
     'zoom' => [
         'client_id' => env('ZOOM_CLIENT_ID'),
         'client_secret' => env('ZOOM_CLIENT_SECRET'),

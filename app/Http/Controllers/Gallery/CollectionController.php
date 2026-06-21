@@ -4,9 +4,13 @@ namespace App\Http\Controllers\Gallery;
 
 use App\Http\Controllers\Controller;
 use App\Models\Collection;
+use App\Models\PriceSheet;
+use App\Models\Project;
+use App\Models\Studio;
 use App\Support\ClientEmailContent;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -19,12 +23,26 @@ class CollectionController extends Controller
     {
         $collections = Collection::query()
             ->withCount('photos')
+            ->with('coverPhoto:id,derivative_keys')
             ->latest()
-            ->paginate(24);
+            ->paginate(24)
+            ->through(fn (Collection $c) => [
+                ...$c->toArray(),
+                'cover_url' => $this->coverThumbUrl($c),
+            ]);
 
         return Inertia::render('Collections/Index', [
             'collections' => $collections,
         ]);
+    }
+
+    /** A signed thumbnail for the list view — the chosen cover, else the first ready photo. */
+    private function coverThumbUrl(Collection $collection): ?string
+    {
+        $photo = $collection->coverPhoto
+            ?? $collection->photos()->where('status', 'ready')->orderBy('position')->first();
+
+        return $photo?->signedUrl('thumb', 120) ?? $photo?->signedUrl('web', 120);
     }
 
     public function create(): Response
@@ -97,6 +115,15 @@ class CollectionController extends Controller
             'sets' => $sets,
             'activity' => $activity,
             'email_defaults' => ClientEmailContent::defaults($collection),
+            'price_sheets' => PriceSheet::orderByDesc('is_default')->orderBy('name')->get(['id', 'name']),
+            'projects' => Project::with('contact:id,first_name,last_name')
+                ->latest()
+                ->get(['id', 'name', 'contact_id'])
+                ->map(fn (Project $p) => [
+                    'id' => $p->id,
+                    'name' => $p->name,
+                    'client' => trim(($p->contact?->first_name ?? '').' '.($p->contact?->last_name ?? '')) ?: null,
+                ]),
         ]);
     }
 
@@ -128,6 +155,10 @@ class CollectionController extends Controller
             // Favourites
             'favourites_enabled' => 'sometimes|boolean',
             'favourites_show_notes' => 'sometimes|boolean',
+            // Store: which price sheet (catalogue) is sold in this gallery
+            'price_sheet_id' => 'sometimes|nullable|integer',
+            // The project this gallery belongs to (its client is derived from the project)
+            'project_id' => 'sometimes|nullable|integer',
         ]);
 
         $updates = [];
@@ -195,6 +226,20 @@ class CollectionController extends Controller
             $updates['favourite_settings'] = $favourites ?: null;
         }
 
+        // Store: validate the price sheet belongs to this studio before assigning.
+        if (array_key_exists('price_sheet_id', $validated)) {
+            $sheetId = $validated['price_sheet_id'];
+            $updates['price_sheet_id'] = $sheetId && PriceSheet::whereKey($sheetId)->exists() ? $sheetId : null;
+        }
+
+        // Assign the gallery to a project (tenant-scoped) and mirror its client onto
+        // the gallery so client-scoped lookups (orders, the contact page) keep working.
+        if (array_key_exists('project_id', $validated)) {
+            $project = $validated['project_id'] ? Project::find($validated['project_id']) : null;
+            $updates['project_id'] = $project?->id;
+            $updates['contact_id'] = $project?->contact_id;
+        }
+
         if ($updates) {
             $collection->update($updates);
         }
@@ -204,6 +249,15 @@ class CollectionController extends Controller
 
     public function destroy(Collection $collection): RedirectResponse
     {
+        // Photos cascade-delete at the DB level, so their per-photo storage
+        // events won't fire — reclaim the collection's storage up front.
+        $bytes = (int) $collection->photos()->sum('file_size');
+        if ($bytes > 0) {
+            Studio::whereKey($collection->studio_id)->update([
+                'storage_used' => DB::raw('GREATEST(0, storage_used - '.$bytes.')'),
+            ]);
+        }
+
         $collection->delete();
 
         return redirect()->route('collections.index')

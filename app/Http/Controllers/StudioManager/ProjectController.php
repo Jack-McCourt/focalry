@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Models\ProjectFieldDefinition;
 use App\Models\ProjectStatus;
 use App\Models\ProjectType;
+use App\Services\WorkflowEngine;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -52,14 +53,20 @@ class ProjectController extends Controller
                 ? $request->input('view')
                 : 'grid',
             'preselect_contact_id' => $request->integer('client') ?: null,
+            'open_project_id' => $request->integer('open') ?: null,
         ]);
     }
 
     public function show(Project $project): JsonResponse
     {
-        $project->load(['invoices' => fn ($q) => $q->orderByDesc('id'), 'contracts' => fn ($q) => $q->orderByDesc('id'), 'noteEntries']);
+        $project->load(['invoices' => fn ($q) => $q->orderByDesc('id'), 'contracts' => fn ($q) => $q->orderByDesc('id'), 'noteEntries', 'collections']);
 
         return response()->json([
+            'galleries' => $project->collections->map(fn ($c) => [
+                'id' => $c->id,
+                'title' => $c->title,
+                'status' => $c->status,
+            ]),
             'invoices' => $project->invoices->map(fn (Invoice $i) => [
                 'id' => $i->id,
                 'public_id' => $i->public_id,
@@ -90,14 +97,24 @@ class ProjectController extends Controller
         // New projects land at the end of their status column.
         $data['position'] = (int) Project::where('status_id', $data['status_id'] ?? null)->max('position') + 1;
 
-        Project::create($data);
+        $project = Project::create($data);
+
+        app(WorkflowEngine::class)->dispatch('project_created', $project);
+        if ($project->status_id) {
+            app(WorkflowEngine::class)->dispatch('project_status_changed', $project, ['status_id' => $project->status_id]);
+        }
 
         return back()->with('success', 'Project created.');
     }
 
     public function update(Request $request, Project $project): RedirectResponse
     {
+        $previousStatusId = $project->status_id;
         $project->update($this->validateProject($request, creating: false));
+
+        if ($project->status_id && $project->status_id !== $previousStatusId) {
+            app(WorkflowEngine::class)->dispatch('project_status_changed', $project, ['status_id' => $project->status_id]);
+        }
 
         return back()->with('success', 'Project updated.');
     }
@@ -121,6 +138,8 @@ class ProjectController extends Controller
             'ordered_ids.*' => 'integer',
         ]);
 
+        $statusChanged = $project->status_id !== (int) $validated['status_id'];
+
         DB::transaction(function () use ($validated) {
             foreach ($validated['ordered_ids'] as $i => $id) {
                 // whereKey is studio-scoped via the global scope, so cross-tenant ids are ignored.
@@ -130,6 +149,14 @@ class ProjectController extends Controller
                 ]);
             }
         });
+
+        if ($statusChanged) {
+            app(WorkflowEngine::class)->dispatch(
+                'project_status_changed',
+                $project->refresh(),
+                ['status_id' => (int) $validated['status_id']],
+            );
+        }
 
         return back();
     }

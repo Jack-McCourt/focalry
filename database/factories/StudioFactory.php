@@ -27,7 +27,7 @@ class StudioFactory extends Factory
         ];
     }
 
-    public function onPaidPlan(string $plan = 'pro'): static
+    public function onPaidPlan(string $plan = 'plus'): static
     {
         return $this->state([
             'plan' => $plan,

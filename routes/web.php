@@ -1,6 +1,15 @@
 <?php
 
+use App\Http\Controllers\Admin\AuditController as AdminAuditController;
+use App\Http\Controllers\Admin\ContentController as AdminContentController;
+use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
+use App\Http\Controllers\Admin\ImpersonationController;
+use App\Http\Controllers\Admin\OrderController as AdminOrderController;
+use App\Http\Controllers\Admin\StudioController as AdminStudioController;
+use App\Http\Controllers\Admin\UserController as AdminUserController;
+use App\Http\Controllers\BillingController;
 use App\Http\Controllers\ConversationController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Gallery\CollectionController;
 use App\Http\Controllers\Gallery\FavouriteController;
 use App\Http\Controllers\Gallery\FavouriteListDownloadController;
@@ -14,7 +23,11 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public\ContractSigningController;
 use App\Http\Controllers\Public\PublicMeetingController;
 use App\Http\Controllers\Public\PublicPackageController;
+use App\Http\Controllers\Public\PublicProposalController;
+use App\Http\Controllers\Public\PublicQuestionnaireController;
 use App\Http\Controllers\Public\PublicSiteController;
+use App\Http\Controllers\Public\StoreCheckoutController;
+use App\Http\Controllers\Public\StoreDownloadController;
 use App\Http\Controllers\Settings\GoogleCalendarController;
 use App\Http\Controllers\Settings\StudioSettingsController;
 use App\Http\Controllers\Settings\ZoomController;
@@ -25,16 +38,29 @@ use App\Http\Controllers\StudioManager\ClientEmailController;
 use App\Http\Controllers\StudioManager\ContactController;
 use App\Http\Controllers\StudioManager\ContractController;
 use App\Http\Controllers\StudioManager\ContractTemplateController;
+use App\Http\Controllers\StudioManager\CouponController;
+use App\Http\Controllers\StudioManager\GiftCardController;
 use App\Http\Controllers\StudioManager\InvoiceController;
 use App\Http\Controllers\StudioManager\InvoiceSettingsController;
 use App\Http\Controllers\StudioManager\MeetingController;
 use App\Http\Controllers\StudioManager\MeetingTypeController;
 use App\Http\Controllers\StudioManager\PackageController;
+use App\Http\Controllers\StudioManager\PriceSheetController;
+use App\Http\Controllers\StudioManager\ProductCategoryController;
+use App\Http\Controllers\StudioManager\ProductController;
 use App\Http\Controllers\StudioManager\ProjectController;
 use App\Http\Controllers\StudioManager\ProjectFieldController;
 use App\Http\Controllers\StudioManager\ProjectNoteController;
 use App\Http\Controllers\StudioManager\ProjectSettingsController;
+use App\Http\Controllers\StudioManager\ProposalController;
+use App\Http\Controllers\StudioManager\QuestionnaireController;
+use App\Http\Controllers\StudioManager\QuestionnaireTemplateController;
 use App\Http\Controllers\StudioManager\SiteController;
+use App\Http\Controllers\StudioManager\TaskController;
+use App\Http\Controllers\StudioManager\TaskTemplateController;
+use App\Http\Controllers\StudioManager\WorkflowController;
+use App\Http\Controllers\StudioManager\StoreOrderController;
+use App\Http\Controllers\StudioManager\StoreSettingsController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -48,14 +74,23 @@ Route::get('/', function () {
     ]);
 });
 
-Route::middleware(['auth', 'verified'])->group(function () {
-    Route::get('/dashboard', function () {
-        return Inertia::render('Dashboard');
-    })->name('dashboard');
+// Stop impersonating — auth only (no verified/suspension gate) so an admin can
+// always exit, even if the impersonated user is unverified or suspended.
+Route::middleware('auth')->post('/impersonate/stop', [ImpersonationController::class, 'stop'])
+    ->name('impersonate.stop');
+
+Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
+    Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // Billing — subscription plans (the studio's own SaaS plan)
+    Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');
+    Route::post('/billing/subscribe', [BillingController::class, 'subscribe'])->name('billing.subscribe');
+    Route::get('/billing/success', [BillingController::class, 'success'])->name('billing.success');
+    Route::post('/billing/portal', [BillingController::class, 'portal'])->name('billing.portal');
 
     // Studio (business) settings — address + default currency
     Route::patch('/settings/studio', [StudioSettingsController::class, 'update'])->name('studio.update');
@@ -73,12 +108,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('collections', CollectionController::class)->except(['edit']);
 
     // Studio Manager — Contacts (CRM)
-    Route::resource('contacts', ContactController::class)->except(['create', 'edit']);
+    Route::resource('contacts', ContactController::class)->except(['create', 'edit'])
+        ->middleware('plan:studio_manager');
 
     // Studio Manager — Projects
     // Settings route before the resource so it isn't matched as projects/{project}.
-    Route::get('projects/settings', [ProjectSettingsController::class, 'edit'])->name('projects.settings');
-    Route::resource('projects', ProjectController::class)->only(['index', 'show', 'store', 'update', 'destroy']);
+    Route::get('projects/settings', [ProjectSettingsController::class, 'edit'])->name('projects.settings')
+        ->middleware('plan:studio_manager');
+    Route::resource('projects', ProjectController::class)->only(['index', 'show', 'store', 'update', 'destroy'])
+        ->middleware('plan:studio_manager');
     Route::post('projects/{project}/move', [ProjectController::class, 'move'])->name('projects.move');
     Route::post('projects/{project}/notes', [ProjectNoteController::class, 'store'])->name('projects.notes.store');
     Route::patch('project-notes/{note}', [ProjectNoteController::class, 'update'])->name('project-notes.update');
@@ -121,24 +159,81 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
 
     // Booking — session types, availability, and the bookings list
-    Route::get('meetings', [MeetingController::class, 'index'])->name('meetings.index');
+    Route::get('meetings', [MeetingController::class, 'index'])->name('meetings.index')
+        ->middleware('plan:studio_manager');
     Route::post('meetings/{meeting}/confirm', [MeetingController::class, 'confirm'])->name('meetings.confirm');
     Route::post('meetings/{meeting}/decline', [MeetingController::class, 'decline'])->name('meetings.decline');
     Route::post('meetings/{meeting}/cancel', [MeetingController::class, 'cancel'])->name('meetings.cancel');
 
-    Route::get('meeting-types', [MeetingTypeController::class, 'index'])->name('meeting-types.index');
+    Route::get('meeting-types', [MeetingTypeController::class, 'index'])->name('meeting-types.index')
+        ->middleware('plan:studio_manager');
     Route::post('meeting-types', [MeetingTypeController::class, 'store'])->name('meeting-types.store');
     Route::patch('meeting-types/{meetingType}', [MeetingTypeController::class, 'update'])->name('meeting-types.update');
     Route::delete('meeting-types/{meetingType}', [MeetingTypeController::class, 'destroy'])->name('meeting-types.destroy');
 
-    Route::get('availability', [AvailabilityController::class, 'edit'])->name('availability.edit');
+    Route::get('availability', [AvailabilityController::class, 'edit'])->name('availability.edit')
+        ->middleware('plan:studio_manager');
     Route::patch('availability', [AvailabilityController::class, 'update'])->name('availability.update');
 
     // Bookings — sellable packages (paid shoots → create a Project)
-    Route::get('packages', [PackageController::class, 'index'])->name('packages.index');
+    Route::get('packages', [PackageController::class, 'index'])->name('packages.index')
+        ->middleware('plan:studio_manager');
     Route::post('packages', [PackageController::class, 'store'])->name('packages.store');
     Route::patch('packages/{package}', [PackageController::class, 'update'])->name('packages.update');
     Route::delete('packages/{package}', [PackageController::class, 'destroy'])->name('packages.destroy');
+
+    // ── Store (Phase 2) ──────────────────────────────────────────────────────
+    Route::prefix('store')->name('store.')->middleware('plan:store')->group(function () {
+        Route::get('/', fn () => redirect()->route('store.orders.index'))->name('index');
+
+        // Orders dashboard
+        Route::get('orders', [StoreOrderController::class, 'index'])->name('orders.index');
+        Route::get('orders/{order}', [StoreOrderController::class, 'show'])->name('orders.show');
+        Route::post('orders/{order}/status', [StoreOrderController::class, 'updateStatus'])->name('orders.status');
+        Route::post('orders/{order}/fulfil', [StoreOrderController::class, 'fulfil'])->name('orders.fulfil');
+        Route::post('orders/{order}/offline-payment', [StoreOrderController::class, 'recordOffline'])->name('orders.offline');
+        Route::post('orders/{order}/refund', [StoreOrderController::class, 'refund'])->name('orders.refund');
+
+        // Price sheets, categories, products + options
+        Route::get('products', [PriceSheetController::class, 'index'])->name('products.index');
+        Route::post('price-sheets', [PriceSheetController::class, 'store'])->name('price-sheets.store');
+        Route::patch('price-sheets/{priceSheet}', [PriceSheetController::class, 'update'])->name('price-sheets.update');
+        Route::delete('price-sheets/{priceSheet}', [PriceSheetController::class, 'destroy'])->name('price-sheets.destroy');
+        Route::post('price-sheets/{priceSheet}/default', [PriceSheetController::class, 'setDefault'])->name('price-sheets.default');
+
+        Route::post('product-categories', [ProductCategoryController::class, 'store'])->name('product-categories.store');
+        Route::patch('product-categories/{productCategory}', [ProductCategoryController::class, 'update'])->name('product-categories.update');
+        Route::delete('product-categories/{productCategory}', [ProductCategoryController::class, 'destroy'])->name('product-categories.destroy');
+        Route::post('product-categories/reorder', [ProductCategoryController::class, 'reorder'])->name('product-categories.reorder');
+
+        Route::post('products', [ProductController::class, 'store'])->name('products.store');
+        Route::post('products/lab', [ProductController::class, 'storeLab'])->name('products.lab.store');
+        Route::post('products/reorder', [ProductController::class, 'reorder'])->name('products.reorder');
+        Route::patch('products/{product}/lab', [ProductController::class, 'updateLab'])->name('products.lab.update');
+        Route::patch('products/{product}', [ProductController::class, 'update'])->name('products.update');
+        Route::delete('products/{product}', [ProductController::class, 'destroy'])->name('products.destroy');
+
+        // Coupons
+        Route::get('coupons', [CouponController::class, 'index'])->name('coupons.index');
+        Route::post('coupons', [CouponController::class, 'store'])->name('coupons.store');
+        Route::patch('coupons/{coupon}', [CouponController::class, 'update'])->name('coupons.update');
+        Route::delete('coupons/{coupon}', [CouponController::class, 'destroy'])->name('coupons.destroy');
+
+        // Gift cards
+        Route::get('gift-cards', [GiftCardController::class, 'index'])->name('gift-cards.index');
+        Route::post('gift-cards', [GiftCardController::class, 'store'])->name('gift-cards.store');
+        Route::patch('gift-cards/{giftCard}', [GiftCardController::class, 'update'])->name('gift-cards.update');
+
+        // Settings (review window, tax rates, shipping methods)
+        Route::get('settings', [StoreSettingsController::class, 'edit'])->name('settings.edit');
+        Route::patch('settings', [StoreSettingsController::class, 'update'])->name('settings.update');
+        Route::post('tax-rates', [StoreSettingsController::class, 'storeTax'])->name('tax-rates.store');
+        Route::patch('tax-rates/{taxRate}', [StoreSettingsController::class, 'updateTax'])->name('tax-rates.update');
+        Route::delete('tax-rates/{taxRate}', [StoreSettingsController::class, 'destroyTax'])->name('tax-rates.destroy');
+        Route::post('shipping-methods', [StoreSettingsController::class, 'storeShipping'])->name('shipping-methods.store');
+        Route::patch('shipping-methods/{shippingMethod}', [StoreSettingsController::class, 'updateShipping'])->name('shipping-methods.update');
+        Route::delete('shipping-methods/{shippingMethod}', [StoreSettingsController::class, 'destroyShipping'])->name('shipping-methods.destroy');
+    });
 
     // Google Calendar connection (per studio)
     Route::get('settings/google-calendar/connect', [GoogleCalendarController::class, 'connect'])->name('google-calendar.connect');
@@ -151,14 +246,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('settings/zoom', [ZoomController::class, 'disconnect'])->name('zoom.disconnect');
 
     // Website builder (studio's marketing site + lead capture)
-    Route::get('website', [SiteController::class, 'edit'])->name('website.edit');
-    Route::put('website', [SiteController::class, 'update'])->name('website.update');
-    Route::post('website/publish', [SiteController::class, 'publish'])->name('website.publish');
-    Route::post('website/template', [SiteController::class, 'applyTemplate'])->name('website.template');
-    Route::post('website/upload', [SiteController::class, 'uploadImage'])->name('website.upload');
-    Route::get('website/gallery-images', [SiteController::class, 'galleryImages'])->name('website.gallery.images');
-    Route::post('website/gallery-images', [SiteController::class, 'importGalleryImages'])->name('website.gallery.import');
-    Route::get('website/leads', [SiteController::class, 'leads'])->name('website.leads');
+    Route::middleware('plan:website')->group(function () {
+        Route::get('website', [SiteController::class, 'edit'])->name('website.edit');
+        Route::put('website', [SiteController::class, 'update'])->name('website.update');
+        Route::post('website/publish', [SiteController::class, 'publish'])->name('website.publish');
+        Route::post('website/template', [SiteController::class, 'applyTemplate'])->name('website.template');
+        Route::post('website/upload', [SiteController::class, 'uploadImage'])->name('website.upload');
+        Route::get('website/gallery-images', [SiteController::class, 'galleryImages'])->name('website.gallery.images');
+        Route::post('website/gallery-images', [SiteController::class, 'importGalleryImages'])->name('website.gallery.import');
+        Route::get('website/leads', [SiteController::class, 'leads'])->name('website.leads');
+    });
 
     // Send an email to a client about an invoice / contract / gallery
     Route::post('client-emails', [ClientEmailController::class, 'send'])->name('client-emails.send');
@@ -171,17 +268,66 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('contracts/templates/{template}/edit', [ContractTemplateController::class, 'edit'])->name('contracts.templates.edit');
     Route::patch('contracts/templates/{template}', [ContractTemplateController::class, 'update'])->name('contracts.templates.update');
     Route::delete('contracts/templates/{template}', [ContractTemplateController::class, 'destroy'])->name('contracts.templates.destroy');
-    Route::resource('contracts', ContractController::class);
+    Route::resource('contracts', ContractController::class)->middleware('plan:studio_manager');
     Route::post('contracts/{contract}/send', [ContractController::class, 'send'])->name('contracts.send');
     Route::post('contracts/{contract}/sign', [ContractController::class, 'sign'])->name('contracts.sign');
     Route::post('contracts/{contract}/void', [ContractController::class, 'void'])->name('contracts.void');
     Route::get('contracts/{contract}/pdf', [ContractController::class, 'pdf'])->name('contracts.pdf');
 
+    // Studio Manager — Tasks (per-project to-dos + reusable checklists)
+    Route::middleware('plan:studio_manager')->group(function () {
+        Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
+        Route::post('tasks', [TaskController::class, 'store'])->name('tasks.store');
+        Route::post('tasks/apply-template', [TaskController::class, 'applyTemplate'])->name('tasks.apply-template');
+        Route::patch('tasks/{task}', [TaskController::class, 'update'])->name('tasks.update');
+        Route::post('tasks/{task}/toggle', [TaskController::class, 'toggle'])->name('tasks.toggle');
+        Route::delete('tasks/{task}', [TaskController::class, 'destroy'])->name('tasks.destroy');
+
+        Route::post('task-templates', [TaskTemplateController::class, 'store'])->name('task-templates.store');
+        Route::patch('task-templates/{taskTemplate}', [TaskTemplateController::class, 'update'])->name('task-templates.update');
+        Route::delete('task-templates/{taskTemplate}', [TaskTemplateController::class, 'destroy'])->name('task-templates.destroy');
+    });
+
+    // Studio Manager — Questionnaires
+    // Template routes before the resource so 'templates' isn't matched as {questionnaire}.
+    Route::middleware('plan:studio_manager')->group(function () {
+        Route::get('questionnaires/templates', [QuestionnaireTemplateController::class, 'index'])->name('questionnaires.templates.index');
+        Route::post('questionnaire-templates', [QuestionnaireTemplateController::class, 'store'])->name('questionnaire-templates.store');
+        Route::patch('questionnaire-templates/{questionnaireTemplate}', [QuestionnaireTemplateController::class, 'update'])->name('questionnaire-templates.update');
+        Route::delete('questionnaire-templates/{questionnaireTemplate}', [QuestionnaireTemplateController::class, 'destroy'])->name('questionnaire-templates.destroy');
+
+        Route::get('questionnaires', [QuestionnaireController::class, 'index'])->name('questionnaires.index');
+        Route::get('questionnaires/create', [QuestionnaireController::class, 'create'])->name('questionnaires.create');
+        Route::post('questionnaires', [QuestionnaireController::class, 'store'])->name('questionnaires.store');
+        Route::get('questionnaires/{questionnaire}', [QuestionnaireController::class, 'show'])->name('questionnaires.show');
+        Route::post('questionnaires/{questionnaire}/send', [QuestionnaireController::class, 'send'])->name('questionnaires.send');
+        Route::delete('questionnaires/{questionnaire}', [QuestionnaireController::class, 'destroy'])->name('questionnaires.destroy');
+    });
+
+    // Studio Manager — Proposals (package + contract + deposit, bundled)
+    Route::resource('proposals', ProposalController::class)
+        ->only(['index', 'create', 'store', 'show', 'destroy'])
+        ->middleware('plan:studio_manager');
+    Route::post('proposals/{proposal}/send', [ProposalController::class, 'send'])->name('proposals.send');
+
+    // Studio Manager — Workflows (automations)
+    Route::middleware('plan:studio_manager')->group(function () {
+        Route::get('workflows', [WorkflowController::class, 'index'])->name('workflows.index');
+        Route::get('workflows/create', [WorkflowController::class, 'create'])->name('workflows.create');
+        Route::post('workflows', [WorkflowController::class, 'store'])->name('workflows.store');
+        Route::get('workflows/{workflow}/edit', [WorkflowController::class, 'edit'])->name('workflows.edit');
+        Route::patch('workflows/{workflow}', [WorkflowController::class, 'update'])->name('workflows.update');
+        Route::post('workflows/{workflow}/toggle', [WorkflowController::class, 'toggle'])->name('workflows.toggle');
+        Route::delete('workflows/{workflow}', [WorkflowController::class, 'destroy'])->name('workflows.destroy');
+    });
+
     // Studio Manager — Invoices
     // Settings routes registered before the resource so they don't match {invoice}.
-    Route::get('invoices/settings', [InvoiceSettingsController::class, 'edit'])->name('invoices.settings.edit');
-    Route::patch('invoices/settings', [InvoiceSettingsController::class, 'update'])->name('invoices.settings.update');
-    Route::resource('invoices', InvoiceController::class);
+    Route::get('invoices/settings', [InvoiceSettingsController::class, 'edit'])->name('invoices.settings.edit')
+        ->middleware('plan:studio_manager');
+    Route::patch('invoices/settings', [InvoiceSettingsController::class, 'update'])->name('invoices.settings.update')
+        ->middleware('plan:studio_manager');
+    Route::resource('invoices', InvoiceController::class)->middleware('plan:studio_manager');
     Route::post('invoices/{invoice}/sent', [InvoiceController::class, 'markSent'])->name('invoices.sent');
     Route::post('invoices/{invoice}/void', [InvoiceController::class, 'void'])->name('invoices.void');
     Route::post('invoices/{invoice}/payments', [InvoiceController::class, 'recordPayment'])->name('invoices.payments.store');
@@ -204,9 +350,39 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('favourite-lists.export-csv');
 });
 
+// ── Super Admin suite ─────────────────────────────────────────────────────────
+Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/', AdminDashboardController::class)->name('dashboard');
+
+    Route::get('studios', [AdminStudioController::class, 'index'])->name('studios.index');
+    Route::get('studios/{studio}', [AdminStudioController::class, 'show'])->name('studios.show');
+    Route::patch('studios/{studio}', [AdminStudioController::class, 'update'])->name('studios.update');
+    Route::post('studios/{studio}/suspend', [AdminStudioController::class, 'suspend'])->name('studios.suspend');
+    Route::delete('studios/{studio}', [AdminStudioController::class, 'destroy'])->name('studios.destroy');
+
+    Route::get('users', [AdminUserController::class, 'index'])->name('users.index');
+    Route::post('users/{user}/impersonate', [ImpersonationController::class, 'start'])->name('users.impersonate');
+
+    Route::get('orders', [AdminOrderController::class, 'index'])->name('orders.index');
+
+    Route::get('content', [AdminContentController::class, 'index'])->name('content.index');
+    Route::post('content/collections/{collection}/takedown', [AdminContentController::class, 'takedownCollection'])->name('content.collections.takedown');
+    Route::post('content/sites/{site}/takedown', [AdminContentController::class, 'takedownSite'])->name('content.sites.takedown');
+
+    Route::get('audit', [AdminAuditController::class, 'index'])->name('audit.index');
+});
+
 // Public contract signing (no auth — resolved by unguessable public_id)
 Route::get('/c/{publicId}', [ContractSigningController::class, 'show'])->name('contracts.public.show');
 Route::post('/c/{publicId}/sign', [ContractSigningController::class, 'sign'])->name('contracts.public.sign');
+
+// Public questionnaire (no auth — resolved by unguessable public_id)
+Route::get('/q/{publicId}', [PublicQuestionnaireController::class, 'show'])->name('questionnaires.public.show');
+Route::post('/q/{publicId}', [PublicQuestionnaireController::class, 'submit'])->name('questionnaires.public.submit');
+
+// Public proposal (no auth — resolved by unguessable public_id)
+Route::get('/p/{publicId}', [PublicProposalController::class, 'show'])->name('proposals.public.show');
+Route::post('/p/{publicId}/sign', [PublicProposalController::class, 'sign'])->name('proposals.public.sign');
 
 // Public invoice payment (no auth — resolved by unguessable public_id)
 Route::get('/i/{publicId}', [PublicInvoiceController::class, 'show'])->name('invoices.public.show');
@@ -239,6 +415,8 @@ Route::post('/g/{slug}/download/verify-pin', [GalleryDownloadController::class, 
     ->name('gallery.download.verify-pin');
 Route::get('/g/{slug}/download', [GalleryDownloadController::class, 'all'])
     ->name('gallery.download.all');
+Route::get('/g/{slug}/download-selection', [GalleryDownloadController::class, 'selection'])
+    ->name('gallery.download.selection');
 Route::get('/g/{slug}/download/{photoId}', [GalleryDownloadController::class, 'single'])
     ->whereNumber('photoId')
     ->name('gallery.download.single');
@@ -253,6 +431,13 @@ Route::get('/booking/{meeting}', [PublicMeetingController::class, 'confirmation'
 Route::get('/packages/{slug}', [PublicPackageController::class, 'index'])->name('packages.public');
 Route::post('/packages/{slug}/{package}/checkout', [PublicPackageController::class, 'checkout'])->name('packages.public.checkout');
 Route::get('/package-booking/{booking}', [PublicPackageController::class, 'confirmation'])->name('packages.public.confirmation');
+
+// Public store checkout (no auth) — in-gallery cart → Stripe Connect checkout.
+Route::post('/g/{slug}/store/quote', [StoreCheckoutController::class, 'quote'])->name('store.public.quote');
+Route::post('/g/{slug}/store/checkout', [StoreCheckoutController::class, 'checkout'])->name('store.public.checkout');
+Route::get('/order/{publicId}', [StoreCheckoutController::class, 'confirmation'])->name('store.public.confirmation');
+// Purchased digital download (token-gated, no auth).
+Route::get('/d/{token}', [StoreDownloadController::class, 'download'])->name('store.public.download');
 
 // Email open-tracking pixel (read receipts) — token-protected, no auth.
 Route::get('/e/o/{message}/{token}', MailOpenController::class)

@@ -3,14 +3,22 @@ export interface User {
     name: string;
     email: string;
     role: 'owner' | 'admin' | 'member';
+    is_super_admin?: boolean;
 }
+
+export type PlanKey = 'free' | 'lite' | 'basic' | 'plus' | 'ultimate';
+
+export type PlanFeature = 'galleries' | 'store' | 'studio_manager' | 'website' | 'custom_domain';
 
 export interface Studio {
     id: number;
     name: string;
     slug: string;
-    plan: 'free' | 'basic' | 'plus' | 'pro' | 'ultimate';
+    plan: PlanKey;
     logo_path: string | null;
+    features: PlanFeature[];
+    storage_used: number;
+    storage_limit: number | null;
 }
 
 export interface Auth {
@@ -49,7 +57,9 @@ export interface Collection {
     event_date: string | null;
     status: 'draft' | 'published';
     cover_photo_id: number | null;
+    project_id?: number | null;
     cover_style: Partial<CoverStyle> | null;
+    cover_url?: string | null;
     photos_count?: number;
     published_at: string | null;
     created_at: string;

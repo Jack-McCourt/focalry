@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
 use App\Models\Contract;
+use App\Services\WorkflowEngine;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -55,7 +56,7 @@ class ContractSigningController extends Controller
         ]);
     }
 
-    public function sign(Request $request, string $publicId): RedirectResponse
+    public function sign(Request $request, string $publicId, WorkflowEngine $engine): RedirectResponse
     {
         $contract = $this->resolve($publicId);
 
@@ -103,11 +104,18 @@ class ContractSigningController extends Controller
 
         // Fully executed once both parties have signed.
         $contract->load('signatures');
+        $becameSigned = false;
         if ($contract->signatureFor('studio')) {
             $contract->status = 'signed';
             $contract->signed_at = now();
+            $becameSigned = true;
         }
         $contract->save();
+
+        // Fire any "contract signed" automations for the linked project.
+        if ($becameSigned && $contract->project) {
+            $engine->dispatch('contract_signed', $contract->project);
+        }
 
         return redirect()
             ->route('contracts.public.show', $contract->public_id)

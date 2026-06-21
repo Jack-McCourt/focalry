@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('watermark_path')->nullable();
             $table->json('branding')->nullable();
             $table->string('custom_domain')->nullable()->unique();
-            $table->string('default_currency', 3)->default('usd');
+            $table->string('default_currency', 3)->default('gbp');
             $table->string('plan')->default('free');
             $table->unsignedInteger('commission_rate')->default(15);
             $table->unsignedBigInteger('storage_used')->default(0);

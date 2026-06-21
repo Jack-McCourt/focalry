@@ -7,11 +7,34 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class Photo extends Model
 {
     use BelongsToStudio, HasFactory;
+
+    /**
+     * Keep the studio's storage meter in sync as photos come and go so plan
+     * quotas can be enforced. Bulk/cascade deletes (e.g. deleting a whole
+     * collection) bypass these events and are accounted for explicitly.
+     */
+    protected static function booted(): void
+    {
+        static::created(function (Photo $photo): void {
+            if ($photo->file_size && $photo->studio_id) {
+                Studio::whereKey($photo->studio_id)->increment('storage_used', $photo->file_size);
+            }
+        });
+
+        static::deleted(function (Photo $photo): void {
+            if ($photo->file_size && $photo->studio_id) {
+                Studio::whereKey($photo->studio_id)->update([
+                    'storage_used' => DB::raw('GREATEST(0, storage_used - '.(int) $photo->file_size.')'),
+                ]);
+            }
+        });
+    }
 
     protected $fillable = [
         'studio_id',

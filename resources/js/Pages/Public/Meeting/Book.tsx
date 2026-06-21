@@ -62,6 +62,7 @@ export default function Book({
     // ── Month calendar ──
     const available = useMemo(() => new Set(dates), [dates]);
     const toISO = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const todayISO = toISO(new Date());
     const thisMonth = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1); };
     const startMonth = useMemo(() => {
         const first = dates[0] ? new Date(dates[0] + 'T00:00:00') : new Date();
@@ -120,21 +121,25 @@ export default function Book({
                             {cells.map((iso, i) => {
                                 if (!iso) return <div key={i} />;
                                 const isAvail = available.has(iso);
+                                const isPast = iso < todayISO;
                                 const day = Number(iso.slice(-2));
                                 const selected = selectedDate === iso;
+                                // Green dot = bookable, red dot = no availability (today onward).
+                                const dot = isAvail ? 'bg-emerald-500' : isPast ? '' : 'bg-red-400';
                                 return (
                                     <button
                                         key={iso}
                                         type="button"
                                         disabled={!isAvail}
                                         onClick={() => pickDate(iso)}
-                                        className={`flex aspect-square items-center justify-center rounded-lg text-sm transition ${
+                                        className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-lg text-sm transition ${
                                             selected ? 'bg-neutral-900 font-semibold text-white'
                                                 : isAvail ? 'font-medium text-neutral-800 hover:bg-neutral-100 ring-1 ring-inset ring-neutral-200'
                                                 : 'text-neutral-300'
                                         }`}
                                     >
                                         {day}
+                                        <span className={`h-1.5 w-1.5 rounded-full ${selected ? 'bg-white' : dot}`} />
                                     </button>
                                 );
                             })}

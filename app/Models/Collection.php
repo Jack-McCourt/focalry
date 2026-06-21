@@ -15,6 +15,7 @@ class Collection extends Model
     protected $fillable = [
         'studio_id',
         'contact_id',
+        'project_id',
         'title',
         'slug',
         'event_date',
@@ -52,6 +53,36 @@ class Collection extends Model
     public function contact(): BelongsTo
     {
         return $this->belongsTo(Contact::class);
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
+    }
+
+    public function priceSheet(): BelongsTo
+    {
+        return $this->belongsTo(PriceSheet::class);
+    }
+
+    /**
+     * The price sheet that governs sales in this gallery: the explicitly assigned
+     * one, else the studio's default. Resolved without the studio global scope so
+     * it works in the public (unauthenticated) gallery context.
+     */
+    public function effectivePriceSheet(): ?PriceSheet
+    {
+        return $this->price_sheet_id
+            ? PriceSheet::withoutGlobalScopes()->find($this->price_sheet_id)
+            : PriceSheet::withoutGlobalScopes()
+                ->where('studio_id', $this->studio_id)
+                ->where('is_default', true)
+                ->first();
+    }
+
+    public function effectivePriceSheetId(): ?int
+    {
+        return $this->effectivePriceSheet()?->id;
     }
 
     public function sets(): HasMany

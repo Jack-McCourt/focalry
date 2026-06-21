@@ -63,7 +63,7 @@ return [
     |
     */
 
-    'currency' => env('CASHIER_CURRENCY', 'usd'),
+    'currency' => env('CASHIER_CURRENCY', 'gbp'),
 
     /*
     |--------------------------------------------------------------------------

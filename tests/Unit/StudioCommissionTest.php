@@ -9,7 +9,7 @@ test('free plan studio has 15% commission', function () {
 });
 
 test('paid plan studio has 0% commission', function () {
-    $studio = new Studio(['plan' => 'pro', 'commission_rate' => 15]);
+    $studio = new Studio(['plan' => 'plus', 'commission_rate' => 15]);
 
     expect($studio->effectiveCommissionRate())->toBe(0);
 });
@@ -21,7 +21,7 @@ test('isOnFreePlan returns true for free plan', function () {
 });
 
 test('isOnFreePlan returns false for paid plans', function () {
-    foreach (['basic', 'plus', 'pro', 'ultimate'] as $plan) {
+    foreach (['lite', 'basic', 'plus', 'ultimate'] as $plan) {
         $studio = new Studio(['plan' => $plan]);
         expect($studio->isOnFreePlan())->toBeFalse();
     }

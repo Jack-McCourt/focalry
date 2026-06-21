@@ -39,7 +39,7 @@ export default function StudioSettingsForm({
         region: studio.region ?? '',
         postal_code: studio.postal_code ?? '',
         country: studio.country ?? '',
-        default_currency: studio.default_currency ?? 'usd',
+        default_currency: studio.default_currency ?? 'gbp',
         email_signature: studio.email_signature ?? '',
     });
 
