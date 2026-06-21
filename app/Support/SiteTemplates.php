@@ -21,6 +21,14 @@ class SiteTemplates
             'name' => 'Portfolio',
             'description' => 'A multi-page site: home, about, a blog and a contact page — with sensible blocks on each.',
         ],
+        'editorial' => [
+            'name' => 'Editorial',
+            'description' => 'An elegant, fine-art template with serif type and warm tones — home, portfolio, about, investment, journal and contact.',
+        ],
+        'studio' => [
+            'name' => 'Studio',
+            'description' => 'A clean, modern single-scroll template with bold sans-serif type — home, work, journal and contact.',
+        ],
     ];
 
     public const DEFAULT = 'portfolio';
@@ -42,32 +50,44 @@ class SiteTemplates
     /** @return array{primary_color: string, font: string} */
     public static function theme(string $key): array
     {
-        return [
-            'primary_color' => '#171717',
-            'font' => 'sans',
-        ];
+        return match ($key) {
+            'editorial' => ['primary_color' => '#7d6b58', 'font' => 'serif'],
+            'studio' => ['primary_color' => '#111827', 'font' => 'sans'],
+            default => ['primary_color' => '#171717', 'font' => 'sans'],
+        };
     }
 
     /** @return list<array{label: string, kind: string, target: string}> */
     public static function headerNav(string $key): array
     {
-        return [
-            ['label' => 'Home', 'kind' => 'page', 'target' => 'home'],
-            ['label' => 'About', 'kind' => 'page', 'target' => 'about'],
-            ['label' => 'Blog', 'kind' => 'page', 'target' => 'blog'],
-            ['label' => 'Contact', 'kind' => 'page', 'target' => 'contact'],
-        ];
+        return match ($key) {
+            'editorial' => [
+                ['label' => 'Home', 'kind' => 'page', 'target' => 'home'],
+                ['label' => 'Portfolio', 'kind' => 'page', 'target' => 'portfolio'],
+                ['label' => 'About', 'kind' => 'page', 'target' => 'about'],
+                ['label' => 'Investment', 'kind' => 'page', 'target' => 'investment'],
+                ['label' => 'Journal', 'kind' => 'page', 'target' => 'journal'],
+                ['label' => 'Contact', 'kind' => 'page', 'target' => 'contact'],
+            ],
+            'studio' => [
+                ['label' => 'Home', 'kind' => 'page', 'target' => 'home'],
+                ['label' => 'Work', 'kind' => 'page', 'target' => 'work'],
+                ['label' => 'Journal', 'kind' => 'page', 'target' => 'journal'],
+                ['label' => 'Contact', 'kind' => 'page', 'target' => 'contact'],
+            ],
+            default => [
+                ['label' => 'Home', 'kind' => 'page', 'target' => 'home'],
+                ['label' => 'About', 'kind' => 'page', 'target' => 'about'],
+                ['label' => 'Blog', 'kind' => 'page', 'target' => 'blog'],
+                ['label' => 'Contact', 'kind' => 'page', 'target' => 'contact'],
+            ],
+        };
     }
 
     /** @return list<array{label: string, kind: string, target: string}> */
     public static function footerNav(string $key): array
     {
-        return [
-            ['label' => 'Home', 'kind' => 'page', 'target' => 'home'],
-            ['label' => 'About', 'kind' => 'page', 'target' => 'about'],
-            ['label' => 'Blog', 'kind' => 'page', 'target' => 'blog'],
-            ['label' => 'Contact', 'kind' => 'page', 'target' => 'contact'],
-        ];
+        return self::headerNav($key);
     }
 
     /**
@@ -80,6 +100,8 @@ class SiteTemplates
         $key = self::exists($key) ? $key : self::DEFAULT;
 
         return match ($key) {
+            'editorial' => self::editorialPages($studioName),
+            'studio' => self::studioPages($studioName),
             default => self::portfolioPages($studioName),
         };
     }
@@ -192,6 +214,321 @@ class SiteTemplates
                         'heading' => '',
                         'subheading' => '',
                         'submit_label' => 'Send enquiry',
+                        'show_phone' => true,
+                        'show_event_date' => true,
+                        'show_event_type' => true,
+                    ]),
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Editorial — a fine-art, serif template. Big portrait/masonry galleries,
+     * a story-led about page and a dedicated investment page.
+     *
+     * @return list<array{title: string, slug: string, is_home: bool, blocks: array}>
+     */
+    private static function editorialPages(string $studioName): array
+    {
+        return [
+            // ── Home ──
+            [
+                'title' => 'Home',
+                'slug' => 'home',
+                'is_home' => true,
+                'blocks' => [
+                    self::block('hero', [
+                        'heading' => $studioName,
+                        'subheading' => 'Fine-art wedding photography for couples who love timeless, editorial imagery.',
+                        'image_url' => '',
+                        'cta_label' => 'Enquire',
+                        'cta_link' => '/contact',
+                        'overlay' => 35,
+                        'align' => 'center',
+                    ]),
+                    self::block('about', [
+                        'heading' => 'A storyteller at heart',
+                        'body' => 'I photograph weddings the way they feel — unhurried, emotive and full of light. '
+                            ."Every collection is crafted to feel like a piece of art you'll return to for a lifetime.",
+                        'image_url' => '',
+                        'image_side' => 'right',
+                    ]),
+                    self::block('gallery', [
+                        'heading' => 'Selected work',
+                        'columns' => 2,
+                        'layout' => 'portrait',
+                        'lightbox' => true,
+                        'images' => [],
+                    ]),
+                    self::block('services', [
+                        'heading' => 'The experience',
+                        'items' => [
+                            ['title' => 'Weddings', 'description' => 'Full-day, narrative coverage from prep to the last dance.', 'price' => 'From $3,200'],
+                            ['title' => 'Elopements', 'description' => 'Intimate ceremonies, captured with care and intention.', 'price' => 'From $1,800'],
+                            ['title' => 'Engagements', 'description' => 'A relaxed session to celebrate the year before the day.', 'price' => 'From $500'],
+                        ],
+                    ]),
+                    self::block('blog', [
+                        'heading' => 'From the journal',
+                        'columns' => 3,
+                        'limit' => 3,
+                    ]),
+                    self::block('text', [
+                        'heading' => "Let's tell your story",
+                        'body' => 'Now booking a limited number of weddings each season.',
+                        'align' => 'center',
+                        'heading_level' => 'h2',
+                    ]),
+                ],
+            ],
+
+            // ── Portfolio ──
+            [
+                'title' => 'Portfolio',
+                'slug' => 'portfolio',
+                'is_home' => false,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => 'Portfolio',
+                        'body' => 'A selection of recent weddings, elopements and portraits.',
+                        'align' => 'center',
+                        'heading_level' => 'h1',
+                    ]),
+                    self::block('gallery', [
+                        'heading' => '',
+                        'columns' => 2,
+                        'layout' => 'masonry',
+                        'lightbox' => true,
+                        'images' => [],
+                    ]),
+                ],
+            ],
+
+            // ── About ──
+            [
+                'title' => 'About',
+                'slug' => 'about',
+                'is_home' => false,
+                'blocks' => [
+                    self::block('hero', [
+                        'heading' => 'About',
+                        'subheading' => 'The person behind the camera.',
+                        'image_url' => '',
+                        'cta_label' => '',
+                        'cta_link' => '',
+                        'overlay' => 30,
+                        'align' => 'center',
+                    ]),
+                    self::block('about', [
+                        'heading' => "Hello, I'm so glad you're here",
+                        'body' => 'I believe the best photographs come from genuine connection. When we work together '
+                            ."you won't be posed and prodded — you'll be free to simply be with the people you love, while "
+                            .'I quietly capture it all.',
+                        'image_url' => '',
+                        'image_side' => 'left',
+                    ]),
+                    self::block('services', [
+                        'heading' => 'How we work together',
+                        'items' => [
+                            ['title' => '01 — Enquire', 'description' => 'Share your date and vision, and we’ll see if we’re a fit.', 'price' => ''],
+                            ['title' => '02 — Plan', 'description' => 'A relaxed consultation to map out your day together.', 'price' => ''],
+                            ['title' => '03 — Relive', 'description' => 'A beautifully edited gallery, delivered with care.', 'price' => ''],
+                        ],
+                    ]),
+                ],
+            ],
+
+            // ── Investment ──
+            [
+                'title' => 'Investment',
+                'slug' => 'investment',
+                'is_home' => false,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => 'Investment',
+                        'body' => 'Thoughtfully designed collections, tailored to your day.',
+                        'align' => 'center',
+                        'heading_level' => 'h1',
+                    ]),
+                    self::block('packages', [
+                        'heading' => 'Wedding collections',
+                        'subheading' => 'Every collection can be customised — these are a starting point.',
+                        'columns' => 3,
+                    ]),
+                    self::block('services', [
+                        'heading' => 'Always included',
+                        'items' => [
+                            ['title' => 'Pre-wedding consult', 'description' => 'We plan your timeline so the day flows effortlessly.', 'price' => ''],
+                            ['title' => 'A second photographer', 'description' => 'Two perspectives on every meaningful moment.', 'price' => ''],
+                            ['title' => 'Private online gallery', 'description' => 'High-resolution images, ready to download and share.', 'price' => ''],
+                        ],
+                    ]),
+                ],
+            ],
+
+            // ── Journal (blog) ──
+            [
+                'title' => 'Journal',
+                'slug' => 'journal',
+                'is_home' => false,
+                'is_blog' => true,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => 'Journal',
+                        'body' => 'Real weddings, gentle advice and moments from behind the camera.',
+                        'align' => 'center',
+                        'heading_level' => 'h1',
+                    ]),
+                    self::block('blog', ['heading' => '', 'columns' => 2, 'limit' => 0]),
+                ],
+            ],
+
+            // ── Contact ──
+            [
+                'title' => 'Contact',
+                'slug' => 'contact',
+                'is_home' => false,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => 'Get in touch',
+                        'body' => "Tell me about your day and I'll be in touch within 48 hours.",
+                        'align' => 'center',
+                        'heading_level' => 'h1',
+                    ]),
+                    self::block('contact', [
+                        'heading' => '',
+                        'subheading' => '',
+                        'submit_label' => 'Send enquiry',
+                        'show_phone' => true,
+                        'show_event_date' => true,
+                        'show_event_type' => true,
+                    ]),
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Studio — a clean, modern, sans-serif template. Lean navigation, a rich
+     * single-scroll home page, a work grid and a journal.
+     *
+     * @return list<array{title: string, slug: string, is_home: bool, blocks: array}>
+     */
+    private static function studioPages(string $studioName): array
+    {
+        return [
+            // ── Home (rich single-scroll) ──
+            [
+                'title' => 'Home',
+                'slug' => 'home',
+                'is_home' => true,
+                'blocks' => [
+                    self::block('hero', [
+                        'heading' => $studioName,
+                        'subheading' => 'Modern wedding & portrait photography — clean, candid and full of life.',
+                        'image_url' => '',
+                        'cta_label' => 'Book a call',
+                        'cta_link' => '/contact',
+                        'overlay' => 40,
+                        'align' => 'left',
+                    ]),
+                    self::block('services', [
+                        'heading' => 'Services',
+                        'items' => [
+                            ['title' => 'Weddings', 'description' => 'Documentary coverage of your whole day.', 'price' => 'From $2,800'],
+                            ['title' => 'Portraits', 'description' => 'Individuals, couples and families.', 'price' => 'From $400'],
+                            ['title' => 'Brand & events', 'description' => 'Editorial imagery for people and businesses.', 'price' => 'From $700'],
+                        ],
+                    ]),
+                    self::block('gallery', [
+                        'heading' => 'Recent work',
+                        'columns' => 3,
+                        'layout' => 'square',
+                        'lightbox' => true,
+                        'images' => [],
+                    ]),
+                    self::block('about', [
+                        'heading' => 'A little about me',
+                        'body' => 'I’m a photographer who cares less about stiff poses and more about real moments. '
+                            .'Expect a relaxed, easy experience and images that actually look like you.',
+                        'image_url' => '',
+                        'image_side' => 'left',
+                    ]),
+                    self::block('packages', [
+                        'heading' => 'Packages',
+                        'subheading' => 'Simple, transparent pricing.',
+                        'columns' => 3,
+                    ]),
+                    self::block('blog', [
+                        'heading' => 'Latest stories',
+                        'columns' => 3,
+                        'limit' => 3,
+                    ]),
+                    self::block('text', [
+                        'heading' => 'Ready when you are',
+                        'body' => 'Tell me about your project and let’s make something great.',
+                        'align' => 'center',
+                        'heading_level' => 'h2',
+                    ]),
+                ],
+            ],
+
+            // ── Work ──
+            [
+                'title' => 'Work',
+                'slug' => 'work',
+                'is_home' => false,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => 'Work',
+                        'body' => 'A look at recent shoots.',
+                        'align' => 'center',
+                        'heading_level' => 'h1',
+                    ]),
+                    self::block('gallery', [
+                        'heading' => '',
+                        'columns' => 3,
+                        'layout' => 'square',
+                        'lightbox' => true,
+                        'images' => [],
+                    ]),
+                ],
+            ],
+
+            // ── Journal (blog) ──
+            [
+                'title' => 'Journal',
+                'slug' => 'journal',
+                'is_home' => false,
+                'is_blog' => true,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => 'Journal',
+                        'body' => 'Recent shoots, stories and the occasional tip.',
+                        'align' => 'center',
+                        'heading_level' => 'h1',
+                    ]),
+                    self::block('blog', ['heading' => '', 'columns' => 3, 'limit' => 0]),
+                ],
+            ],
+
+            // ── Contact ──
+            [
+                'title' => 'Contact',
+                'slug' => 'contact',
+                'is_home' => false,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => 'Contact',
+                        'body' => 'Tell me a little about what you have in mind.',
+                        'align' => 'center',
+                        'heading_level' => 'h1',
+                    ]),
+                    self::block('contact', [
+                        'heading' => '',
+                        'subheading' => '',
+                        'submit_label' => 'Send message',
                         'show_phone' => true,
                         'show_event_date' => true,
                         'show_event_type' => true,
