@@ -51,8 +51,8 @@ class SiteTemplates
     public static function theme(string $key): array
     {
         return match ($key) {
-            'editorial' => ['primary_color' => '#7d6b58', 'font' => 'serif'],
-            'studio' => ['primary_color' => '#111827', 'font' => 'sans'],
+            'editorial' => ['primary_color' => '#b0654f', 'font' => 'serif'],
+            'studio' => ['primary_color' => '#4f46e5', 'font' => 'sans'],
             default => ['primary_color' => '#171717', 'font' => 'sans'],
         };
     }
@@ -268,7 +268,7 @@ class SiteTemplates
                             ['title' => 'Elopements', 'description' => 'Intimate ceremonies, captured with care and intention.', 'price' => 'From $1,800'],
                             ['title' => 'Engagements', 'description' => 'A relaxed session to celebrate the year before the day.', 'price' => 'From $500'],
                         ],
-                    ]),
+                    ], ['background' => '#f7efe9']),
                     self::block('blog', [
                         'heading' => 'From the journal',
                         'columns' => 3,
@@ -279,7 +279,7 @@ class SiteTemplates
                         'body' => 'Now booking a limited number of weddings each season.',
                         'align' => 'center',
                         'heading_level' => 'h2',
-                    ]),
+                    ], ['background' => '#b0654f', 'text_color' => '#ffffff', 'padding' => 'lg']),
                 ],
             ],
 
@@ -335,7 +335,7 @@ class SiteTemplates
                             ['title' => '02 — Plan', 'description' => 'A relaxed consultation to map out your day together.', 'price' => ''],
                             ['title' => '03 — Relive', 'description' => 'A beautifully edited gallery, delivered with care.', 'price' => ''],
                         ],
-                    ]),
+                    ], ['background' => '#f7efe9']),
                 ],
             ],
 
@@ -363,7 +363,7 @@ class SiteTemplates
                             ['title' => 'A second photographer', 'description' => 'Two perspectives on every meaningful moment.', 'price' => ''],
                             ['title' => 'Private online gallery', 'description' => 'High-resolution images, ready to download and share.', 'price' => ''],
                         ],
-                    ]),
+                    ], ['background' => '#f7efe9']),
                 ],
             ],
 
@@ -440,7 +440,7 @@ class SiteTemplates
                             ['title' => 'Portraits', 'description' => 'Individuals, couples and families.', 'price' => 'From $400'],
                             ['title' => 'Brand & events', 'description' => 'Editorial imagery for people and businesses.', 'price' => 'From $700'],
                         ],
-                    ]),
+                    ], ['background' => '#eef2ff']),
                     self::block('gallery', [
                         'heading' => 'Recent work',
                         'columns' => 3,
@@ -470,7 +470,7 @@ class SiteTemplates
                         'body' => 'Tell me about your project and let’s make something great.',
                         'align' => 'center',
                         'heading_level' => 'h2',
-                    ]),
+                    ], ['background' => '#4f46e5', 'text_color' => '#ffffff', 'padding' => 'lg']),
                 ],
             ],
 
@@ -602,13 +602,22 @@ class SiteTemplates
         ];
     }
 
-    /** @param array<string, mixed> $data */
-    private static function block(string $type, array $data): array
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $settings  Optional block style (background, text_color, padding…)
+     */
+    private static function block(string $type, array $data, array $settings = []): array
     {
-        return [
+        $block = [
             'id' => (string) Str::uuid(),
             'type' => $type,
             'data' => $data,
         ];
+
+        if ($settings !== []) {
+            $block['settings'] = $settings;
+        }
+
+        return $block;
     }
 }
