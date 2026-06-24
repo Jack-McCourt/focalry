@@ -1,5 +1,7 @@
 <?php
 
+use App\Jobs\ImportSiteImage;
+use App\Mail\ClientMessage;
 use App\Models\Collection;
 use App\Models\Contact;
 use App\Models\Photo;
@@ -8,8 +10,12 @@ use App\Models\ProjectStatus;
 use App\Models\Site;
 use App\Models\SiteLead;
 use App\Models\SitePage;
+use App\Models\SiteVisit;
 use App\Models\Studio;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 
 function publishedSite(Studio $studio): Site
@@ -89,6 +95,73 @@ it('creates a contact, project lead and lead log from a website enquiry', functi
         ->and($contact->last_name)->toBe('Doe');
 });
 
+it('drops a honeypot submission without creating a lead', function () {
+    $studio = Studio::factory()->onPaidPlan()->create();
+    $site = publishedSite($studio);
+
+    $this->post("/site/{$site->slug}/contact", [
+        'name' => 'Spam Bot',
+        'email' => 'bot@example.com',
+        'company_website' => 'http://spam.example',
+    ])->assertRedirect();
+
+    $this->assertDatabaseMissing('contacts', ['email' => 'bot@example.com']);
+    $this->assertDatabaseMissing('site_leads', ['email' => 'bot@example.com']);
+});
+
+it('emails the studio on a new lead and an autoresponder when requested', function () {
+    Mail::fake();
+    $studio = Studio::factory()->onPaidPlan()->create(['email' => 'studio@example.com']);
+    $site = publishedSite($studio);
+
+    $this->post("/site/{$site->slug}/contact", [
+        'name' => 'Jane Doe',
+        'email' => 'jane@example.com',
+        'autoresponder' => true,
+        'autoresponder_subject' => 'Got it!',
+        'autoresponder_message' => 'Thanks Jane.',
+    ])->assertRedirect();
+
+    Mail::assertSent(ClientMessage::class, fn ($m) => $m->hasTo('studio@example.com'));
+    Mail::assertSent(ClientMessage::class, fn ($m) => $m->hasTo('jane@example.com'));
+});
+
+it('does not send an autoresponder unless opted in', function () {
+    Mail::fake();
+    $studio = Studio::factory()->onPaidPlan()->create(['email' => 'studio@example.com']);
+    $site = publishedSite($studio);
+
+    $this->post("/site/{$site->slug}/contact", [
+        'name' => 'Jane Doe',
+        'email' => 'jane@example.com',
+    ])->assertRedirect();
+
+    Mail::assertSent(ClientMessage::class, fn ($m) => $m->hasTo('studio@example.com'));
+    Mail::assertNotSent(ClientMessage::class, fn ($m) => $m->hasTo('jane@example.com'));
+});
+
+it('captures custom fields and a file attachment on a lead', function () {
+    Storage::fake('wasabi');
+    $studio = Studio::factory()->onPaidPlan()->create();
+    $site = publishedSite($studio);
+
+    $this->post("/site/{$site->slug}/contact", [
+        'name' => 'Jane Doe',
+        'email' => 'jane@example.com',
+        'message' => 'Hello',
+        'custom_values' => [['label' => 'Venue', 'value' => 'The Barn']],
+        'attachment' => UploadedFile::fake()->create('brief.pdf', 20, 'application/pdf'),
+    ])->assertRedirect();
+
+    $lead = SiteLead::withoutGlobalScopes()->where('email', 'jane@example.com')->first();
+    expect($lead->payload['custom_values'][0]['value'])->toBe('The Barn')
+        ->and($lead->payload['attachment_url'])->not->toBeNull();
+
+    $project = Project::withoutGlobalScopes()->where('contact_id', $lead->contact_id)->first();
+    expect($project->notes)->toContain('Venue: The Barn')->toContain('Attachment:');
+    expect(Storage::disk('wasabi')->allFiles())->not->toBeEmpty();
+});
+
 it('reuses an existing contact by email instead of duplicating', function () {
     $studio = Studio::factory()->onPaidPlan()->create();
     $site = publishedSite($studio);
@@ -109,6 +182,51 @@ it('reuses an existing contact by email instead of duplicating', function () {
     expect(Contact::withoutGlobalScopes()->where('email', 'repeat@example.com')->count())->toBe(1);
     $lead = SiteLead::withoutGlobalScopes()->where('email', 'repeat@example.com')->first();
     expect($lead->contact_id)->toBe($existing->id);
+});
+
+it('301-redirects a configured old path', function () {
+    $studio = Studio::factory()->onPaidPlan()->create();
+    $site = publishedSite($studio);
+    $site->update(['redirects' => [['from' => 'old-about', 'to' => 'about']]]);
+    $site->pages()->create(['studio_id' => $studio->id, 'title' => 'Home', 'slug' => 'home', 'is_home' => true, 'blocks' => []]);
+
+    $this->get("/site/{$site->slug}/old-about")
+        ->assertRedirect(url("/site/{$site->slug}/about"));
+});
+
+it('renders a custom 404 page for unknown URLs', function () {
+    $studio = Studio::factory()->onPaidPlan()->create();
+    $site = publishedSite($studio);
+    $site->pages()->create(['studio_id' => $studio->id, 'title' => 'Home', 'slug' => 'home', 'is_home' => true, 'blocks' => []]);
+    $site->pages()->create(['studio_id' => $studio->id, 'title' => 'Not found', 'slug' => 'oops', 'is_404' => true, 'blocks' => []]);
+
+    $this->get("/site/{$site->slug}/does-not-exist")->assertNotFound();
+});
+
+it('records a page view for analytics but skips bots', function () {
+    $studio = Studio::factory()->onPaidPlan()->create();
+    $site = publishedSite($studio);
+    $site->pages()->create(['studio_id' => $studio->id, 'title' => 'Home', 'slug' => 'home', 'is_home' => true, 'blocks' => []]);
+
+    $this->withHeaders(['User-Agent' => 'Mozilla/5.0 (real human)'])->get("/site/{$site->slug}")->assertOk();
+    $this->withHeaders(['User-Agent' => 'Googlebot/2.1'])->get("/site/{$site->slug}")->assertOk();
+
+    expect(SiteVisit::withoutGlobalScopes()->where('site_id', $site->id)->count())->toBe(1);
+});
+
+it('serves sitemap.xml and robots.txt for a published site', function () {
+    $studio = Studio::factory()->onPaidPlan()->create();
+    $site = publishedSite($studio);
+    $site->pages()->create(['studio_id' => $studio->id, 'title' => 'Home', 'slug' => 'home', 'is_home' => true, 'blocks' => []]);
+    $site->pages()->create(['studio_id' => $studio->id, 'title' => 'About', 'slug' => 'about', 'blocks' => []]);
+
+    $sitemap = $this->get("/site/{$site->slug}/sitemap.xml");
+    $sitemap->assertOk()->assertHeader('Content-Type', 'application/xml');
+    expect($sitemap->getContent())->toContain(url("/site/{$site->slug}/about"))->toContain('<urlset');
+
+    $robots = $this->get("/site/{$site->slug}/robots.txt");
+    $robots->assertOk();
+    expect($robots->getContent())->toContain('Sitemap: '.url("/site/{$site->slug}/sitemap.xml"));
 });
 
 it('does not expose an unpublished site', function () {
@@ -213,9 +331,9 @@ it('persists nested grid blocks and per-block style settings through a save', fu
         ->and($blocks[0]['children'][0][0]['settings']['text_size'])->toBe('lg');
 });
 
-it('imports a chosen gallery photo into the site as a permanent public image', function () {
+it('queues conversion of a chosen gallery photo and returns its future public url', function () {
+    Queue::fake();
     Storage::fake('wasabi');
-    Storage::fake('public');
 
     $studio = Studio::factory()->onPaidPlan()->create();
     $user = User::factory()->for($studio)->create();
@@ -223,20 +341,20 @@ it('imports a chosen gallery photo into the site as a permanent public image', f
     $collection = Collection::withoutGlobalScopes()->create([
         'studio_id' => $studio->id, 'title' => 'Wedding', 'slug' => 'wedding', 'status' => 'published',
     ]);
-    $key = "studios/{$studio->id}/collections/{$collection->id}/photos/1/web.jpg";
-    Storage::disk('wasabi')->put($key, 'fake-image-bytes');
+    $original = "studios/{$studio->id}/collections/{$collection->id}/originals/1.jpg";
 
     $photo = Photo::withoutGlobalScopes()->create([
         'studio_id' => $studio->id, 'collection_id' => $collection->id, 'filename' => 'p.jpg',
-        'wasabi_key_original' => "studios/{$studio->id}/collections/{$collection->id}/originals/1.jpg",
-        'status' => 'ready', 'derivative_keys' => ['web' => $key],
+        'wasabi_key_original' => $original,
+        'status' => 'ready', 'derivative_keys' => ['web' => "studios/{$studio->id}/collections/{$collection->id}/photos/1/web.jpg"],
     ]);
 
     $res = $this->actingAs($user)->postJson(route('website.gallery.import'), ['photo_ids' => [$photo->id]]);
 
+    // Instant response with the permanent URL; the heavy convert runs on the queue.
     $res->assertOk();
-    expect($res->json('urls'))->toHaveCount(1)
-        ->and(Storage::disk('public')->allFiles())->not->toBeEmpty();
+    expect($res->json('urls'))->toHaveCount(1);
+    Queue::assertPushed(ImportSiteImage::class, fn ($job) => $job->sourceKey === $original && $job->maxWidth === 1920);
 });
 
 it('requires a name and email to submit an enquiry', function () {

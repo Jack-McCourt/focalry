@@ -50,6 +50,10 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
         ->name('photos.store');
     Route::post('photos/assign-set', [PhotoController::class, 'assignSet'])
         ->name('photos.assign-set');
+    Route::post('photos/reorder', [PhotoController::class, 'reorder'])
+        ->name('photos.reorder');
+    Route::post('photos/sort-by-time', [PhotoController::class, 'sortByTime'])
+        ->name('photos.sort-time');
     Route::patch('photos/{photo}', [PhotoController::class, 'update'])
         ->name('photos.update');
     Route::post('photos/{photo}/cover', [PhotoController::class, 'setCover'])

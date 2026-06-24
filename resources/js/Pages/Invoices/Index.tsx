@@ -130,19 +130,17 @@ export default function Index({
 
     return (
         <AuthenticatedLayout
-            header={
-                <div className="flex w-full items-center justify-between">
-                    <h1 className="text-sm font-semibold text-neutral-900">Studio Manager</h1>
-                    <div className="flex items-center gap-2">
-                        <Link href={route('invoices.settings.edit')} className="btn-secondary">Settings</Link>
-                        <Link href={route('invoices.create')} className="btn-primary">
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                            </svg>
-                            New invoice
-                        </Link>
-                    </div>
-                </div>
+            header={<h1 className="text-sm font-semibold text-neutral-900">Studio Manager</h1>}
+            actions={
+                <>
+                    <Link href={route('invoices.settings.edit')} className="btn-secondary">Settings</Link>
+                    <Link href={route('invoices.create')} className="btn-primary">
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        New invoice
+                    </Link>
+                </>
             }
         >
             <Head title="Invoices" />

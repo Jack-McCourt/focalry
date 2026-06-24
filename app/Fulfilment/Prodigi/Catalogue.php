@@ -8,7 +8,9 @@ namespace App\Fulfilment\Prodigi;
  * Prodigi is currently the only lab partner, so this catalogue is the single
  * source of truth for what "lab" products exist. Each size maps to a real
  * Prodigi SKU plus an estimated cost-of-goods (used for the order payout ledger)
- * and a suggested retail price (a starting point — the studio edits it).
+ * and a suggested retail price — a starting point the studio edits. By default
+ * the suggested price is exactly 2× the Prodigi cost (`cogs_cents`); keep them in
+ * step when adjusting costs.
  *
  * ⚠️ SKUs and `cogs_cents` are starting values and MUST be reconciled against
  *    your live Prodigi dashboard (Get Product Details / Quotes API), as Prodigi
@@ -30,10 +32,10 @@ class Catalogue
             'default' => true,
             'sizing' => 'fillPrintArea',
             'sizes' => [
-                ['sku' => 'GLOBAL-PHO-6X4', 'label' => '6×4″', 'cogs_cents' => 50, 'suggested_price_cents' => 600],
-                ['sku' => 'GLOBAL-PHO-7X5', 'label' => '7×5″', 'cogs_cents' => 70, 'suggested_price_cents' => 800],
-                ['sku' => 'GLOBAL-PHO-10X8', 'label' => '10×8″', 'cogs_cents' => 150, 'suggested_price_cents' => 1800],
-                ['sku' => 'GLOBAL-PHO-A4', 'label' => 'A4', 'cogs_cents' => 220, 'suggested_price_cents' => 2500],
+                ['sku' => 'GLOBAL-PHO-6X4', 'label' => '6×4″', 'cogs_cents' => 50, 'suggested_price_cents' => 100],
+                ['sku' => 'GLOBAL-PHO-7X5', 'label' => '7×5″', 'cogs_cents' => 70, 'suggested_price_cents' => 140],
+                ['sku' => 'GLOBAL-PHO-10X8', 'label' => '10×8″', 'cogs_cents' => 150, 'suggested_price_cents' => 300],
+                ['sku' => 'GLOBAL-PHO-A4', 'label' => 'A4', 'cogs_cents' => 220, 'suggested_price_cents' => 440],
             ],
         ],
         [
@@ -44,9 +46,9 @@ class Catalogue
             'default' => true,
             'sizing' => 'fillPrintArea',
             'sizes' => [
-                ['sku' => 'GLOBAL-FAP-A4', 'label' => 'A4', 'cogs_cents' => 450, 'suggested_price_cents' => 3500],
-                ['sku' => 'GLOBAL-FAP-A3', 'label' => 'A3', 'cogs_cents' => 700, 'suggested_price_cents' => 5500],
-                ['sku' => 'GLOBAL-FAP-A2', 'label' => 'A2', 'cogs_cents' => 1100, 'suggested_price_cents' => 8500],
+                ['sku' => 'GLOBAL-FAP-A4', 'label' => 'A4', 'cogs_cents' => 450, 'suggested_price_cents' => 900],
+                ['sku' => 'GLOBAL-FAP-A3', 'label' => 'A3', 'cogs_cents' => 700, 'suggested_price_cents' => 1400],
+                ['sku' => 'GLOBAL-FAP-A2', 'label' => 'A2', 'cogs_cents' => 1100, 'suggested_price_cents' => 2200],
             ],
         ],
         [
@@ -57,9 +59,9 @@ class Catalogue
             'default' => true,
             'sizing' => 'fillPrintArea',
             'sizes' => [
-                ['sku' => 'GLOBAL-CAN-10X10', 'label' => '10×10″', 'cogs_cents' => 1400, 'suggested_price_cents' => 5500],
-                ['sku' => 'GLOBAL-CAN-16X20', 'label' => '16×20″', 'cogs_cents' => 2600, 'suggested_price_cents' => 9500],
-                ['sku' => 'GLOBAL-CAN-20X30', 'label' => '20×30″', 'cogs_cents' => 3900, 'suggested_price_cents' => 14500],
+                ['sku' => 'GLOBAL-CAN-10X10', 'label' => '10×10″', 'cogs_cents' => 1400, 'suggested_price_cents' => 2800],
+                ['sku' => 'GLOBAL-CAN-16X20', 'label' => '16×20″', 'cogs_cents' => 2600, 'suggested_price_cents' => 5200],
+                ['sku' => 'GLOBAL-CAN-20X30', 'label' => '20×30″', 'cogs_cents' => 3900, 'suggested_price_cents' => 7800],
             ],
         ],
         [
@@ -70,8 +72,8 @@ class Catalogue
             'default' => false,
             'sizing' => 'fillPrintArea',
             'sizes' => [
-                ['sku' => 'GLOBAL-CFPM-16X20', 'label' => '16×20″', 'cogs_cents' => 3200, 'suggested_price_cents' => 11500],
-                ['sku' => 'GLOBAL-CFPM-A2', 'label' => 'A2', 'cogs_cents' => 3800, 'suggested_price_cents' => 13500],
+                ['sku' => 'GLOBAL-CFPM-16X20', 'label' => '16×20″', 'cogs_cents' => 3200, 'suggested_price_cents' => 6400],
+                ['sku' => 'GLOBAL-CFPM-A2', 'label' => 'A2', 'cogs_cents' => 3800, 'suggested_price_cents' => 7600],
             ],
         ],
     ];

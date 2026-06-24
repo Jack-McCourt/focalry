@@ -50,14 +50,12 @@ export default function Index({ templates }: PageProps<{ templates: Template[] }
 
     return (
         <AuthenticatedLayout
-            header={
-                <div className="flex w-full items-center justify-between">
-                    <h1 className="text-sm font-semibold text-neutral-900">Questionnaire templates</h1>
-                    <div className="flex items-center gap-2">
-                        <Link href={route('questionnaires.index')} className="btn-secondary">Back</Link>
-                        {!editing && <button onClick={startNew} className="btn-primary">New template</button>}
-                    </div>
-                </div>
+            header={<h1 className="text-sm font-semibold text-neutral-900">Questionnaire templates</h1>}
+            actions={
+                <>
+                    <Link href={route('questionnaires.index')} className="btn-secondary">Back</Link>
+                    {!editing && <button onClick={startNew} className="btn-primary">New template</button>}
+                </>
             }
         >
             <Head title="Questionnaire templates" />

@@ -1,16 +1,37 @@
-@component('mail::message')
-{!! \Illuminate\Support\Str::markdown($bodyText, ['html_input' => 'escape', 'allow_unsafe_links' => false]) !!}
+@component('mail::layout')
+{{-- Header: the studio's logo if set, otherwise the studio name. --}}
+@slot('header')
+@component('mail::header', ['url' => config('app.url')])
+@if (!empty($logoUrl))
+<img src="{{ $logoUrl }}" alt="{{ $studioName }}" style="max-height:48px;width:auto;border:0;">
+@else
+{{ $studioName }}
+@endif
+@endcomponent
+@endslot
 
-@if (!empty($signature))
+{!! $bodyHtml !!}
+
+@if (!empty($signatureHtml))
 <br>
-{!! \Illuminate\Support\Str::markdown($signature, ['html_input' => 'escape', 'allow_unsafe_links' => false]) !!}
+{!! $signatureHtml !!}
 @else
 <br>
 — {{ $studioName }}
 @endif
 
+{{-- Subcopy --}}
 @slot('subcopy')
+@component('mail::subcopy')
 You can reply directly to this email and your message will reach {{ $studioName }}.
+@endcomponent
+@endslot
+
+{{-- Footer --}}
+@slot('footer')
+@component('mail::footer')
+© {{ date('Y') }} {{ $studioName }}
+@endcomponent
 @endslot
 @endcomponent
 @if (!empty($trackingUrl))

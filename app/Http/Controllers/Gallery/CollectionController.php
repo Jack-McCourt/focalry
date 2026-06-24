@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Gallery;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\RenderCoverDerivative;
 use App\Models\Collection;
+use App\Models\Photo;
 use App\Models\PriceSheet;
 use App\Models\Project;
 use App\Models\Studio;
@@ -57,11 +59,38 @@ class CollectionController extends Controller
             'event_date' => 'nullable|date',
         ]);
 
-        $collection = Collection::create([
+        $studio = $request->user()->studio;
+        $defaults = $studio->gallery_defaults ?? [];
+
+        $attributes = [
             ...$validated,
             'slug' => $this->uniqueSlug($validated['title']),
             'status' => 'draft',
-        ]);
+        ];
+
+        // Apply the studio's saved gallery defaults (theme, cover, downloads,
+        // favourites, guest uploads). guest_upload_settings.set_id is per-gallery,
+        // so it's never carried over.
+        foreach (['theme', 'cover_style', 'download_settings', 'favourite_settings'] as $key) {
+            if (array_key_exists($key, $defaults) && $defaults[$key] !== null) {
+                $attributes[$key] = $defaults[$key];
+            }
+        }
+        if (! empty($defaults['guest_upload_settings'])) {
+            $guest = $defaults['guest_upload_settings'];
+            unset($guest['set_id']);
+            $attributes['guest_upload_settings'] = $guest;
+        }
+        if (array_key_exists('email_gate', $defaults)) {
+            $attributes['privacy'] = ['email_gate' => (bool) $defaults['email_gate']];
+        }
+
+        // Attach a price sheet so the store is live by default: the saved default,
+        // else the studio's default (Prodigi lab) sheet.
+        $attributes['price_sheet_id'] = $defaults['price_sheet_id']
+            ?? PriceSheet::where('studio_id', $studio->id)->where('is_default', true)->value('id');
+
+        $collection = Collection::create($attributes);
 
         // Every collection starts with a default "Highlights" set — photos always
         // live in a set (no catch-all "all photos" view).
@@ -73,6 +102,28 @@ class CollectionController extends Controller
 
         return redirect()->route('collections.show', $collection)
             ->with('success', 'Collection created.');
+    }
+
+    /**
+     * Snapshot this gallery's settings as the studio-wide template applied to
+     * every newly created gallery.
+     */
+    public function saveAsDefaults(Collection $collection): RedirectResponse
+    {
+        $guest = $collection->guest_upload_settings ?? [];
+        unset($guest['set_id']); // per-gallery, never templated
+
+        $collection->studio->update(['gallery_defaults' => [
+            'theme' => $collection->theme,
+            'cover_style' => $collection->cover_style,
+            'download_settings' => $collection->download_settings,
+            'favourite_settings' => $collection->favourite_settings,
+            'guest_upload_settings' => $guest ?: null,
+            'email_gate' => (bool) ($collection->privacy['email_gate'] ?? false),
+            'price_sheet_id' => $collection->price_sheet_id,
+        ]]);
+
+        return back()->with('success', 'Saved as the default for new galleries.');
     }
 
     public function show(Collection $collection): Response
@@ -143,6 +194,7 @@ class CollectionController extends Controller
             'cover_style.overlay' => 'sometimes|integer|min:0|max:80',
             'cover_style.focal_x' => 'sometimes|numeric|min:0|max:100',
             'cover_style.focal_y' => 'sometimes|numeric|min:0|max:100',
+            'theme' => 'sometimes|in:dark,light,cream,stone',
             // Privacy
             'privacy_password' => 'sometimes|nullable|string|max:100',
             'privacy_clear_password' => 'sometimes|boolean',
@@ -180,6 +232,9 @@ class CollectionController extends Controller
         }
         if (array_key_exists('cover_style', $validated)) {
             $updates['cover_style'] = $validated['cover_style'] ?: null;
+        }
+        if (isset($validated['theme'])) {
+            $updates['theme'] = $validated['theme'];
         }
 
         // Privacy
@@ -242,6 +297,15 @@ class CollectionController extends Controller
 
         if ($updates) {
             $collection->update($updates);
+        }
+
+        // Ensure the chosen cover has a high-res (1920px) derivative for the
+        // full-bleed public cover banner; generated lazily, off the queue.
+        if (array_key_exists('cover_photo_id', $updates) && $updates['cover_photo_id']) {
+            $cover = Photo::find($updates['cover_photo_id']);
+            if ($cover && ! $cover->derivativeKey('cover')) {
+                RenderCoverDerivative::dispatch($cover->id);
+            }
         }
 
         return back()->with('success', 'Collection updated.');

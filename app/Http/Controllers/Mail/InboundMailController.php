@@ -7,6 +7,7 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\User;
 use App\Notifications\NewClientReply;
+use App\Support\StudioPaths;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
@@ -136,9 +137,9 @@ class InboundMailController extends Controller
 
             $name = (string) ($att['Name'] ?? 'attachment');
             $safe = Str::random(8).'-'.preg_replace('/[^A-Za-z0-9._-]/', '_', $name);
-            $path = "studios/{$message->studio_id}/messages/{$message->id}/{$safe}";
+            $path = StudioPaths::asset($message->studio_id, "messages/{$message->id}/{$safe}");
 
-            Storage::disk('public')->put($path, $binary);
+            Storage::disk('wasabi')->put($path, $binary, 'public');
 
             $message->attachments()->create([
                 'studio_id' => $message->studio_id,
@@ -165,6 +166,7 @@ class InboundMailController extends Controller
             fromName: $fromName,
             subject: $conversation->subject,
             preview: $preview,
+            body: $message->body,
         ));
     }
 

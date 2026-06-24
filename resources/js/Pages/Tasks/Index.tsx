@@ -102,14 +102,12 @@ export default function Index({
 
     return (
         <AuthenticatedLayout
-            header={
-                <div className="flex w-full items-center justify-between">
-                    <h1 className="text-sm font-semibold text-neutral-900">Studio Manager</h1>
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => setChecklistOpen(true)} className="btn-secondary">Checklists</button>
-                        <button onClick={() => setApplyOpen(true)} className="btn-secondary">Apply checklist</button>
-                    </div>
-                </div>
+            header={<h1 className="text-sm font-semibold text-neutral-900">Studio Manager</h1>}
+            actions={
+                <>
+                    <button onClick={() => setChecklistOpen(true)} className="btn-secondary">Checklists</button>
+                    <button onClick={() => setApplyOpen(true)} className="btn-secondary">Apply checklist</button>
+                </>
             }
         >
             <Head title="Tasks" />

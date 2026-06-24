@@ -69,7 +69,7 @@ it('queues the outbound send on the Horizon queue', function () {
 
 it('stores outbound attachments and attaches them to the email', function () {
     Mail::fake();
-    Storage::fake('public');
+    Storage::fake('wasabi');
     [$studio, $user] = studioUser();
     $contact = Contact::withoutGlobalScopes()->create([
         'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com', 'status' => 'client',
@@ -86,14 +86,14 @@ it('stores outbound attachments and attaches them to the email', function () {
     $attachment = $message->attachments()->withoutGlobalScopes()->firstOrFail();
 
     expect($attachment->name)->toBe('contract.pdf');
-    Storage::disk('public')->assertExists($attachment->path);
+    Storage::disk('wasabi')->assertExists($attachment->path);
 
     Mail::assertSent(StudioMessageMail::class, fn (StudioMessageMail $m) => count($m->files) === 1 && $m->files[0]['name'] === 'contract.pdf');
 });
 
 it('allows an attachment-only message with no body', function () {
     Mail::fake();
-    Storage::fake('public');
+    Storage::fake('wasabi');
     [$studio, $user] = studioUser();
     $contact = Contact::withoutGlobalScopes()->create([
         'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com', 'status' => 'client',
@@ -109,7 +109,7 @@ it('allows an attachment-only message with no body', function () {
 });
 
 it('captures inbound Postmark attachments into the thread', function () {
-    Storage::fake('public');
+    Storage::fake('wasabi');
     [$studio] = studioUser();
     $conv = Conversation::withoutGlobalScopes()->create([
         'studio_id' => $studio->id, 'subject' => 'Your wedding', 'reply_token' => 'att-tok',
@@ -131,7 +131,7 @@ it('captures inbound Postmark attachments into the thread', function () {
     $attachment = $message->attachments()->withoutGlobalScopes()->firstOrFail();
 
     expect($attachment->name)->toBe('photo.jpg')->and($attachment->mime)->toBe('image/jpeg');
-    Storage::disk('public')->assertExists($attachment->path);
+    Storage::disk('wasabi')->assertExists($attachment->path);
 });
 
 it('ingests a Postmark inbound reply into the conversation thread', function () {

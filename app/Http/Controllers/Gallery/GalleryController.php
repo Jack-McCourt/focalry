@@ -6,9 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Collection;
 use App\Models\Coupon;
 use App\Models\GalleryVisitor;
+use App\Models\Photo;
 use App\Models\Product;
 use App\Models\ShippingMethod;
-use App\Models\Studio;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -27,6 +27,14 @@ class GalleryController extends Controller
         if (! $collection->isPublished()) {
             abort(404);
         }
+
+        // Bind the collection's studio for the rest of this public request so
+        // BelongsToStudio-scoped queries (photos, sets, favourites…) resolve to
+        // the gallery's studio. Without this a logged-in user from another studio
+        // would have the scope filter the gallery's photos to *their* studio and
+        // see nothing. (Guests are unaffected — the scope is skipped when no
+        // studio is bound — but binding it is the correct, explicit behaviour.)
+        app()->instance('current.studio.id', $collection->studio_id);
 
         // Password gate
         if ($collection->isPasswordProtected()) {
@@ -80,16 +88,25 @@ class GalleryController extends Controller
 
         $photos = $collection->photos()
             ->where('status', 'ready')
+            // Guest uploads awaiting moderation are hidden until approved; studio
+            // photos are always approved.
+            ->where('approved', true)
             ->orderBy('position')
-            ->get()
+            // Only the columns the gallery actually renders — avoids hydrating
+            // exif/file_size/etc. for every photo in a large collection.
+            ->get(['id', 'filename', 'width', 'height', 'set_id', 'derivative_keys'])
             ->map(fn ($photo) => [
                 'id' => $photo->id,
                 'filename' => $photo->filename,
                 'width' => $photo->width,
                 'height' => $photo->height,
                 'set_id' => $photo->set_id,
-                'thumb_url' => $photo->signedUrl('preview', 120),
-                'web_url' => $photo->signedUrl('preview', 120),
+                // Grid uses thumb (≈300px) on 1× screens and grid (≈600px) on
+                // retina; the lightbox uses the large (≈1200px) preview
+                // (watermarked when the studio has a mark).
+                'thumb_url' => $photo->firstSignedUrl(['thumb', 'preview'], 180),
+                'grid_url' => $photo->firstSignedUrl(['grid', 'web', 'thumb'], 180),
+                'web_url' => $photo->firstSignedUrl(['preview', 'web'], 180),
             ]);
 
         $sets = $collection->sets()
@@ -139,7 +156,7 @@ class GalleryController extends Controller
             return null;
         }
 
-        $studio = Studio::find($collection->studio_id);
+        $studio = $collection->studio;
 
         $products = Product::withoutGlobalScopes()
             ->where('studio_id', $collection->studio_id)
@@ -198,8 +215,25 @@ class GalleryController extends Controller
             'slug' => $collection->slug,
             'event_date' => $collection->event_date?->toDateString(),
             'cover_style' => $collection->cover_style,
-            'cover_url' => $collection->coverPhoto?->signedUrl('web', 120),
+            'theme' => $collection->theme ?? 'dark',
+            'cover_url' => $collection->coverPhoto?->firstSignedUrl(['cover', 'web'], 120),
+            'cover_srcset' => $this->coverSrcset($collection->coverPhoto),
         ];
+    }
+
+    /** Responsive srcset for the cover banner, from whatever derivatives exist. */
+    private function coverSrcset(?Photo $photo): ?string
+    {
+        if (! $photo) {
+            return null;
+        }
+
+        $parts = collect(['grid' => 600, 'web' => 1200, 'cover' => 1920])
+            ->map(fn ($w, $variant) => ($u = $photo->signedUrl($variant, 120)) ? "{$u} {$w}w" : null)
+            ->filter()
+            ->values();
+
+        return $parts->isNotEmpty() ? $parts->implode(', ') : null;
     }
 
     private function resolveVisitor(Request $request, Collection $collection): ?GalleryVisitor

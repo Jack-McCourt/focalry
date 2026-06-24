@@ -11,6 +11,9 @@ interface PickerCollection {
     photos: PickerPhoto[];
 }
 
+// Synthetic collection id for the "Recently used" tab.
+const RECENT_ID = -1;
+
 /** Modal to pick image(s) from the studio's galleries. Selected photos are
  *  imported (copied to permanent storage) and their URLs returned via onSelect. */
 export default function GalleryPicker({
@@ -40,8 +43,13 @@ export default function GalleryPicker({
             .get(route('website.gallery.images'))
             .then((res: any) => {
                 const cols: PickerCollection[] = res.data.collections ?? [];
-                setCollections(cols);
-                setActiveId(cols[0]?.id ?? null);
+                const recent: PickerPhoto[] = res.data.recent ?? [];
+                // Prepend a "Recently used" tab (newest first) when there's history.
+                const all = recent.length > 0
+                    ? [{ id: RECENT_ID, title: 'Recently used', photos: recent }, ...cols]
+                    : cols;
+                setCollections(all);
+                setActiveId(all[0]?.id ?? null);
             })
             .catch(() => setError('Could not load your galleries.'))
             .finally(() => setLoading(false));
@@ -73,7 +81,7 @@ export default function GalleryPicker({
     return (
         <Modal show={open} onClose={onClose} maxWidth="2xl">
             <div className="flex max-h-[80vh] flex-col">
-                <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-3">
+                <div className="flex shrink-0 items-center justify-between border-b border-neutral-100 px-5 py-3">
                     <h2 className="text-sm font-semibold text-neutral-900">Choose from galleries</h2>
                     <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700">
                         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -81,7 +89,7 @@ export default function GalleryPicker({
                 </div>
 
                 {collections.length > 0 && (
-                    <div className="flex gap-1 overflow-x-auto border-b border-neutral-100 px-3 py-2">
+                    <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-neutral-100 px-3 py-2">
                         {collections.map((c) => (
                             <button
                                 key={c.id}
@@ -125,7 +133,7 @@ export default function GalleryPicker({
                     )}
                 </div>
 
-                <div className="flex items-center justify-between border-t border-neutral-100 px-5 py-3">
+                <div className="flex shrink-0 items-center justify-between border-t border-neutral-100 px-5 py-3">
                     <span className="text-xs text-neutral-500">
                         {selected.length > 0 ? `${selected.length} selected` : multiple ? 'Select one or more images' : 'Select an image'}
                     </span>

@@ -3,15 +3,15 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToStudio;
+use App\Models\Concerns\HasPublicImage;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Storage;
 
 class Product extends Model
 {
-    use BelongsToStudio, HasFactory;
+    use BelongsToStudio, HasFactory, HasPublicImage;
 
     protected $fillable = [
         'studio_id',
@@ -48,11 +48,6 @@ class Product extends Model
     public function options(): HasMany
     {
         return $this->hasMany(ProductOption::class)->orderBy('position');
-    }
-
-    public function imageUrl(): ?string
-    {
-        return $this->image_path ? Storage::disk('public')->url($this->image_path) : null;
     }
 
     /** Whether this product is delivered digitally (no physical fulfilment). */

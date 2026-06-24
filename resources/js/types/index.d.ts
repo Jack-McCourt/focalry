@@ -59,6 +59,7 @@ export interface Collection {
     cover_photo_id: number | null;
     project_id?: number | null;
     cover_style: Partial<CoverStyle> | null;
+    theme?: string;
     cover_url?: string | null;
     photos_count?: number;
     published_at: string | null;
@@ -238,7 +239,26 @@ export type SiteFont = 'sans' | 'serif';
 
 export interface SiteTheme {
     primary_color: string;
+    /** Legacy single font — kept as a fallback for heading_font/body_font. */
     font: SiteFont;
+    /** Font registry key for headings/titles. Falls back to `font`. */
+    heading_font?: string;
+    /** Font registry key for body text. Falls back to `font`. */
+    body_font?: string;
+    /** Font registry key for the logo + menu. Empty = inherit the body font. */
+    logo_font?: string;
+    /** Hex colour for the logo/site name. Empty = default (near-black). */
+    logo_color?: string;
+    /** Hex colour for the navigation menu links. Empty = default. */
+    nav_color?: string;
+    /** Header nav text size: 'sm' (default) | 'base' | 'lg'. */
+    nav_size?: string;
+    /** Logo/wordmark text size: 'base' (default) | 'lg' | 'xl' | '2xl'. */
+    logo_size?: string;
+    /** Visual style preset: 'classic' (default) | 'editorial'. */
+    style?: string;
+    /** Content container width: 'normal' (default) | 'wide'. */
+    width?: string;
 }
 
 export type SiteBlockType =
@@ -252,6 +272,17 @@ export type SiteBlockType =
     | 'image'
     | 'grid'
     | 'packages'
+    | 'reviews'
+    | 'video'
+    | 'embed'
+    | 'faq'
+    | 'testimonials'
+    | 'logos'
+    | 'button'
+    | 'divider'
+    | 'cta'
+    | 'pricing'
+    | 'map'
     | 'footer';
 
 export interface BlockSettings {
@@ -271,6 +302,7 @@ export interface BlogPostCard {
     title: string;
     slug: string;
     excerpt: string | null;
+    category?: string | null;
     cover_image: string | null;
     published_at: string | null;
     url?: string;
@@ -304,23 +336,41 @@ export interface SitePageData {
     slug: string;
     is_home: boolean;
     is_blog?: boolean;
+    is_404?: boolean;
     status?: 'draft' | 'published';
     published_at?: string | null;
     excerpt?: string | null;
+    category?: string | null;
     cover_image?: string | null;
     blocks: SiteBlock[];
     seo_title?: string | null;
     seo_description?: string | null;
+    head_code?: string | null;
+    body_code?: string | null;
+    og_image?: string | null;
 }
 
 export interface SiteData {
     id: number;
     name: string;
     slug: string;
+    custom_domain: string | null;
+    domain_token: string | null;
+    domain_verified: boolean;
+    domain_live: boolean;
     template: string;
     theme: SiteTheme;
     header_nav: SiteNavItem[];
     footer_nav: SiteNavItem[];
+    head_code: string | null;
+    body_code: string | null;
+    cookie_consent: boolean;
+    cookie_message: string | null;
+    cookie_policy_url: string | null;
+    favicon_url: string | null;
+    og_image_url: string | null;
+    redirects: { from: string; to: string }[];
+    saved_sections: { id: string; name: string; block: SiteBlock }[];
     contact_email: string | null;
     seo_title: string | null;
     seo_description: string | null;

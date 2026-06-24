@@ -2,7 +2,7 @@ import Modal from '@/Components/Modal';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 
 interface ContactRef {
     id: number;
@@ -37,6 +37,7 @@ interface MessageItem {
     id: number;
     direction: 'outbound' | 'inbound';
     is_internal: boolean;
+    project_id: number | null;
     body: string;
     author_name: string;
     status: string;
@@ -46,12 +47,18 @@ interface MessageItem {
     attachments: Attachment[];
 }
 
+interface ProjectRef {
+    id: number;
+    name: string;
+}
+
 interface Selected {
     id: number;
     subject: string;
     status: 'open' | 'archived';
     tags: string[];
     contact: { id: number; name: string; email: string | null; phone: string | null } | null;
+    projects: ProjectRef[];
     messages: MessageItem[];
 }
 
@@ -64,6 +71,15 @@ function fmtSize(bytes: number) {
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+// Server caps attachments at 15 MB; reject oversize files up front so the send
+// doesn't silently fail (PHP/Laravel would drop them with no visible error).
+const MAX_ATTACH_MB = 15;
+function withinAttachLimit(files: File[]): File[] {
+    const ok = files.filter((f) => f.size <= MAX_ATTACH_MB * 1024 * 1024);
+    if (ok.length < files.length) alert(`Some files are larger than ${MAX_ATTACH_MB} MB and were skipped.`);
+    return ok;
+}
+
 function escapeHtml(s: string) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -74,8 +90,267 @@ function renderMarkdown(raw: string) {
     let s = escapeHtml(raw);
     s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     s = s.replace(/(^|[^*])\*([^*\n]+?)\*/g, '$1<em>$2</em>');
+    // Images (![alt](url)) before links, since the syntax overlaps.
+    s = s.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, '<img src="$2" alt="$1" class="my-1.5 max-h-80 max-w-full rounded-lg border border-neutral-200" />');
     s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer" class="underline">$1</a>');
     return s.replace(/\n/g, '<br>');
+}
+
+// ── Gmail-like rich composer ────────────────────────────────────────────────
+// A contentEditable editor where bold/italic/links/images render live, then
+// serialises back to the Markdown the backend already stores — so the send and
+// email-render pipeline is unchanged.
+
+interface LinkableItem { type: string; label: string; meta: string; url: string }
+
+interface RichComposerHandle {
+    clear: () => void;
+    focus: () => void;
+    exec: (cmd: string, value?: string) => void;
+    insertHtml: (html: string) => void;
+    insertImages: (files: File[]) => void;
+    hasContent: () => boolean;
+}
+
+// Serialise the editor DOM to the constrained Markdown subset we support.
+function domToMarkdown(root: HTMLElement): string {
+    const walk = (node: Node): string => {
+        if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? '';
+        if (node.nodeType !== Node.ELEMENT_NODE) return '';
+        const el = node as HTMLElement;
+        const inner = Array.from(el.childNodes).map(walk).join('');
+        switch (el.tagName.toLowerCase()) {
+            case 'br': return '\n';
+            case 'b': case 'strong': return inner.trim() ? `**${inner}**` : inner;
+            case 'i': case 'em': return inner.trim() ? `*${inner}*` : inner;
+            case 'a': { const href = el.getAttribute('href') ?? ''; return href ? `[${inner || href}](${href})` : inner; }
+            case 'img': { const src = el.getAttribute('src') ?? ''; return src ? `![${el.getAttribute('alt') ?? ''}](${src})` : ''; }
+            case 'div': case 'p': return inner + '\n';
+            default: return inner;
+        }
+    };
+    return walk(root).replace(/\n{3,}/g, '\n\n').replace(/[ \t]+\n/g, '\n').replace(/^\n+|\n+$/g, '');
+}
+
+function xsrfToken(): string {
+    return decodeURIComponent(document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? '');
+}
+
+const RichComposer = forwardRef<RichComposerHandle, {
+    value: string;
+    onChange: (md: string) => void;
+    onSend?: () => void;
+    placeholder?: string;
+    className?: string;
+    autoFocus?: boolean;
+}>(function RichComposer({ value, onChange, onSend, placeholder, className, autoFocus }, ref) {
+    const edRef = useRef<HTMLDivElement>(null);
+    const savedRange = useRef<Range | null>(null);
+    const [empty, setEmpty] = useState(true);
+
+    // Remember the caret/selection so inserts (image, document link) land where
+    // the user was typing — even after a picker modal briefly steals focus.
+    const saveSelection = () => {
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0 && edRef.current?.contains(sel.anchorNode)) {
+            savedRange.current = sel.getRangeAt(0).cloneRange();
+        }
+    };
+    const focusWithCaret = () => {
+        const el = edRef.current;
+        if (!el) return;
+        el.focus();
+        const sel = window.getSelection();
+        if (savedRange.current && sel) {
+            sel.removeAllRanges();
+            sel.addRange(savedRange.current);
+        }
+    };
+
+    const sync = () => {
+        const el = edRef.current;
+        if (!el) return;
+        saveSelection();
+        const md = domToMarkdown(el);
+        setEmpty(md.trim() === '' && !el.querySelector('img'));
+        onChange(md);
+    };
+
+    // Hydrate once from the markdown value — also runs on remount (expand toggle).
+    useEffect(() => {
+        const el = edRef.current;
+        if (!el) return;
+        el.innerHTML = value ? renderMarkdown(value) : '';
+        setEmpty(!value);
+        if (autoFocus) requestAnimationFrame(() => el.focus());
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const exec = (cmd: string, val?: string) => { focusWithCaret(); document.execCommand(cmd, false, val); sync(); };
+
+    // Insert at the saved caret via the Range API (works even while a picker modal
+    // still holds focus — no execCommand/focus required, so nothing jumps to top).
+    const insertHtml = (html: string) => {
+        const el = edRef.current;
+        if (!el) return;
+        const range = savedRange.current && el.contains(savedRange.current.commonAncestorContainer) ? savedRange.current : null;
+        if (range) {
+            range.deleteContents();
+            const frag = range.createContextualFragment(html);
+            const last = frag.lastChild;
+            range.insertNode(frag);
+            if (last) { range.setStartAfter(last); range.collapse(true); savedRange.current = range.cloneRange(); }
+        } else {
+            el.focus();
+            document.execCommand('insertHTML', false, html);
+        }
+        sync();
+    };
+
+    const uploadImage = async (file: File): Promise<string> => {
+        const fd = new FormData();
+        fd.append('image', file);
+        const res = await fetch(route('messages.inline-image'), {
+            method: 'POST', body: fd, credentials: 'same-origin',
+            headers: { 'X-XSRF-TOKEN': xsrfToken(), Accept: 'application/json' },
+        });
+        if (!res.ok) throw new Error('upload failed');
+        return (await res.json()).url as string;
+    };
+
+    const insertImages = (files: File[]) => {
+        files.filter((f) => f.type.startsWith('image/')).forEach(async (file) => {
+            try {
+                const url = await uploadImage(file);
+                insertHtml(`<img src="${url}" alt="" style="max-width:100%;height:auto;border-radius:8px;" />`);
+            } catch { alert('Could not upload that image.'); }
+        });
+    };
+
+    useImperativeHandle(ref, () => ({
+        clear() { if (edRef.current) { edRef.current.innerHTML = ''; sync(); } },
+        focus() { edRef.current?.focus(); },
+        exec, insertHtml, insertImages,
+        hasContent() { const el = edRef.current; return !!el && (domToMarkdown(el).trim() !== '' || !!el.querySelector('img')); },
+    }));
+
+    return (
+        <div className="relative flex-1">
+            {empty && placeholder && (
+                <p className="pointer-events-none absolute left-0 top-0 select-none text-sm text-neutral-400">{placeholder}</p>
+            )}
+            <div
+                ref={edRef}
+                contentEditable
+                suppressContentEditableWarning
+                role="textbox"
+                aria-multiline="true"
+                onInput={sync}
+                onKeyUp={saveSelection}
+                onMouseUp={saveSelection}
+                onBlur={saveSelection}
+                onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); onSend?.(); } }}
+                onPaste={(e) => {
+                    const img = Array.from(e.clipboardData?.items ?? []).find((i) => i.type.startsWith('image/'));
+                    if (img) { e.preventDefault(); const f = img.getAsFile(); if (f) insertImages([f]); return; }
+                    e.preventDefault();
+                    document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+                    sync();
+                }}
+                onDrop={(e) => {
+                    const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => f.type.startsWith('image/'));
+                    if (files.length) { e.preventDefault(); insertImages(files); }
+                }}
+                className={`max-w-none break-words text-sm leading-relaxed outline-none [&_a]:text-blue-600 [&_a]:underline [&_img]:my-1.5 [&_img]:max-h-80 [&_img]:max-w-full [&_img]:rounded-lg ${className ?? ''}`}
+            />
+        </div>
+    );
+});
+
+// Toolbar shared by the reply composer and the new-message modal.
+function ComposerToolbar({ composer, onLinkDocument, onExpand, expanded, children }: {
+    composer: React.RefObject<RichComposerHandle>;
+    onLinkDocument?: () => void;
+    onExpand?: () => void;
+    expanded?: boolean;
+    children?: React.ReactNode;
+}) {
+    const imgInput = useRef<HTMLInputElement>(null);
+    const btn = 'rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100';
+    const insertLink = () => {
+        const url = window.prompt('Link URL', 'https://');
+        if (!url) return;
+        if (window.getSelection()?.toString()) composer.current?.exec('createLink', url);
+        else composer.current?.insertHtml(`<a href="${url}">${url}</a>`);
+    };
+    return (
+        <div className="mb-1.5 flex flex-wrap items-center gap-1">
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => composer.current?.exec('bold')} className={`${btn} font-bold`} title="Bold (⌘/Ctrl+B)">B</button>
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => composer.current?.exec('italic')} className={`${btn} italic`} title="Italic (⌘/Ctrl+I)">I</button>
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={insertLink} className={btn} title="Insert link">🔗</button>
+            <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => imgInput.current?.click()} className={btn} title="Insert image">🖼️</button>
+            <input ref={imgInput} type="file" accept="image/*" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); if (f.length) composer.current?.insertImages(f); e.target.value = ''; }} />
+            {onLinkDocument && <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={onLinkDocument} className={btn} title="Link a document or invoice">📎 Link document</button>}
+            <span className="mx-1 h-4 w-px bg-neutral-200" />
+            {children}
+            {onExpand && (
+                <button type="button" onClick={onExpand} className={`${btn} ml-auto`} title={expanded ? 'Shrink' : 'Expand'}>
+                    {expanded ? '🗗 Shrink' : '🗖 Expand'}
+                </button>
+            )}
+        </div>
+    );
+}
+
+// Modal that lists the contact's invoices/contracts/galleries to link.
+function LinkDocumentModal({ show, onClose, conversationId, onPick }: {
+    show: boolean; onClose: () => void; conversationId: number | null; onPick: (item: LinkableItem) => void;
+}) {
+    const [items, setItems] = useState<LinkableItem[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (!show || !conversationId) return;
+        setLoading(true);
+        fetch(route('messages.linkables', conversationId), { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+            .then((r) => r.json())
+            .then((d) => setItems(d.items ?? []))
+            .catch(() => setItems([]))
+            .finally(() => setLoading(false));
+    }, [show, conversationId]);
+
+    const icon = (t: string) => ({ invoice: '💳', contract: '📝', gallery: '🖼️', questionnaire: '❓', proposal: '📄' }[t] ?? '🔗');
+
+    return (
+        <Modal show={show} onClose={onClose} maxWidth="md">
+            <div className="p-5">
+                <div className="mb-3 flex items-center justify-between">
+                    <h2 className="text-sm font-semibold text-neutral-900">Link a document</h2>
+                    <button type="button" onClick={onClose} className="text-neutral-400 hover:text-neutral-700">✕</button>
+                </div>
+                {loading ? (
+                    <p className="py-8 text-center text-sm text-neutral-400">Loading…</p>
+                ) : items.length === 0 ? (
+                    <p className="py-8 text-center text-sm text-neutral-400">Nothing to link for this client yet.</p>
+                ) : (
+                    <ul className="max-h-80 divide-y divide-neutral-100 overflow-y-auto">
+                        {items.map((it, i) => (
+                            <li key={i}>
+                                <button type="button" onClick={() => { onPick(it); onClose(); }} className="flex w-full items-center gap-3 px-1 py-2.5 text-left hover:bg-neutral-50">
+                                    <span className="text-lg">{icon(it.type)}</span>
+                                    <span className="min-w-0 flex-1">
+                                        <span className="block truncate text-sm font-medium text-neutral-800">{it.label}</span>
+                                        <span className="block text-xs capitalize text-neutral-400">{it.type} · {it.meta}</span>
+                                    </span>
+                                    <span className="text-xs text-blue-600">Insert</span>
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+        </Modal>
+    );
 }
 
 function IconPaperclip({ className }: { className?: string }) {
@@ -94,6 +369,76 @@ function AttachButton({ onAdd, className, label }: { onAdd: (files: File[]) => v
             </button>
             <input ref={ref} type="file" multiple className="hidden" onChange={(e) => { const f = Array.from(e.target.files ?? []); if (f.length) onAdd(f); e.target.value = ''; }} />
         </>
+    );
+}
+
+function IconTag({ className }: { className?: string }) {
+    return (
+        <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
+        </svg>
+    );
+}
+
+/** Tag/untag a single message to one of the contact's projects. */
+function ProjectTag({ message, projects }: { message: MessageItem; projects: ProjectRef[] }) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        const onDoc = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+        document.addEventListener('mousedown', onDoc);
+        return () => document.removeEventListener('mousedown', onDoc);
+    }, [open]);
+
+    if (projects.length === 0) return null;
+
+    const current = projects.find((p) => p.id === message.project_id) ?? null;
+
+    const tag = (projectId: number | null) => {
+        setOpen(false);
+        router.post(route('messages.tag-project', message.id), { project_id: projectId }, { preserveScroll: true });
+    };
+
+    return (
+        <div className="relative mt-1" ref={ref}>
+            <button
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium transition ${
+                    current
+                        ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                        : 'text-neutral-400 opacity-0 hover:text-neutral-600 group-hover:opacity-100'
+                }`}
+            >
+                <IconTag className="h-3 w-3" />
+                {current ? current.name : 'Tag to project'}
+            </button>
+            {open && (
+                <div className="absolute right-0 z-20 mt-1 w-52 rounded-lg border border-neutral-100 bg-white py-1 text-xs shadow-lg">
+                    <p className="px-3 py-1 text-[10px] font-medium uppercase tracking-wider text-neutral-400">Tag to project</p>
+                    {projects.map((p) => (
+                        <button
+                            key={p.id}
+                            onClick={() => tag(p.id)}
+                            className={`block w-full truncate px-3 py-1.5 text-left hover:bg-neutral-50 ${p.id === message.project_id ? 'font-medium text-indigo-700' : 'text-neutral-700'}`}
+                        >
+                            {p.name}
+                        </button>
+                    ))}
+                    {current && (
+                        <>
+                            <div className="my-1 border-t border-neutral-100" />
+                            <button onClick={() => tag(null)} className="block w-full px-3 py-1.5 text-left text-red-600 hover:bg-red-50">
+                                Remove tag
+                            </button>
+                        </>
+                    )}
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -149,7 +494,10 @@ export default function Index({
     const [threadSearch, setThreadSearch] = useState('');
     const firstRender = useRef(true);
     const threadEnd = useRef<HTMLDivElement>(null);
-    const replyRef = useRef<HTMLTextAreaElement>(null);
+    const composerRef = useRef<RichComposerHandle>(null);
+    const [expanded, setExpanded] = useState(false);
+    const [linking, setLinking] = useState(false);
+    const [highlightId, setHighlightId] = useState<number | null>(null);
 
     // Debounced conversation-list search.
     useEffect(() => {
@@ -163,61 +511,99 @@ export default function Index({
         return () => clearTimeout(t);
     }, [search]);
 
-    // Scroll to the newest message when a conversation loads. Reset per-thread UI.
+    // Scroll to the newest message when a conversation loads — or, when arriving
+    // via a #message-{id} deep link (e.g. from a project drawer), scroll to and
+    // briefly highlight that specific message instead. Reset per-thread UI.
     useEffect(() => {
-        threadEnd.current?.scrollIntoView();
         setThreadSearch('');
+        const hash = window.location.hash.match(/^#message-(\d+)$/);
+        const targetId = hash ? Number(hash[1]) : null;
+        if (targetId && selected?.messages.some((m) => m.id === targetId)) {
+            // Defer until the thread has rendered.
+            requestAnimationFrame(() => {
+                document.getElementById(`message-${targetId}`)?.scrollIntoView({ block: 'center' });
+            });
+            setHighlightId(targetId);
+            const t = setTimeout(() => setHighlightId(null), 2500);
+            return () => clearTimeout(t);
+        }
+        threadEnd.current?.scrollIntoView();
     }, [selected?.id]);
 
     useEffect(() => {
         threadEnd.current?.scrollIntoView();
     }, [selected?.messages.length]);
 
+    // The email is sent by a queued job that flips the message to sent/failed.
+    // Poll the open thread while anything is still 'queued' so "sending…" updates
+    // on its own without a manual reload; stop once nothing is pending.
+    useEffect(() => {
+        if (!selected?.messages.some((m) => m.status === 'queued')) return;
+        const id = setInterval(() => {
+            router.reload({ only: ['selected'] });
+        }, 3000);
+        return () => clearInterval(id);
+    }, [selected]);
+
     const setStatus = (status: string) => router.get(route('messages.index'), { status, search: search || undefined }, { preserveState: true, preserveScroll: true, replace: true });
 
     const reply = useForm<{ body: string; attachments: File[] }>({ body: '', attachments: [] });
 
-    const sendReply = (e: React.FormEvent) => {
-        e.preventDefault();
+    const sendReply = (e?: React.FormEvent) => {
+        e?.preventDefault();
         if (!selected || (!reply.data.body.trim() && reply.data.attachments.length === 0)) return;
-        reply.post(route('messages.reply', selected.id), { preserveScroll: true, forceFormData: true, onSuccess: () => reply.reset() });
-    };
-
-    // Wrap the current textarea selection with Markdown markers.
-    const applyFormat = (marker: string, placeholder: string) => {
-        const ta = replyRef.current;
-        if (!ta) return;
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        const val = reply.data.body;
-        const sel = val.slice(start, end) || placeholder;
-        reply.setData('body', val.slice(0, start) + marker + sel + marker + val.slice(end));
-        requestAnimationFrame(() => {
-            ta.focus();
-            ta.selectionStart = start + marker.length;
-            ta.selectionEnd = start + marker.length + sel.length;
+        reply.post(route('messages.reply', selected.id), {
+            preserveScroll: true,
+            forceFormData: true,
+            onSuccess: () => { reply.reset(); composerRef.current?.clear(); setExpanded(false); },
         });
-    };
-
-    const applyLink = () => {
-        const ta = replyRef.current;
-        if (!ta) return;
-        const url = window.prompt('Link URL', 'https://');
-        if (!url) return;
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        const val = reply.data.body;
-        const sel = val.slice(start, end) || 'link text';
-        reply.setData('body', `${val.slice(0, start)}[${sel}](${url})${val.slice(end)}`);
     };
 
     const insertTemplate = (id: string) => {
         const t = templates.find((x) => String(x.id) === id);
         if (!t) return;
-        const body = reply.data.body;
-        reply.setData('body', body ? `${body}\n\n${t.body}` : t.body);
-        requestAnimationFrame(() => replyRef.current?.focus());
+        composerRef.current?.insertHtml(renderMarkdown(t.body));
     };
+
+    const linkDocument = (item: LinkableItem) => {
+        composerRef.current?.insertHtml(`<a href="${item.url}">${item.label}</a>&nbsp;`);
+    };
+
+    // Shared reply composer, rendered inline or inside the expanded modal. Only
+    // one instance is mounted at a time so `composerRef` is unambiguous.
+    const renderComposer = (isExpanded: boolean) => (
+        <form onSubmit={sendReply} className={isExpanded ? 'flex h-full flex-col p-4' : 'p-3 pt-2'}>
+            <AttachChips files={reply.data.attachments} onRemove={(i) => reply.setData('attachments', reply.data.attachments.filter((_, idx) => idx !== i))} />
+            <ComposerToolbar composer={composerRef} onLinkDocument={() => setLinking(true)} onExpand={() => setExpanded((v) => !v)} expanded={isExpanded}>
+                {templates.length > 0 && (
+                    <select onChange={(e) => { insertTemplate(e.target.value); e.target.value = ''; }} defaultValue="" className="rounded border-neutral-200 bg-white py-1 text-xs text-neutral-500">
+                        <option value="">Insert template…</option>
+                        {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                )}
+                <button type="button" onClick={() => setManagingTemplates(true)} className="rounded px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600">Manage</button>
+            </ComposerToolbar>
+            <div className={`flex gap-2 ${isExpanded ? 'min-h-0 flex-1 items-stretch' : 'items-end'}`}>
+                <AttachButton onAdd={(f) => reply.setData('attachments', [...reply.data.attachments, ...withinAttachLimit(f)])} />
+                <div className={`flex-1 rounded-md border border-neutral-200 px-3 py-2 ${isExpanded ? 'overflow-y-auto' : 'max-h-44 overflow-y-auto'}`}>
+                    <RichComposer
+                        ref={composerRef}
+                        value={reply.data.body}
+                        onChange={(md) => reply.setData('body', md)}
+                        onSend={() => sendReply()}
+                        placeholder="Write a reply…  (⌘/Ctrl + Enter to send)"
+                        autoFocus={isExpanded}
+                        className={isExpanded ? 'min-h-[40vh]' : 'min-h-[2.25rem]'}
+                    />
+                </div>
+                <button type="submit" disabled={reply.processing || (!reply.data.body.trim() && reply.data.attachments.length === 0)} className="btn-primary self-end">
+                    {reply.processing ? 'Sending…' : 'Send'}
+                </button>
+            </div>
+            {reply.errors.attachments && <p className="mt-1 text-xs text-red-600">{reply.errors.attachments}</p>}
+            {reply.errors.body && <p className="mt-1 text-xs text-red-600">{reply.errors.body}</p>}
+        </form>
+    );
 
     const setTags = (tags: string[]) => {
         if (!selected) return;
@@ -351,8 +737,8 @@ export default function Index({
                                     const out = m.direction === 'outbound';
                                     const hasBody = m.body && m.body !== NO_TEXT;
                                     return (
-                                        <div key={m.id} className={`flex ${out ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${out ? 'bg-neutral-900 text-white' : 'border border-neutral-200 bg-white text-neutral-800'}`}>
+                                        <div key={m.id} id={`message-${m.id}`} className={`group flex flex-col ${out ? 'items-end' : 'items-start'}`}>
+                                            <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm transition ${out ? 'bg-neutral-900 text-white' : 'border border-neutral-200 bg-white text-neutral-800'} ${highlightId === m.id ? 'ring-2 ring-amber-400 ring-offset-2' : ''}`}>
                                                 {hasBody && <p className="whitespace-pre-line leading-relaxed [&_a]:underline" dangerouslySetInnerHTML={{ __html: renderMarkdown(m.body) }} />}
                                                 {m.attachments.length > 0 && (
                                                     <div className={`space-y-1 ${hasBody ? 'mt-2' : ''}`}>
@@ -373,6 +759,7 @@ export default function Index({
                                                 </p>
                                                 {m.status === 'failed' && m.error && <p className="mt-1 text-[10px] text-red-300">{m.error}</p>}
                                             </div>
+                                            {!m.is_internal && <ProjectTag message={m} projects={selected.projects} />}
                                         </div>
                                     );
                                 })}
@@ -380,44 +767,34 @@ export default function Index({
                             </div>
 
                             {/* ── Composer ── */}
-                            <div className="border-t border-neutral-200 bg-white">
-                                    <form onSubmit={sendReply} className="p-3 pt-2">
-                                        <AttachChips files={reply.data.attachments} onRemove={(i) => reply.setData('attachments', reply.data.attachments.filter((_, idx) => idx !== i))} />
-                                        <div className="mb-1.5 flex items-center gap-1">
-                                            <button type="button" onClick={() => applyFormat('**', 'bold')} className="rounded px-2 py-1 text-xs font-bold text-neutral-500 hover:bg-neutral-100" title="Bold">B</button>
-                                            <button type="button" onClick={() => applyFormat('*', 'italic')} className="rounded px-2 py-1 text-xs italic text-neutral-500 hover:bg-neutral-100" title="Italic">I</button>
-                                            <button type="button" onClick={applyLink} className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100" title="Insert link">🔗</button>
-                                            <span className="mx-1 h-4 w-px bg-neutral-200" />
-                                            {templates.length > 0 && (
-                                                <select onChange={(e) => { insertTemplate(e.target.value); e.target.value = ''; }} defaultValue="" className="rounded border-neutral-200 bg-white py-1 text-xs text-neutral-500">
-                                                    <option value="">Insert template…</option>
-                                                    {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                                </select>
-                                            )}
-                                            <button type="button" onClick={() => setManagingTemplates(true)} className="rounded px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600">Manage</button>
-                                        </div>
-                                        <div className="flex items-end gap-2">
-                                            <AttachButton onAdd={(f) => reply.setData('attachments', [...reply.data.attachments, ...f])} />
-                                            <textarea
-                                                ref={replyRef}
-                                                value={reply.data.body}
-                                                onChange={(e) => reply.setData('body', e.target.value)}
-                                                onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) sendReply(e); }}
-                                                rows={2}
-                                                placeholder="Write a reply…  (⌘/Ctrl + Enter to send · **bold**, *italic*)"
-                                                className="input flex-1 resize-none"
-                                            />
-                                            <button type="submit" disabled={reply.processing || (!reply.data.body.trim() && reply.data.attachments.length === 0)} className="btn-primary">
-                                                {reply.processing ? 'Sending…' : 'Send'}
-                                            </button>
-                                        </div>
-                                    </form>
-                            </div>
+                            {!expanded && (
+                                <div className="border-t border-neutral-200 bg-white">
+                                    {renderComposer(false)}
+                                </div>
+                            )}
                         </>
                     )}
                 </div>
             </div>
 
+            {/* Expanded composer (Gmail-style full window). A plain overlay — not a
+                Headless Dialog — so opening the document picker on top of it doesn't
+                register as an outside-click and close it. */}
+            {expanded && (
+                <div className="fixed inset-0 z-40 flex items-center justify-center bg-gray-500/75 px-4 py-6 sm:px-0">
+                    <div className="flex h-[80vh] w-full flex-col overflow-hidden rounded-lg bg-white shadow-xl sm:mx-auto sm:max-w-2xl">
+                        <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
+                            <h2 className="truncate text-sm font-semibold text-neutral-900">{selected?.subject ?? 'Message'}</h2>
+                            <button type="button" onClick={() => setExpanded(false)} className="text-neutral-400 hover:text-neutral-700" title="Shrink">🗗</button>
+                        </div>
+                        <div className="min-h-0 flex-1">
+                            {renderComposer(true)}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <LinkDocumentModal show={linking} onClose={() => setLinking(false)} conversationId={selected?.id ?? null} onPick={linkDocument} />
             <NewMessageModal show={composing} onClose={() => setComposing(false)} contacts={contacts} defaultContactId={compose_contact_id} />
             <TemplatesModal show={managingTemplates} onClose={() => setManagingTemplates(false)} templates={templates} />
         </AuthenticatedLayout>
@@ -460,6 +837,7 @@ function TagEditor({ tags, allTags, onChange }: { tags: string[]; allTags: strin
 
 function NewMessageModal({ show, onClose, contacts, defaultContactId }: { show: boolean; onClose: () => void; contacts: ContactRef[]; defaultContactId: number | null }) {
     const form = useForm<{ contact_id: string; subject: string; body: string; attachments: File[] }>({ contact_id: defaultContactId ? String(defaultContactId) : '', subject: '', body: '', attachments: [] });
+    const composerRef = useRef<RichComposerHandle>(null);
 
     // Keep the preselected contact in sync when opening from a contact profile.
     useEffect(() => {
@@ -468,7 +846,7 @@ function NewMessageModal({ show, onClose, contacts, defaultContactId }: { show: 
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
-        form.post(route('messages.store'), { forceFormData: true, onSuccess: () => { form.reset(); onClose(); } });
+        form.post(route('messages.store'), { forceFormData: true, onSuccess: () => { form.reset(); composerRef.current?.clear(); onClose(); } });
     };
 
     return (
@@ -501,13 +879,17 @@ function NewMessageModal({ show, onClose, contacts, defaultContactId }: { show: 
 
                 <div>
                     <span className="label mb-1.5 block">Message</span>
-                    <textarea className="input" rows={6} value={form.data.body} onChange={(e) => form.setData('body', e.target.value)} placeholder="Supports **bold**, *italic*, and [links](https://…)" />
+                    <ComposerToolbar composer={composerRef} />
+                    <div className="max-h-72 min-h-[8rem] overflow-y-auto rounded-md border border-neutral-200 px-3 py-2">
+                        <RichComposer ref={composerRef} value={form.data.body} onChange={(md) => form.setData('body', md)} placeholder="Write your message…" />
+                    </div>
                     {form.errors.body && <p className="mt-1 text-xs text-red-600">{form.errors.body}</p>}
                 </div>
 
                 <div>
                     <AttachChips files={form.data.attachments} onRemove={(i) => form.setData('attachments', form.data.attachments.filter((_, idx) => idx !== i))} />
-                    <AttachButton onAdd={(f) => form.setData('attachments', [...form.data.attachments, ...f])} className="btn-secondary px-3 py-1.5 text-xs" label="Attach files" />
+                    <AttachButton onAdd={(f) => form.setData('attachments', [...form.data.attachments, ...withinAttachLimit(f)])} className="btn-secondary px-3 py-1.5 text-xs" label="Attach files" />
+                    {form.errors.attachments && <p className="mt-1 text-xs text-red-600">{form.errors.attachments}</p>}
                 </div>
 
                 <div className="flex justify-end gap-2">

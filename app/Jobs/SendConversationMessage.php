@@ -60,6 +60,7 @@ class SendConversationMessage implements ShouldQueue
             files: $attachments,
             signature: $studio?->email_signature,
             trackingUrl: $message->openTrackingUrl(),
+            logoUrl: $studio?->logoUrl(),
         ));
 
         $message->update(['status' => 'sent', 'error' => null]);

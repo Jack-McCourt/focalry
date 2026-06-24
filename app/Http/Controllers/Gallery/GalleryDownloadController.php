@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class GalleryDownloadController extends Controller
 {
@@ -34,7 +35,7 @@ class GalleryDownloadController extends Controller
     /**
      * Download the whole gallery as a ZIP.
      */
-    public function all(Request $request, string $slug, PhotoArchive $archive): BinaryFileResponse
+    public function all(Request $request, string $slug, PhotoArchive $archive): StreamedResponse
     {
         $collection = $this->resolveCollection($slug);
         $this->ensureDownloadable($collection);
@@ -62,7 +63,7 @@ class GalleryDownloadController extends Controller
      * Download a chosen subset of photos (favourites or a multi-selection) as a ZIP.
      * Photo ids are passed as a comma-separated `ids` query param.
      */
-    public function selection(Request $request, string $slug, PhotoArchive $archive): BinaryFileResponse
+    public function selection(Request $request, string $slug, PhotoArchive $archive): StreamedResponse
     {
         $collection = $this->resolveCollection($slug);
         $this->ensureDownloadable($collection);

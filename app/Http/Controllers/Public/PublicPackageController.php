@@ -18,9 +18,12 @@ use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class PublicPackageController extends Controller
 {
+    private string $studioSlug = '';
+
     public function index(Request $request, string $slug): Response
     {
         $studio = $this->resolveStudio($slug);
+        $this->studioSlug = $studio->slug;
 
         $packages = Package::withoutGlobalScopes()
             ->where('studio_id', $studio->id)
@@ -32,6 +35,24 @@ class PublicPackageController extends Controller
         return Inertia::render('Public/Packages/Index', [
             'studio' => ['name' => $studio->name, 'slug' => $studio->slug, 'logo_url' => $studio->logoUrl()],
             'packages' => $packages,
+            'embed' => $request->boolean('embed'),
+            'can_pay' => $studio->stripe_connect_status === 'active',
+        ]);
+    }
+
+    /** Public page for a single payment link (its own shareable URL). */
+    public function show(Request $request, string $slug, string $package): Response
+    {
+        $studio = $this->resolveStudio($slug);
+        $this->studioSlug = $studio->slug;
+
+        $record = Package::withoutGlobalScopes()
+            ->where('studio_id', $studio->id)->where('slug', $package)->where('active', true)
+            ->firstOrFail();
+
+        return Inertia::render('Public/Packages/Show', [
+            'studio' => ['name' => $studio->name, 'slug' => $studio->slug, 'logo_url' => $studio->logoUrl()],
+            'package' => $this->payload($record),
             'embed' => $request->boolean('embed'),
             'can_pay' => $studio->stripe_connect_status === 'active',
         ]);
@@ -49,11 +70,22 @@ class PublicPackageController extends Controller
             'client_email' => 'required|email|max:255',
             'client_phone' => 'nullable|string|max:50',
             'notes' => 'nullable|string|max:5000',
-            'payment_type' => 'required|in:full,deposit',
+            'payment_type' => 'nullable|in:full,deposit',
+            'amount_cents' => 'nullable|integer|min:0',
         ]);
 
-        $payDeposit = $data['payment_type'] === 'deposit' && $record->offersDeposit();
-        $amount = $payDeposit ? (int) $record->deposit_cents : (int) $record->price_cents;
+        if ($record->isFlexible()) {
+            // Customer-chosen amount (tip jar / pay what you want).
+            $amount = (int) ($data['amount_cents'] ?? 0);
+            $min = max((int) ($record->min_amount_cents ?? 0), 1);
+            if ($amount < $min) {
+                return back()->withErrors(['amount_cents' => 'Please enter an amount of at least '.number_format($min / 100, 2).' '.strtoupper($record->currency).'.']);
+            }
+            $payDeposit = false;
+        } else {
+            $payDeposit = ($data['payment_type'] ?? 'full') === 'deposit' && $record->offersDeposit();
+            $amount = $payDeposit ? (int) $record->deposit_cents : (int) $record->price_cents;
+        }
 
         $booking = DB::transaction(function () use ($studio, $record, $data, $payDeposit, $amount) {
             $contact = Contact::withoutGlobalScopes()
@@ -159,9 +191,13 @@ class PublicPackageController extends Controller
             'description' => $p->description,
             'details' => $p->details,
             'image_url' => $p->imageUrl(),
+            'pricing_type' => $p->pricing_type,
             'price_cents' => $p->price_cents,
             'deposit_cents' => $p->offersDeposit() ? $p->deposit_cents : null,
+            'min_amount_cents' => $p->min_amount_cents,
+            'suggested_amount_cents' => $p->suggested_amount_cents,
             'currency' => $p->currency,
+            'url' => route('packages.public.show', [$this->studioSlug, $p->slug]),
         ];
     }
 }

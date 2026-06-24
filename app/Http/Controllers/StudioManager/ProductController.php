@@ -149,7 +149,7 @@ class ProductController extends Controller
     public function destroy(Product $product): RedirectResponse
     {
         if ($product->image_path) {
-            Storage::disk('public')->delete($product->image_path);
+            Storage::disk('wasabi')->delete($product->image_path);
         }
         $product->delete();
 
@@ -202,11 +202,7 @@ class ProductController extends Controller
         $request->validate(['image' => 'nullable|image|mimes:png,jpg,jpeg,webp|max:5120']);
 
         if ($request->hasFile('image')) {
-            if ($product->image_path) {
-                Storage::disk('public')->delete($product->image_path);
-            }
-            $path = $request->file('image')->store("studios/{$product->studio_id}/products", 'public');
-            $product->update(['image_path' => $path]);
+            $product->replaceImage($request->file('image'), 'products');
         }
     }
 

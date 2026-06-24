@@ -22,13 +22,18 @@ class SitePage extends Model
         'position',
         'is_home',
         'is_blog',
+        'is_404',
         'blocks',
         'status',
         'published_at',
         'excerpt',
+        'category',
         'cover_image',
         'seo_title',
         'seo_description',
+        'head_code',
+        'body_code',
+        'og_image',
     ];
 
     protected function casts(): array
@@ -37,6 +42,7 @@ class SitePage extends Model
             'position' => 'integer',
             'is_home' => 'boolean',
             'is_blog' => 'boolean',
+            'is_404' => 'boolean',
             'blocks' => 'array',
             'published_at' => 'datetime',
         ];

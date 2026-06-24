@@ -4,6 +4,8 @@ namespace App\Jobs;
 
 use App\Models\Photo;
 use App\Models\Studio;
+use App\Support\Images;
+use App\Support\StudioPaths;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -12,8 +14,8 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Intervention\Image\Drivers\Gd\Driver;
-use Intervention\Image\ImageManager;
+use Illuminate\Support\Str;
+use Intervention\Image\Interfaces\ImageInterface;
 
 class ProcessPhoto implements ShouldQueue
 {
@@ -37,45 +39,51 @@ class ProcessPhoto implements ShouldQueue
         $imageData = stream_get_contents($originalStream);
         fclose($originalStream);
 
-        $manager = new ImageManager(new Driver);
-
-        $base = $manager->read($imageData);
-        $width = $base->width();
-        $height = $base->height();
+        $dimensions = Images::manager()->read($imageData);
+        $width = $dimensions->width();
+        $height = $dimensions->height();
 
         $exifTakenAt = $this->readExifDate($imageData);
 
-        $s = $photo->studio_id;
-        $c = $photo->collection_id;
-        $p = $photo->id;
+        // Display derivatives live under the public prefix with a high-entropy,
+        // unguessable path segment: they're served as stable (cacheable) public
+        // CDN URLs rather than signed ones, so the random token is what keeps
+        // them from being enumerated. Originals stay private (outside public/).
+        $dir = StudioPaths::asset($photo->studio_id, "collections/{$photo->collection_id}/photos/{$photo->id}/".Str::random(40));
+        $disk = Storage::disk('wasabi');
 
         $derivatives = [];
 
-        $derivatives['thumb'] = "studios/{$s}/collections/{$c}/photos/{$p}/thumb.jpg";
-        Storage::disk('wasabi')->put(
-            $derivatives['thumb'],
-            $manager->read($imageData)->scaleDown(300)->toJpeg(85)->toString()
-        );
+        $derivatives['thumb'] = "{$dir}/thumb.jpg";
+        $disk->put($derivatives['thumb'], Images::jpeg($imageData, 300, 85), 'public');
 
-        $derivatives['web'] = "studios/{$s}/collections/{$c}/photos/{$p}/web.jpg";
-        Storage::disk('wasabi')->put(
-            $derivatives['web'],
-            $manager->read($imageData)->scaleDown(1200)->toJpeg(88)->toString()
-        );
+        // Mid-size for retina gallery grids: ~2× the thumb so high-DPI screens
+        // stay crisp without pulling the full 1200px web image per tile.
+        $derivatives['grid'] = "{$dir}/grid.jpg";
+        $disk->put($derivatives['grid'], Images::jpeg($imageData, 600, 82), 'public');
 
-        $derivatives['preview'] = "studios/{$s}/collections/{$c}/photos/{$p}/preview.jpg";
-        $preview = $manager->read($imageData)->scaleDown(1200);
-        $this->applyWatermark($manager, $preview, $photo->studio_id);
-        Storage::disk('wasabi')->put(
-            $derivatives['preview'],
-            $preview->toJpeg(85)->toString()
-        );
+        $derivatives['web'] = "{$dir}/web.jpg";
+        $disk->put($derivatives['web'], Images::jpeg($imageData, 1200, 88), 'public');
+
+        // Preview is watermarked between resize and encode, so it can't use the
+        // one-shot Images::jpeg helper. Guest uploads stay clean — the studio's
+        // watermark only belongs on the photographer's own work.
+        $derivatives['preview'] = "{$dir}/preview.jpg";
+        $preview = Images::read($imageData, 1200);
+        if (! $photo->is_guest_upload) {
+            $this->applyWatermark($preview, $photo->studio_id);
+        }
+        $disk->put($derivatives['preview'], $preview->toJpeg(85)->toString(), 'public');
 
         $photo->update([
             'derivative_keys' => $derivatives,
             'width' => $width,
             'height' => $height,
             'exif_taken_at' => $exifTakenAt,
+            // Default ordering = capture time (falls back to upload time), stored
+            // as a unix timestamp in `position` so galleries are chronological by
+            // default; manual drag-reorder / the sort button just rewrite these.
+            'position' => ($exifTakenAt ?? $photo->created_at ?? now())->timestamp,
             'status' => 'ready',
         ]);
     }
@@ -86,7 +94,7 @@ class ProcessPhoto implements ShouldQueue
         Log::error('ProcessPhoto failed', ['photo_id' => $this->photo->id, 'error' => $e->getMessage()]);
     }
 
-    private function applyWatermark(ImageManager $manager, $image, int $studioId): void
+    private function applyWatermark(ImageInterface $image, int $studioId): void
     {
         try {
             $studio = Studio::find($studioId);
@@ -99,7 +107,7 @@ class ProcessPhoto implements ShouldQueue
                 return;
             }
 
-            $watermark = $manager->read($wmData)->scaleDown((int) ($image->width() * 0.3));
+            $watermark = Images::manager()->read($wmData)->scaleDown((int) ($image->width() * 0.3));
             $image->place($watermark, 'center', 0, 0, 60);
         } catch (\Throwable) {
             // Watermark is optional — don't fail the job

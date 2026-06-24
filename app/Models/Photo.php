@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToStudio;
+use App\Support\PublicAsset;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -48,6 +49,10 @@ class Photo extends Model
         'file_size',
         'exif_taken_at',
         'status',
+        'is_guest_upload',
+        'approved',
+        'uploader_name',
+        'caption',
         'position',
         'starred',
     ];
@@ -58,6 +63,8 @@ class Photo extends Model
             'derivative_keys' => 'array',
             'exif_taken_at' => 'datetime',
             'starred' => 'boolean',
+            'is_guest_upload' => 'boolean',
+            'approved' => 'boolean',
             'position' => 'integer',
             'width' => 'integer',
             'height' => 'integer',
@@ -99,10 +106,38 @@ class Photo extends Model
         return null;
     }
 
+    /**
+     * URL for the first available variant in $variants (e.g. ['thumb','preview']),
+     * so callers don't chain `signedUrl(...) ?? signedUrl(...)` and re-resolve.
+     *
+     * @param  array<int, string>  $variants
+     */
+    public function firstSignedUrl(array $variants, int $minutes = 60): ?string
+    {
+        foreach ($variants as $variant) {
+            if ($this->derivativeKey($variant)) {
+                return $this->signedUrl($variant, $minutes);
+            }
+        }
+
+        return null;
+    }
+
     public function signedUrl(string $variant, int $minutes = 60): ?string
     {
         $key = $this->derivativeKey($variant);
+        if (! $key) {
+            return null;
+        }
 
-        return $key ? Storage::disk('wasabi')->temporaryUrl($key, now()->addMinutes($minutes)) : null;
+        // Display derivatives live under the public prefix and are served as
+        // stable, cacheable public CDN URLs (the unguessable path is what keeps
+        // them private). Legacy derivatives stored outside public/ still get a
+        // short-lived Wasabi signed URL until they're migrated.
+        if (str_starts_with($key, 'public/')) {
+            return PublicAsset::url($key);
+        }
+
+        return Storage::disk('wasabi')->temporaryUrl($key, now()->addMinutes($minutes));
     }
 }

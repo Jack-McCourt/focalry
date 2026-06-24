@@ -21,7 +21,7 @@ class StoreOrderController extends Controller
     {
         $status = $request->string('status')->toString();
 
-        $orders = Order::with('items:id,order_id')
+        $orders = Order::withCount('items')
             ->when(in_array($status, self::STATUSES, true), fn ($q) => $q->where('status', $status))
             ->latest()
             ->paginate(30)
@@ -33,7 +33,7 @@ class StoreOrderController extends Controller
                 'fulfilment' => $o->fulfilment,
                 'total_cents' => $o->total_cents,
                 'currency' => $o->currency,
-                'items_count' => $o->items->count(),
+                'items_count' => $o->items_count,
                 'created_at' => $o->created_at->toIso8601String(),
             ]);
 

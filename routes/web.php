@@ -15,6 +15,8 @@ use App\Http\Controllers\Gallery\FavouriteController;
 use App\Http\Controllers\Gallery\FavouriteListDownloadController;
 use App\Http\Controllers\Gallery\GalleryController;
 use App\Http\Controllers\Gallery\GalleryDownloadController;
+use App\Http\Controllers\Gallery\GuestUploadAdminController;
+use App\Http\Controllers\Gallery\GuestUploadController;
 use App\Http\Controllers\Gallery\SetController;
 use App\Http\Controllers\LightroomPluginController;
 use App\Http\Controllers\Mail\MailOpenController;
@@ -29,6 +31,7 @@ use App\Http\Controllers\Public\PublicQuestionnaireController;
 use App\Http\Controllers\Public\PublicSiteController;
 use App\Http\Controllers\Public\StoreCheckoutController;
 use App\Http\Controllers\Public\StoreDownloadController;
+use App\Http\Controllers\PublicAssetController;
 use App\Http\Controllers\Settings\GoogleCalendarController;
 use App\Http\Controllers\Settings\StudioSettingsController;
 use App\Http\Controllers\Settings\ZoomController;
@@ -106,6 +109,8 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
     Route::post('/settings/stripe/refresh-status', [ConnectController::class, 'refreshStatus'])->name('stripe.connect.refresh');
 
     // Collections (Client Galleries)
+    Route::post('collections/{collection}/save-as-defaults', [CollectionController::class, 'saveAsDefaults'])
+        ->name('collections.save-defaults');
     Route::resource('collections', CollectionController::class)->except(['edit']);
 
     // Lightroom Classic publish plugin download
@@ -146,11 +151,14 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
     // Messages (two-way client messaging)
     Route::get('messages', [ConversationController::class, 'index'])->name('messages.index');
     Route::post('messages', [ConversationController::class, 'store'])->name('messages.store');
+    Route::post('messages/inline-image', [ConversationController::class, 'inlineImage'])->name('messages.inline-image');
+    Route::get('messages/{conversation}/linkables', [ConversationController::class, 'linkables'])->name('messages.linkables');
     Route::get('messages/{conversation}', [ConversationController::class, 'index'])->name('messages.show');
     Route::post('messages/{conversation}/reply', [ConversationController::class, 'reply'])->name('messages.reply');
     Route::post('messages/{conversation}/note', [ConversationController::class, 'note'])->name('messages.note');
     Route::post('messages/{conversation}/unread', [ConversationController::class, 'markUnread'])->name('messages.unread');
     Route::patch('messages/{conversation}/tags', [ConversationController::class, 'updateTags'])->name('messages.tags');
+    Route::post('messages/{message}/tag-project', [ConversationController::class, 'tagProject'])->name('messages.tag-project');
     Route::post('messages/{conversation}/archive', [ConversationController::class, 'archive'])->name('messages.archive');
     Route::delete('messages/{conversation}', [ConversationController::class, 'destroy'])->name('messages.destroy');
 
@@ -254,12 +262,20 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
     Route::middleware('plan:website')->group(function () {
         Route::get('website', [SiteController::class, 'edit'])->name('website.edit');
         Route::put('website', [SiteController::class, 'update'])->name('website.update');
+        Route::get('website/settings', [SiteController::class, 'settings'])->name('website.settings');
+        Route::patch('website/settings', [SiteController::class, 'updateSettings'])->name('website.settings.update');
+        Route::post('website/domain', [SiteController::class, 'updateDomain'])->name('website.domain.update');
+        Route::post('website/domain/verify', [SiteController::class, 'verifyDomain'])->name('website.domain.verify');
+        Route::delete('website/domain', [SiteController::class, 'removeDomain'])->name('website.domain.remove');
         Route::post('website/publish', [SiteController::class, 'publish'])->name('website.publish');
         Route::post('website/template', [SiteController::class, 'applyTemplate'])->name('website.template');
         Route::post('website/upload', [SiteController::class, 'uploadImage'])->name('website.upload');
         Route::get('website/gallery-images', [SiteController::class, 'galleryImages'])->name('website.gallery.images');
         Route::post('website/gallery-images', [SiteController::class, 'importGalleryImages'])->name('website.gallery.import');
         Route::get('website/leads', [SiteController::class, 'leads'])->name('website.leads');
+        Route::get('website/analytics', [SiteController::class, 'analytics'])->name('website.analytics');
+        Route::post('website/google-reviews/search', [SiteController::class, 'googleReviewsSearch'])->name('website.google-reviews.search');
+        Route::post('website/google-reviews', [SiteController::class, 'googleReviews'])->name('website.google-reviews');
     });
 
     // Send an email to a client about an invoice / contract / gallery
@@ -347,6 +363,16 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
     Route::post('collections/{collection}/sets/reorder', [SetController::class, 'reorder'])
         ->name('sets.reorder');
 
+    // Guest QR uploads — admin settings, moderation, and the printable A6 card.
+    Route::get('collections/{collection}/guest-uploads', [GuestUploadAdminController::class, 'index'])
+        ->name('collections.guest-uploads.index');
+    Route::patch('collections/{collection}/guest-uploads', [GuestUploadAdminController::class, 'update'])
+        ->name('collections.guest-uploads.update');
+    Route::post('collections/{collection}/guest-uploads/photos/{photo}/approve', [GuestUploadAdminController::class, 'approve'])
+        ->name('collections.guest-uploads.approve');
+    Route::get('collections/{collection}/guest-uploads/card.pdf', [GuestUploadAdminController::class, 'card'])
+        ->name('collections.guest-uploads.card');
+
     // Download a client's favourite list as a ZIP of originals
     Route::get('collections/{collection}/favourite-lists/{list}/download', [FavouriteListDownloadController::class, 'download'])
         ->name('favourite-lists.download');
@@ -396,8 +422,15 @@ Route::post('/i/{publicId}/checkout', [PublicInvoiceController::class, 'checkout
 
 // Public studio website (no auth — resolved by slug, only if published)
 Route::post('/site/{slug}/contact', [PublicSiteController::class, 'submitLead'])->name('sites.public.lead');
+Route::get('/site/{slug}/sitemap.xml', [PublicSiteController::class, 'sitemap'])->name('sites.public.sitemap');
+Route::get('/site/{slug}/robots.txt', [PublicSiteController::class, 'robots'])->name('sites.public.robots');
+Route::get('/site/{slug}/pay/{package}', [PublicSiteController::class, 'paymentLink'])->name('sites.public.pay');
 Route::get('/site/{slug}/{parent}/{post}', [PublicSiteController::class, 'showPost'])->name('sites.public.post');
 Route::get('/site/{slug}/{page?}', [PublicSiteController::class, 'show'])->name('sites.public.show');
+
+// Public site assets streamed from Wasabi (logos, site/product/package images,
+// attachments — everything under the `public/` prefix). See App\Support\PublicAsset.
+Route::get('/assets/{path}', [PublicAssetController::class, 'show'])->where('path', '.*')->name('public-asset');
 
 // Public gallery (no full auth — password/email-gate handled inside)
 Route::get('/g/{slug}', [GalleryController::class, 'show'])->name('gallery.show');
@@ -426,6 +459,17 @@ Route::get('/g/{slug}/download/{photoId}', [GalleryDownloadController::class, 's
     ->whereNumber('photoId')
     ->name('gallery.download.single');
 
+// Public guest QR uploads (no auth — gated by feature flag + session PIN + throttle).
+Route::get('/g/{slug}/upload', [GuestUploadController::class, 'show'])->name('gallery.guest-upload');
+Route::middleware('throttle:60,1')->group(function () {
+    Route::post('/g/{slug}/upload/verify-pin', [GuestUploadController::class, 'verifyPin'])
+        ->name('gallery.guest-upload.verify-pin');
+    Route::post('/g/{slug}/upload/presign', [GuestUploadController::class, 'presign'])
+        ->name('gallery.guest-upload.presign');
+    Route::post('/g/{slug}/upload/register', [GuestUploadController::class, 'register'])
+        ->name('gallery.guest-upload.register');
+});
+
 // Public booking site (no auth) — studio resolved by slug.
 Route::get('/book/{slug}', [PublicMeetingController::class, 'index'])->name('meetings.public.studio');
 Route::get('/book/{slug}/{type}', [PublicMeetingController::class, 'show'])->name('meetings.public.show');
@@ -434,6 +478,7 @@ Route::get('/booking/{meeting}', [PublicMeetingController::class, 'confirmation'
 
 // Public packages / booking shop (no auth) — studio resolved by slug. Embeddable via ?embed=1.
 Route::get('/packages/{slug}', [PublicPackageController::class, 'index'])->name('packages.public');
+Route::get('/packages/{slug}/{package}', [PublicPackageController::class, 'show'])->name('packages.public.show');
 Route::post('/packages/{slug}/{package}/checkout', [PublicPackageController::class, 'checkout'])->name('packages.public.checkout');
 Route::get('/package-booking/{booking}', [PublicPackageController::class, 'confirmation'])->name('packages.public.confirmation');
 

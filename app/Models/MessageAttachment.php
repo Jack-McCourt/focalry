@@ -3,10 +3,10 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToStudio;
+use App\Support\PublicAsset;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Facades\Storage;
 
 class MessageAttachment extends Model
 {
@@ -33,6 +33,6 @@ class MessageAttachment extends Model
 
     public function url(): string
     {
-        return Storage::disk('public')->url($this->path);
+        return (string) PublicAsset::url($this->path);
     }
 }

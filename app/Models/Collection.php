@@ -21,9 +21,11 @@ class Collection extends Model
         'event_date',
         'cover_photo_id',
         'cover_style',
+        'theme',
         'privacy',
         'download_settings',
         'favourite_settings',
+        'guest_upload_settings',
         'price_sheet_id',
         'expires_at',
         'published_at',
@@ -39,6 +41,7 @@ class Collection extends Model
             'privacy' => 'array',
             'download_settings' => 'array',
             'favourite_settings' => 'array',
+            'guest_upload_settings' => 'array',
             'expires_at' => 'datetime',
             'published_at' => 'datetime',
             'starred' => 'boolean',
@@ -125,5 +128,22 @@ class Collection extends Model
     public function isEmailGated(): bool
     {
         return ! empty($this->privacy['email_gate']);
+    }
+
+    public function guestUploadsEnabled(): bool
+    {
+        return (bool) ($this->guest_upload_settings['enabled'] ?? false);
+    }
+
+    public function guestUploadPin(): ?string
+    {
+        $pin = $this->guest_upload_settings['pin'] ?? null;
+
+        return $pin !== null && $pin !== '' ? (string) $pin : null;
+    }
+
+    public function guestUploadsNeedApproval(): bool
+    {
+        return (bool) ($this->guest_upload_settings['require_approval'] ?? false);
     }
 }

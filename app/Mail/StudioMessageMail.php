@@ -10,6 +10,7 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Mail\Mailables\Headers;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Str;
 
 class StudioMessageMail extends Mailable
 {
@@ -27,6 +28,7 @@ class StudioMessageMail extends Mailable
         public array $files = [],
         public ?string $signature = null,
         public ?string $trackingUrl = null,
+        public ?string $logoUrl = null,
     ) {}
 
     public function envelope(): Envelope
@@ -50,11 +52,27 @@ class StudioMessageMail extends Mailable
             markdown: 'mail.studio-message',
             with: [
                 'studioName' => $this->studioName,
-                'bodyText' => $this->bodyText,
-                'signature' => $this->signature,
+                'logoUrl' => $this->logoUrl,
+                'bodyHtml' => $this->renderRich($this->bodyText),
+                'signatureHtml' => $this->signature ? $this->renderRich($this->signature) : null,
                 'trackingUrl' => $this->trackingUrl,
             ],
         );
+    }
+
+    /**
+     * Render a Markdown body to HTML: single newlines become <br>, and any inline
+     * images get constrained so they don't blow out the email layout.
+     */
+    private function renderRich(string $text): string
+    {
+        $html = Str::markdown($text, [
+            'html_input' => 'escape',
+            'allow_unsafe_links' => false,
+            'renderer' => ['soft_break' => "<br>\n"],
+        ]);
+
+        return preg_replace('/<img /i', '<img style="max-width:100%;height:auto;border-radius:6px;" ', $html);
     }
 
     /**
@@ -63,7 +81,7 @@ class StudioMessageMail extends Mailable
     public function attachments(): array
     {
         return collect($this->files)
-            ->map(fn ($f) => Attachment::fromStorageDisk('public', $f['path'])->as($f['name']))
+            ->map(fn ($f) => Attachment::fromStorageDisk('wasabi', $f['path'])->as($f['name']))
             ->all();
     }
 }

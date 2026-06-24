@@ -2,8 +2,8 @@ import { PageProps } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 import { ReactNode } from 'react';
 
-/** Change this to your real brand name. */
-const BRAND = 'Aperture';
+/** The platform's brand name. */
+const BRAND = 'Focalry';
 
 /* ─────────────────────────────  Icons  ───────────────────────────── */
 

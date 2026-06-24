@@ -2,10 +2,9 @@
 
 namespace App\Support;
 
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
-use ZipArchive;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use ZipStream\ZipStream;
 
 /**
  * Builds downloadable archives / files from Wasabi (S3) objects.
@@ -25,57 +24,57 @@ class PhotoArchive
     }
 
     /**
-     * Stream a ZIP of the given objects.
+     * Stream a ZIP of the given objects to the browser.
+     *
+     * The archive is streamed entry-by-entry: each object is pulled from S3 to a
+     * single temp file (SaveAs avoids the php-fpm tempnam spill), written into the
+     * output stream, then deleted before the next one. Bytes start flowing
+     * immediately and only one object is ever on disk, so even a multi-GB
+     * "download all" of originals won't blow disk or time out behind a proxy.
      *
      * @param  array<int, array{key: string, filename: string}>  $items
      */
-    public function zip(array $items, string $downloadName): BinaryFileResponse
+    public function zip(array $items, string $downloadName): StreamedResponse
     {
-        $client = Storage::disk($this->disk)->getClient();
-        $bucket = config("filesystems.disks.{$this->disk}.bucket");
-        $tmpDir = sys_get_temp_dir();
+        return response()->streamDownload(function () use ($items) {
+            // A large archive can take a while; don't let PHP or an aborted client
+            // leave us half-done.
+            @set_time_limit(0);
+            ignore_user_abort(false);
 
-        $zipPath = $tmpDir.'/'.Str::uuid().'.zip';
-        $zip = new ZipArchive;
-        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-            abort(500, 'Unable to create the download archive.');
-        }
+            $zip = new ZipStream(sendHttpHeaders: false);
+            $usedNames = [];
 
-        $tempFiles = [];
-        $usedNames = [];
+            foreach ($items as $item) {
+                if (empty($item['key'])) {
+                    continue;
+                }
 
-        foreach ($items as $item) {
-            if (empty($item['key'])) {
-                continue;
+                $localPath = null;
+                try {
+                    $localPath = WasabiObject::toTempFile($item['key'], $this->disk);
+                    // addFileFromPath streams the whole file into the output before
+                    // it returns, so the temp file is safe to delete straight after.
+                    $zip->addFileFromPath($this->uniqueName($usedNames, $item['filename']), $localPath);
+                } catch (\Throwable $e) {
+                    // Skip a single bad/missing object rather than failing the lot.
+                } finally {
+                    if ($localPath) {
+                        @unlink($localPath);
+                    }
+                }
+
+                if (connection_aborted()) {
+                    break;
+                }
             }
 
-            $localPath = $tmpDir.'/'.Str::uuid();
-            try {
-                $client->getObject([
-                    'Bucket' => $bucket,
-                    'Key' => $item['key'],
-                    'SaveAs' => $localPath,
-                ]);
-            } catch (\Throwable $e) {
-                @unlink($localPath);
-
-                continue;
-            }
-
-            $tempFiles[] = $localPath;
-            $zip->addFile($localPath, $this->uniqueName($usedNames, $item['filename']));
-        }
-
-        $zip->close();
-
-        // Source files are copied into the archive on close(); safe to remove now.
-        foreach ($tempFiles as $file) {
-            @unlink($file);
-        }
-
-        return response()
-            ->download($zipPath, $downloadName)
-            ->deleteFileAfterSend(true);
+            $zip->finish();
+        }, $downloadName, [
+            'Content-Type' => 'application/zip',
+            // Stop nginx buffering the whole archive before the client sees anything.
+            'X-Accel-Buffering' => 'no',
+        ]);
     }
 
     /**
@@ -83,16 +82,8 @@ class PhotoArchive
      */
     public function file(string $key, string $downloadName): BinaryFileResponse
     {
-        $client = Storage::disk($this->disk)->getClient();
-        $bucket = config("filesystems.disks.{$this->disk}.bucket");
-
-        $localPath = sys_get_temp_dir().'/'.Str::uuid();
         try {
-            $client->getObject([
-                'Bucket' => $bucket,
-                'Key' => $key,
-                'SaveAs' => $localPath,
-            ]);
+            $localPath = WasabiObject::toTempFile($key, $this->disk);
         } catch (\Throwable $e) {
             abort(404, 'File not found.');
         }

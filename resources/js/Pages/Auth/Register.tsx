@@ -20,11 +20,12 @@ function guessCountry(): string {
 }
 
 const selectClasses =
-    'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500';
+    'mt-1.5 block w-full rounded-lg border-neutral-300 text-neutral-900 shadow-sm transition focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900';
 
 export default function Register() {
     const { data, setData, post, processing, errors, reset } = useForm({
         name: '',
+        company_name: '',
         email: '',
         password: '',
         password_confirmation: '',
@@ -48,6 +49,11 @@ export default function Register() {
         <GuestLayout>
             <Head title="Register" />
 
+            <div className="mb-8">
+                <h2 className="text-2xl font-bold tracking-tight text-neutral-900">Create your account</h2>
+                <p className="mt-1.5 text-sm text-neutral-500">Start your Focalry studio — free to get going.</p>
+            </div>
+
             <form onSubmit={submit}>
                 <div>
                     <InputLabel htmlFor="name" value="Name" />
@@ -64,6 +70,23 @@ export default function Register() {
                     />
 
                     <InputError message={errors.name} className="mt-2" />
+                </div>
+
+                <div className="mt-4">
+                    <InputLabel htmlFor="company_name" value="Company name (optional)" />
+
+                    <TextInput
+                        id="company_name"
+                        name="company_name"
+                        value={data.company_name}
+                        className="mt-1 block w-full"
+                        autoComplete="organization"
+                        placeholder="Your studio or business name"
+                        onChange={(e) => setData('company_name', e.target.value)}
+                    />
+
+                    <p className="mt-1 text-xs text-neutral-400">Used as your studio name. Leave blank to use your own name.</p>
+                    <InputError message={errors.company_name} className="mt-2" />
                 </div>
 
                 <div className="mt-4">
@@ -219,19 +242,17 @@ export default function Register() {
                     </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-end">
-                    <Link
-                        href={route('login')}
-                        className="rounded-md text-sm text-gray-600 underline hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                    >
-                        Already registered?
-                    </Link>
-
-                    <PrimaryButton className="ms-4" disabled={processing}>
-                        Register
-                    </PrimaryButton>
-                </div>
+                <PrimaryButton className="mt-6 w-full" disabled={processing}>
+                    {processing ? 'Creating your account…' : 'Create account'}
+                </PrimaryButton>
             </form>
+
+            <p className="mt-8 text-center text-sm text-neutral-500">
+                Already have an account?{' '}
+                <Link href={route('login')} className="font-semibold text-neutral-900 hover:underline">
+                    Log in
+                </Link>
+            </p>
         </GuestLayout>
     );
 }

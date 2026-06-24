@@ -15,6 +15,7 @@ class Message extends Model
     protected $fillable = [
         'studio_id',
         'conversation_id',
+        'project_id',
         'direction',
         'is_internal',
         'user_id',
@@ -38,6 +39,12 @@ class Message extends Model
     public function conversation(): BelongsTo
     {
         return $this->belongsTo(Conversation::class);
+    }
+
+    /** The project this message has been tagged to, if any. */
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 
     /** Signed open-tracking pixel URL for outbound email read receipts. */

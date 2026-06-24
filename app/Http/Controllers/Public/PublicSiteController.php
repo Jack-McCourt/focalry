@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
+use App\Mail\ClientMessage;
 use App\Models\Contact;
 use App\Models\Package;
 use App\Models\Project;
@@ -11,18 +12,58 @@ use App\Models\ProjectType;
 use App\Models\Site;
 use App\Models\SiteLead;
 use App\Models\SitePage;
+use App\Models\SiteVisit;
+use App\Support\PublicAsset;
+use App\Support\StudioPaths;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class PublicSiteController extends Controller
 {
-    public function show(string $slug, ?string $page = null): Response
+    /**
+     * The custom domain this request is being served on, or null for the normal
+     * /site/{slug} path. Set by the ResolveCustomDomain middleware (which rewrites
+     * the request to /site/{slug}/... and stamps this attribute), and read here to
+     * emit clean root-relative links and canonical URLs on the custom domain.
+     */
+    private function domainHost(): ?string
     {
-        $site = $this->resolvePublished($slug);
+        return request()->attributes->get('site_domain_host');
+    }
+
+    /** Absolute URL for a site path, on the custom domain when serving via one. */
+    private function siteUrl(Site $site, string $suffix = ''): string
+    {
+        $suffix = ltrim($suffix, '/');
+        if ($host = $this->domainHost()) {
+            return 'https://'.$host.($suffix !== '' ? '/'.$suffix : '');
+        }
+
+        return url('/site/'.$site->slug.($suffix !== '' ? '/'.$suffix : ''));
+    }
+
+    /** Root-relative base for in-page links ('' on a custom domain). */
+    private function basePath(Site $site): string
+    {
+        return $this->domainHost() ? '' : '/site/'.$site->slug;
+    }
+
+    public function show(Request $request, string $slug, ?string $page = null)
+    {
+        return $this->renderPage($request, $this->resolvePublished($slug), $page);
+    }
+
+    private function renderPage(Request $request, Site $site, ?string $page = null)
+    {
+        // Path redirects run before page lookup.
+        if ($redirect = $this->matchRedirect($site, $page ?? '')) {
+            return redirect($redirect, 301);
+        }
 
         // Only top-level pages are reachable directly (posts live under the blog page).
         $top = $site->pages->whereNull('parent_id');
@@ -30,8 +71,22 @@ class PublicSiteController extends Controller
             ? $top->firstWhere('slug', $page)
             : ($top->firstWhere('is_home', true) ?? $top->first());
 
-        abort_if(! $current, 404);
+        // No such page → render the studio's custom 404 page if they have one.
+        if (! $current) {
+            $notFound = $top->firstWhere('is_404', true);
+            abort_if(! $notFound, 404);
 
+            return $this->pageResponse($site, $notFound)->toResponse(request())->setStatusCode(404);
+        }
+
+        $this->recordVisit($site, $page ?? '', $request);
+
+        return $this->pageResponse($site, $current);
+    }
+
+    /** Build the Inertia page response for a resolved page. */
+    private function pageResponse(Site $site, SitePage $current): Response
+    {
         return Inertia::render('Sites/Public', [
             'site' => $this->siteProps($site, $current),
             'studio_logo' => $site->studio?->logoUrl(),
@@ -42,15 +97,67 @@ class PublicSiteController extends Controller
                 'title' => $current->title,
                 'slug' => $current->slug,
                 'blocks' => $current->blocks ?? [],
+                'head_code' => $current->head_code,
+                'body_code' => $current->body_code,
+                'og_image' => $current->og_image,
+                'canonical' => $current->is_home ? $this->siteUrl($site) : $this->siteUrl($site, $current->slug),
             ],
         ]);
     }
 
-    /** A single published blog post (a child page of the blog page). */
-    public function showPost(string $slug, string $parent, string $post): Response
+    /** Record a page view (skipping obvious bots) for built-in analytics. */
+    private function recordVisit(Site $site, string $path, Request $request): void
     {
-        $site = $this->resolvePublished($slug);
+        $ua = (string) $request->userAgent();
+        if ($ua === '' || preg_match('/bot|crawl|spider|slurp|bing|facebookexternalhit|headless|preview|monitor/i', $ua)) {
+            return;
+        }
 
+        app()->instance('current.studio.id', $site->studio_id);
+
+        try {
+            $ref = $request->headers->get('referer');
+            $host = $ref ? parse_url($ref, PHP_URL_HOST) : null;
+            // Ignore self-referrals (internal navigation).
+            if ($host === $request->getHost()) {
+                $host = null;
+            }
+
+            SiteVisit::create([
+                'site_id' => $site->id,
+                'path' => mb_substr($path !== '' ? $path : '/', 0, 250),
+                'referrer_host' => $host ? mb_substr($host, 0, 250) : null,
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /** Resolve a redirect target for a requested path segment, or null. */
+    private function matchRedirect(Site $site, string $path): ?string
+    {
+        foreach ($site->redirects ?? [] as $r) {
+            $from = ltrim((string) ($r['from'] ?? ''), '/');
+            if ($from !== '' && $from === ltrim($path, '/')) {
+                $to = (string) ($r['to'] ?? '');
+
+                return preg_match('#^https?://#i', $to) || str_starts_with($to, '/')
+                    ? $to
+                    : $this->siteUrl($site, $to);
+            }
+        }
+
+        return null;
+    }
+
+    /** A single published blog post (a child page of the blog page). */
+    public function showPost(Request $request, string $slug, string $parent, string $post): Response
+    {
+        return $this->renderPost($request, $this->resolvePublished($slug), $parent, $post);
+    }
+
+    private function renderPost(Request $request, Site $site, string $parent, string $post): Response
+    {
         $blog = $site->pages->first(fn (SitePage $p) => $p->is_blog && $p->slug === $parent);
         abort_if(! $blog, 404);
 
@@ -58,6 +165,8 @@ class PublicSiteController extends Controller
             && $p->slug === $post
             && $this->isLive($p));
         abort_if(! $entry, 404);
+
+        $this->recordVisit($site, "{$parent}/{$post}", $request);
 
         return Inertia::render('Sites/Public', [
             'site' => $this->siteProps($site, $entry, $entry->title),
@@ -70,8 +179,54 @@ class PublicSiteController extends Controller
                 'title' => $entry->title,
                 'slug' => $blog->slug,
                 'blocks' => $entry->blocks ?? [],
+                'head_code' => $entry->head_code,
+                'body_code' => $entry->body_code,
+                'og_image' => $entry->og_image ?: $entry->cover_image,
+                'canonical' => $this->siteUrl($site, "{$blog->slug}/{$entry->slug}"),
             ],
         ]);
+    }
+
+    /** sitemap.xml for a published site (home + top pages + published posts). */
+    public function sitemap(string $slug): \Illuminate\Http\Response
+    {
+        return $this->renderSitemap($this->resolvePublished($slug));
+    }
+
+    private function renderSitemap(Site $site): \Illuminate\Http\Response
+    {
+        $urls = [];
+
+        foreach ($site->pages->whereNull('parent_id') as $p) {
+            $urls[] = $p->is_home ? $this->siteUrl($site) : $this->siteUrl($site, $p->slug);
+        }
+
+        $blog = $site->blogPage();
+        if ($blog) {
+            foreach ($site->pages->where('parent_id', $blog->id)->filter(fn (SitePage $p) => $this->isLive($p)) as $p) {
+                $urls[] = $this->siteUrl($site, "{$blog->slug}/{$p->slug}");
+            }
+        }
+
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>'
+            .'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            .collect($urls)->map(fn ($u) => '<url><loc>'.e($u).'</loc></url>')->implode('')
+            .'</urlset>';
+
+        return response($xml, 200, ['Content-Type' => 'application/xml']);
+    }
+
+    /** robots.txt pointing at the site's sitemap. */
+    public function robots(string $slug): \Illuminate\Http\Response
+    {
+        return $this->renderRobots($this->resolvePublished($slug));
+    }
+
+    private function renderRobots(Site $site): \Illuminate\Http\Response
+    {
+        $body = "User-agent: *\nAllow: /\nSitemap: ".$this->siteUrl($site, 'sitemap.xml')."\n";
+
+        return response($body, 200, ['Content-Type' => 'text/plain']);
     }
 
     /**
@@ -80,7 +235,16 @@ class PublicSiteController extends Controller
      */
     public function submitLead(Request $request, string $slug): RedirectResponse
     {
-        $site = $this->resolvePublished($slug);
+        return $this->processLead($request, $this->resolvePublished($slug));
+    }
+
+    private function processLead(Request $request, Site $site): RedirectResponse
+    {
+        // Honeypot: a hidden field real visitors never see. If a bot fills it,
+        // pretend success and drop the submission silently.
+        if (filled($request->input('company_website'))) {
+            return back()->with('success', "Thanks — your enquiry has been sent. We'll be in touch soon!");
+        }
 
         // Public route: no authenticated studio. Bind the site's studio so the
         // BelongsToStudio scope + auto studio_id assignment work as normal.
@@ -93,9 +257,40 @@ class PublicSiteController extends Controller
             'event_date' => 'nullable|date',
             'event_type' => 'nullable|string|max:120',
             'message' => 'nullable|string|max:5000',
+            'custom_values' => 'array|max:30',
+            'custom_values.*.label' => 'nullable|string|max:200',
+            'custom_values.*.value' => 'nullable|string|max:5000',
+            'attachment' => 'nullable|file|max:10240|mimes:pdf,jpg,jpeg,png,webp,doc,docx',
+            'autoresponder' => 'boolean',
+            'autoresponder_subject' => 'nullable|string|max:200',
+            'autoresponder_message' => 'nullable|string|max:5000',
         ]);
 
-        DB::transaction(function () use ($site, $data) {
+        // Stash an uploaded attachment and replace the file object with its URL.
+        $attachmentUrl = null;
+        if ($request->hasFile('attachment')) {
+            $path = $request->file('attachment')->storePublicly(StudioPaths::asset($site->studio_id, 'site/uploads'), 'wasabi');
+            $attachmentUrl = PublicAsset::url($path);
+        }
+        unset($data['attachment']);
+        $data['attachment_url'] = $attachmentUrl;
+
+        // Compose CRM notes from the message + any custom field answers + attachment.
+        $noteLines = [];
+        if (! empty($data['message'])) {
+            $noteLines[] = $data['message'];
+        }
+        foreach ($data['custom_values'] ?? [] as $cv) {
+            if (! empty($cv['label']) && ($cv['value'] ?? '') !== '') {
+                $noteLines[] = "{$cv['label']}: {$cv['value']}";
+            }
+        }
+        if ($attachmentUrl) {
+            $noteLines[] = "Attachment: {$attachmentUrl}";
+        }
+        $notes = $noteLines ? implode("\n", $noteLines) : null;
+
+        $contact = DB::transaction(function () use ($site, $data, $notes) {
             [$first, $last] = $this->splitName($data['name']);
 
             $contact = Contact::where('email', $data['email'])->first();
@@ -137,7 +332,7 @@ class PublicSiteController extends Controller
                 'status_id' => $leadStatus?->id,
                 'type_id' => $type?->id,
                 'event_date' => $data['event_date'] ?? null,
-                'notes' => $data['message'] ?? null,
+                'notes' => $notes,
                 'position' => (int) Project::where('status_id', $leadStatus?->id)->max('position') + 1,
             ]);
 
@@ -153,9 +348,79 @@ class PublicSiteController extends Controller
                 'message' => $data['message'] ?? null,
                 'payload' => $data,
             ]);
+
+            return $contact;
         });
 
+        $this->sendLeadEmails($site, $data, $contact);
+
         return back()->with('success', "Thanks — your enquiry has been sent. We'll be in touch soon!");
+    }
+
+    /**
+     * Notify the studio of a new enquiry and, if the form opted in, send the
+     * enquirer an autoresponder. Email failures never break the submission.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function sendLeadEmails(Site $site, array $data, Contact $contact): void
+    {
+        $studio = $site->studio;
+        $studioName = $studio?->name ?: config('app.name');
+
+        // ── Notify the studio ──
+        if ($studio?->email) {
+            try {
+                $details = array_values(array_filter([
+                    ['label' => 'Name', 'value' => $data['name']],
+                    ['label' => 'Email', 'value' => $data['email']],
+                    $data['phone'] ?? null ? ['label' => 'Phone', 'value' => $data['phone']] : null,
+                    $data['event_date'] ?? null ? ['label' => 'Event date', 'value' => $data['event_date']] : null,
+                    $data['event_type'] ?? null ? ['label' => 'Event type', 'value' => $data['event_type']] : null,
+                    $data['message'] ?? null ? ['label' => 'Message', 'value' => $data['message']] : null,
+                ]));
+
+                foreach ($data['custom_values'] ?? [] as $cv) {
+                    if (! empty($cv['label']) && ($cv['value'] ?? '') !== '') {
+                        $details[] = ['label' => $cv['label'], 'value' => $cv['value']];
+                    }
+                }
+                if (! empty($data['attachment_url'])) {
+                    $details[] = ['label' => 'Attachment', 'value' => $data['attachment_url']];
+                }
+
+                Mail::to($studio->email)->send(new ClientMessage(
+                    studioName: $studioName,
+                    subjectLine: "New website enquiry — {$data['name']}",
+                    bodyText: "You've received a new enquiry from your website.",
+                    ctaLabel: 'View in leads',
+                    ctaUrl: route('website.leads'),
+                    details: $details,
+                    replyToEmail: $data['email'],
+                ));
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        // ── Autoresponder to the enquirer ──
+        if (! empty($data['autoresponder']) && filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+            try {
+                $body = trim((string) ($data['autoresponder_message'] ?? '')) ?:
+                    "Thanks for getting in touch — we've received your enquiry and will reply as soon as we can.";
+
+                Mail::to($data['email'])->send(new ClientMessage(
+                    studioName: $studioName,
+                    subjectLine: trim((string) ($data['autoresponder_subject'] ?? '')) ?: 'Thanks for your enquiry',
+                    bodyText: $body,
+                    ctaLabel: 'Visit our website',
+                    ctaUrl: $this->siteUrl($site),
+                    replyToEmail: $studio?->email,
+                ));
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
     }
 
     // ── Helpers ──
@@ -166,9 +431,17 @@ class PublicSiteController extends Controller
         return [
             'name' => $site->name,
             'slug' => $site->slug,
+            'base_path' => $this->basePath($site),
             'theme' => $site->themeSettings(),
             'header_nav' => $site->header_nav ?? [],
             'footer_nav' => $site->footer_nav ?? [],
+            'head_code' => $site->head_code,
+            'body_code' => $site->body_code,
+            'cookie_consent' => $site->cookie_consent,
+            'cookie_message' => $site->cookie_message,
+            'cookie_policy_url' => $site->cookie_policy_url,
+            'favicon_url' => $site->favicon_url,
+            'og_image_url' => $site->og_image_url,
             'seo_title' => $seoTitleOverride ?: ($current?->seo_title ?: $site->seo_title ?: $site->name),
             'seo_description' => $current?->seo_description ?: $site->seo_description,
         ];
@@ -185,6 +458,38 @@ class PublicSiteController extends Controller
     }
 
     /** Active packages as cards for the `packages` block. */
+    /** A single payment link rendered inside the studio's website (its shell). */
+    public function paymentLink(Request $request, string $slug, string $package): Response
+    {
+        $site = $this->resolvePublished($slug);
+        $studio = $site->studio;
+
+        $record = Package::withoutGlobalScopes()
+            ->where('studio_id', $site->studio_id)->where('slug', $package)->where('active', true)
+            ->firstOrFail();
+
+        return Inertia::render('Sites/PaymentLink', [
+            'site' => $this->siteProps($site),
+            'studio_logo' => $studio?->logoUrl(),
+            'pages' => $this->topNav($site),
+            'studio_slug' => $studio?->slug,
+            'can_pay' => $studio?->stripe_connect_status === 'active',
+            'package' => [
+                'slug' => $record->slug,
+                'name' => $record->name,
+                'description' => $record->description,
+                'details' => $record->details,
+                'image_url' => $record->imageUrl(),
+                'pricing_type' => $record->pricing_type,
+                'price_cents' => $record->price_cents,
+                'deposit_cents' => $record->offersDeposit() ? $record->deposit_cents : null,
+                'min_amount_cents' => $record->min_amount_cents,
+                'suggested_amount_cents' => $record->suggested_amount_cents,
+                'currency' => $record->currency,
+            ],
+        ]);
+    }
+
     private function packageCards(Site $site): Collection
     {
         return Package::withoutGlobalScopes()
@@ -200,7 +505,9 @@ class PublicSiteController extends Controller
                 'price_cents' => $p->price_cents,
                 'deposit_cents' => $p->offersDeposit() ? $p->deposit_cents : null,
                 'currency' => $p->currency,
-                'url' => route('packages.public', $site->studio->slug ?? $site->slug),
+                // Each card opens its own payment page within the website (the
+                // ResolveCustomDomain middleware maps this on custom domains too).
+                'url' => $this->basePath($site).'/pay/'.$p->slug,
             ])->values();
     }
 
@@ -220,9 +527,10 @@ class PublicSiteController extends Controller
                 'title' => $p->title,
                 'slug' => $p->slug,
                 'excerpt' => $p->excerpt,
+                'category' => $p->category,
                 'cover_image' => $p->cover_image,
                 'published_at' => $p->published_at?->toDateString(),
-                'url' => "/site/{$site->slug}/{$blog->slug}/{$p->slug}",
+                'url' => $this->basePath($site)."/{$blog->slug}/{$p->slug}",
             ])->values();
     }
 

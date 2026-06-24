@@ -14,12 +14,16 @@ interface Package {
     description: string | null;
     details: string | null;
     image_url: string | null;
+    pricing_type: 'fixed' | 'flexible';
     price_cents: number;
     deposit_cents: number | null;
+    min_amount_cents: number | null;
+    suggested_amount_cents: number | null;
     currency: string;
     active: boolean;
     sort_order: number;
     bookings_count: number;
+    url?: string;
 }
 
 interface Booking {
@@ -52,6 +56,7 @@ export default function Index({
     const [editing, setEditing] = useState<Package | null>(null);
     const [creating, setCreating] = useState(false);
     const [copied, setCopied] = useState<'link' | 'embed' | null>(null);
+    const [copiedId, setCopiedId] = useState<number | null>(null);
 
     const copy = (text: string, which: 'link' | 'embed') => {
         navigator.clipboard.writeText(text);
@@ -60,21 +65,21 @@ export default function Index({
     };
 
     return (
-        <AuthenticatedLayout header={<h1 className="text-sm font-semibold text-neutral-900">Bookings</h1>}>
-            <Head title="Bookings" />
+        <AuthenticatedLayout header={<h1 className="text-sm font-semibold text-neutral-900">Payment links</h1>}>
+            <Head title="Payment links" />
             <StudioManagerNav active="bookings" />
 
             <div className="px-4 py-6 sm:px-8">
                 {!stripe_ready && (
                     <div className="mb-5 rounded-lg bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
-                        Connect Stripe (Settings → payments) to take payment for packages. You can still create packages now.
+                        Connect Stripe (Settings → payments) to take payment through your payment links. You can still create them now.
                     </div>
                 )}
 
                 {/* Share / embed */}
                 <div className="mb-6 grid gap-3 lg:grid-cols-2">
                     <div className="rounded-xl border border-neutral-200 bg-white p-4">
-                        <p className="text-xs font-medium text-neutral-500">Your packages page</p>
+                        <p className="text-xs font-medium text-neutral-500">Your payments page</p>
                         <p className="mt-1 truncate text-sm text-neutral-800">{public_url}</p>
                         <div className="mt-2 flex gap-2">
                             <button onClick={() => copy(public_url, 'link')} className="btn-secondary px-3 py-1.5 text-xs">{copied === 'link' ? 'Copied!' : 'Copy link'}</button>
@@ -89,14 +94,14 @@ export default function Index({
                 </div>
 
                 <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-sm font-semibold text-neutral-900">Packages</h2>
-                    <button onClick={() => setCreating(true)} className="btn-primary">New package</button>
+                    <h2 className="text-sm font-semibold text-neutral-900">Payment links</h2>
+                    <button onClick={() => setCreating(true)} className="btn-primary">New payment link</button>
                 </div>
 
                 {packages.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-neutral-200 py-16 text-center">
-                        <p className="text-sm font-medium text-neutral-700">No packages yet</p>
-                        <p className="mt-1 text-sm text-neutral-400">Create a package clients can book and pay for.</p>
+                        <p className="text-sm font-medium text-neutral-700">No payment links yet</p>
+                        <p className="mt-1 text-sm text-neutral-400">Create a payment link clients can pay through.</p>
                     </div>
                 ) : (
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -108,8 +113,18 @@ export default function Index({
                                         <span className="text-sm font-semibold text-neutral-900">{p.name}</span>
                                         {!p.active && <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-500">Hidden</span>}
                                     </div>
-                                    <p className="mt-1 text-sm text-neutral-700">{formatMoney(p.price_cents, p.currency)}{p.deposit_cents ? ` · ${formatMoney(p.deposit_cents, p.currency)} deposit` : ''}</p>
+                                    <p className="mt-1 text-sm text-neutral-700">{p.pricing_type === 'flexible' ? 'Flexible amount' : `${formatMoney(p.price_cents, p.currency)}${p.deposit_cents ? ` · ${formatMoney(p.deposit_cents, p.currency)} deposit` : ''}`}</p>
                                     <p className="mt-1 text-[11px] text-neutral-400">{p.bookings_count} booking{p.bookings_count === 1 ? '' : 's'}</p>
+                                    {p.url && (
+                                        <span
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(p.url!); setCopiedId(p.id); setTimeout(() => setCopiedId(null), 1500); }}
+                                            className="mt-2 inline-block text-[11px] font-medium text-blue-600 hover:underline"
+                                        >
+                                            {copiedId === p.id ? 'Copied!' : 'Copy link'}
+                                        </span>
+                                    )}
                                 </div>
                             </button>
                         ))}
@@ -119,13 +134,13 @@ export default function Index({
                 {/* Sales */}
                 {bookings.length > 0 && (
                     <div className="mt-8">
-                        <h2 className="mb-3 text-sm font-semibold text-neutral-900">Recent bookings</h2>
+                        <h2 className="mb-3 text-sm font-semibold text-neutral-900">Recent payments</h2>
                         <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
                             {bookings.map((b) => (
                                 <div key={b.id} className="flex items-center justify-between gap-3 border-b border-neutral-50 px-4 py-2.5 text-sm last:border-0">
                                     <div className="min-w-0">
                                         <span className="font-medium text-neutral-900">{b.client_name}</span>
-                                        <span className="text-neutral-400"> · {b.package ?? 'Package'}</span>
+                                        <span className="text-neutral-400"> · {b.package ?? 'Payment link'}</span>
                                     </div>
                                     <div className="flex shrink-0 items-center gap-3">
                                         <span className="text-neutral-700">{formatMoney(b.amount_cents, b.currency)}{b.payment_type === 'deposit' ? ' deposit' : ''}</span>
@@ -151,8 +166,11 @@ function PackageModal({ onClose, pkg, defaultCurrency }: { onClose: () => void; 
         name: string;
         description: string;
         details: string;
+        pricing_type: 'fixed' | 'flexible';
         price: string;
         deposit: string;
+        min: string;
+        suggested: string;
         currency: string;
         active: boolean;
         image: File | null;
@@ -161,18 +179,25 @@ function PackageModal({ onClose, pkg, defaultCurrency }: { onClose: () => void; 
         name: pkg?.name ?? '',
         description: pkg?.description ?? '',
         details: pkg?.details ?? '',
+        pricing_type: pkg?.pricing_type ?? 'fixed',
         price: pkg ? centsToInput(pkg.price_cents) : '0.00',
         deposit: pkg?.deposit_cents ? centsToInput(pkg.deposit_cents) : '',
+        min: pkg?.min_amount_cents ? centsToInput(pkg.min_amount_cents) : '',
+        suggested: pkg?.suggested_amount_cents ? centsToInput(pkg.suggested_amount_cents) : '',
         currency: pkg?.currency ?? defaultCurrency,
         active: pkg?.active ?? true,
         image: null,
     });
 
+    const flexible = data.pricing_type === 'flexible';
+
     transform((d) => ({
         ...d,
         active: d.active ? 1 : 0,
-        price_cents: toCents(d.price),
-        deposit_cents: d.deposit.trim() === '' ? null : toCents(d.deposit),
+        price_cents: d.pricing_type === 'flexible' ? null : toCents(d.price),
+        deposit_cents: d.pricing_type === 'flexible' || d.deposit.trim() === '' ? null : toCents(d.deposit),
+        min_amount_cents: d.pricing_type === 'flexible' && d.min.trim() !== '' ? toCents(d.min) : null,
+        suggested_amount_cents: d.pricing_type === 'flexible' && d.suggested.trim() !== '' ? toCents(d.suggested) : null,
     }));
 
     // Server-side errors are keyed by the transformed names (price_cents, etc.).
@@ -188,7 +213,7 @@ function PackageModal({ onClose, pkg, defaultCurrency }: { onClose: () => void; 
     };
 
     const del = () => {
-        if (confirm('Delete this package? Existing bookings are kept.')) {
+        if (confirm('Delete this payment link? Existing payments are kept.')) {
             router.delete(route('packages.destroy', pkg!.id), { onSuccess: onClose });
         }
     };
@@ -199,7 +224,7 @@ function PackageModal({ onClose, pkg, defaultCurrency }: { onClose: () => void; 
         <Modal show onClose={onClose} maxWidth="lg">
             <form onSubmit={submit} className="space-y-4 p-6">
                 <div className="flex items-center justify-between">
-                    <h2 className="text-sm font-semibold text-neutral-900">{isEdit ? 'Edit package' : 'New package'}</h2>
+                    <h2 className="text-sm font-semibold text-neutral-900">{isEdit ? 'Edit payment link' : 'New payment link'}</h2>
                     <button type="button" onClick={onClose} className="text-neutral-400 hover:text-neutral-700">✕</button>
                 </div>
 
@@ -219,24 +244,57 @@ function PackageModal({ onClose, pkg, defaultCurrency }: { onClose: () => void; 
                     <textarea className={field} rows={3} value={data.details} onChange={(e) => setData('details', e.target.value)} placeholder="One line per item" />
                 </div>
 
-                <div className="grid grid-cols-3 gap-3">
-                    <div>
-                        <span className="label">Price</span>
-                        <input className={field} value={data.price} onChange={(e) => setData('price', e.target.value)} placeholder="0.00" />
-                        {fieldErrors.price_cents && <p className="mt-1 text-xs text-red-600">{fieldErrors.price_cents}</p>}
-                    </div>
-                    <div>
-                        <span className="label">Deposit (optional)</span>
-                        <input className={field} value={data.deposit} onChange={(e) => setData('deposit', e.target.value)} placeholder="—" />
-                        {fieldErrors.deposit_cents && <p className="mt-1 text-xs text-red-600">{fieldErrors.deposit_cents}</p>}
-                    </div>
-                    <div>
-                        <span className="label">Currency</span>
-                        <select className={field} value={data.currency} onChange={(e) => setData('currency', e.target.value)}>
-                            {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
-                        </select>
+                <div>
+                    <span className="label">Payment type</span>
+                    <div className="mt-1 grid grid-cols-2 gap-2">
+                        {([['fixed', 'Fixed price', 'A set amount (with optional deposit)'], ['flexible', 'Flexible', 'Customer chooses the amount — a tip jar']] as const).map(([key, title, sub]) => (
+                            <button
+                                key={key}
+                                type="button"
+                                onClick={() => setData('pricing_type', key)}
+                                className={`rounded-lg border p-3 text-left transition ${data.pricing_type === key ? 'border-neutral-900 ring-1 ring-neutral-900' : 'border-neutral-200 hover:border-neutral-400'}`}
+                            >
+                                <span className="block text-sm font-medium text-neutral-900">{title}</span>
+                                <span className="mt-0.5 block text-xs text-neutral-500">{sub}</span>
+                            </button>
+                        ))}
                     </div>
                 </div>
+
+                {flexible ? (
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <span className="label">Minimum (optional)</span>
+                            <input className={field} value={data.min} onChange={(e) => setData('min', e.target.value)} placeholder="—" />
+                            {fieldErrors.min_amount_cents && <p className="mt-1 text-xs text-red-600">{fieldErrors.min_amount_cents}</p>}
+                        </div>
+                        <div>
+                            <span className="label">Currency</span>
+                            <select className={field} value={data.currency} onChange={(e) => setData('currency', e.target.value)}>
+                                {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-3 gap-3">
+                        <div>
+                            <span className="label">Price</span>
+                            <input className={field} value={data.price} onChange={(e) => setData('price', e.target.value)} placeholder="0.00" />
+                            {fieldErrors.price_cents && <p className="mt-1 text-xs text-red-600">{fieldErrors.price_cents}</p>}
+                        </div>
+                        <div>
+                            <span className="label">Deposit (optional)</span>
+                            <input className={field} value={data.deposit} onChange={(e) => setData('deposit', e.target.value)} placeholder="—" />
+                            {fieldErrors.deposit_cents && <p className="mt-1 text-xs text-red-600">{fieldErrors.deposit_cents}</p>}
+                        </div>
+                        <div>
+                            <span className="label">Currency</span>
+                            <select className={field} value={data.currency} onChange={(e) => setData('currency', e.target.value)}>
+                                {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                )}
 
                 <div>
                     <span className="label">Image</span>
@@ -247,7 +305,7 @@ function PackageModal({ onClose, pkg, defaultCurrency }: { onClose: () => void; 
 
                 <label className="flex items-center gap-2 text-sm text-neutral-700">
                     <input type="checkbox" checked={data.active} onChange={(e) => setData('active', e.target.checked)} className="rounded border-neutral-300" />
-                    Active (shown on your packages page)
+                    Active (shown on your payments page)
                 </label>
 
                 <div className="flex items-center justify-between pt-2">

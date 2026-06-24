@@ -20,30 +20,40 @@ class FavouriteController extends Controller
     public function updateVisitor(Request $request, string $slug): JsonResponse
     {
         $collection = $this->resolveCollection($slug);
+
+        // Email identifies the visitor (so favourites can be retrieved later);
+        // name is optional.
+        $validated = $request->validate([
+            'email' => 'required|email|max:255',
+            'name' => 'nullable|string|max:100',
+        ]);
+
         $visitor = $this->resolveVisitor($collection);
 
         if (! $visitor) {
-            $visitor = GalleryVisitor::create([
-                'collection_id' => $collection->id,
-                'token' => Str::random(40),
-                'last_seen_at' => now(),
-            ]);
+            // No active session: retrieve an existing identity by email so the
+            // visitor gets their previous favourites back (any device), else start
+            // a fresh one.
+            $visitor = GalleryVisitor::where('collection_id', $collection->id)
+                ->where('email', $validated['email'])
+                ->latest('id')
+                ->first()
+                ?? GalleryVisitor::create([
+                    'collection_id' => $collection->id,
+                    'token' => Str::random(40),
+                ]);
             session()->put("gallery_visitor_{$collection->id}", $visitor->token);
         }
 
-        $validated = $request->validate([
-            'name' => 'required|string|max:100',
-            'email' => 'nullable|email|max:255',
-        ]);
-
         $visitor->update([
-            'name' => $validated['name'],
-            'email' => $validated['email'] ?? $visitor->email,
+            'email' => $validated['email'],
+            'name' => $validated['name'] ?? $visitor->name,
             'last_seen_at' => now(),
         ]);
 
         return response()->json([
             'visitor' => ['name' => $visitor->name, 'email' => $visitor->email],
+            'lists' => $this->serializeLists($visitor, $collection),
         ]);
     }
 

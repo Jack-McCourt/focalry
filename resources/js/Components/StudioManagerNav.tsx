@@ -12,49 +12,52 @@ type Section =
     | 'meetings'
     | 'bookings';
 
-const SECTIONS: { key: Section; label: string; href: string | null }[] = [
-    { key: 'contacts', label: 'Contacts', href: '/contacts' },
-    { key: 'projects', label: 'Projects', href: '/projects' },
-    { key: 'tasks', label: 'Tasks', href: '/tasks' },
-    { key: 'proposals', label: 'Proposals', href: '/proposals' },
-    { key: 'invoices', label: 'Invoices', href: '/invoices' },
-    { key: 'contracts', label: 'Contracts', href: '/contracts' },
-    { key: 'questionnaires', label: 'Questionnaires', href: '/questionnaires' },
-    { key: 'workflows', label: 'Workflows', href: '/workflows' },
-    { key: 'meetings', label: 'Meetings', href: '/meetings' },
-    { key: 'bookings', label: 'Bookings', href: '/packages' },
+type SectionItem = { key: Section; label: string; href: string };
+type Group = { key: string; label: string; items: SectionItem[] };
+
+// Top-level groups. Each top tab opens its first section; a sub-nav row shows
+// the sections within the active group.
+const GROUPS: Group[] = [
+    {
+        key: 'clients',
+        label: 'Clients',
+        items: [
+            { key: 'contacts', label: 'Contacts', href: '/contacts' },
+            { key: 'projects', label: 'Projects', href: '/projects' },
+        ],
+    },
+    {
+        key: 'documents',
+        label: 'Documents',
+        items: [
+            { key: 'proposals', label: 'Proposals', href: '/proposals' },
+            { key: 'invoices', label: 'Invoices', href: '/invoices' },
+            { key: 'contracts', label: 'Contracts', href: '/contracts' },
+            { key: 'questionnaires', label: 'Questionnaires', href: '/questionnaires' },
+        ],
+    },
+    {
+        key: 'scheduling',
+        label: 'Scheduling',
+        items: [
+            { key: 'meetings', label: 'Meetings', href: '/meetings' },
+            { key: 'bookings', label: 'Bookings', href: '/packages' },
+        ],
+    },
+    {
+        key: 'automation',
+        label: 'Automation',
+        items: [
+            { key: 'tasks', label: 'Tasks', href: '/tasks' },
+            { key: 'workflows', label: 'Workflows', href: '/workflows' },
+        ],
+    },
 ];
 
-export default function StudioManagerNav({ active }: { active: Section }) {
-    return (
-        <nav className="flex items-center gap-1 overflow-x-auto border-b border-neutral-200 px-4 sm:px-8">
-            {SECTIONS.map((s) => {
-                const isActive = s.key === active;
-                const classes = `relative -mb-px border-b-2 px-3 py-3 text-sm font-medium transition ${
-                    isActive
-                        ? 'border-neutral-900 text-neutral-900'
-                        : 'border-transparent text-neutral-400'
-                } ${s.href && !isActive ? 'hover:text-neutral-700' : ''} ${
-                    !s.href ? 'cursor-default' : ''
-                }`;
-
-                if (!s.href) {
-                    return (
-                        <span key={s.key} className={classes}>
-                            {s.label}
-                            <span className="ml-1.5 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-neutral-400">
-                                Soon
-                            </span>
-                        </span>
-                    );
-                }
-
-                return (
-                    <Link key={s.key} href={s.href} className={classes}>
-                        {s.label}
-                    </Link>
-                );
-            })}
-        </nav>
-    );
+// The Studio Manager sub-navigation now lives in the left sidebar (the
+// product-area menu in AuthenticatedLayout), so this in-page horizontal tab bar
+// is retired. Kept as a no-op component so the many pages that render it don't
+// each need editing.
+export default function StudioManagerNav(_props: { active: Section }) {
+    return null;
 }

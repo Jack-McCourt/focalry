@@ -20,19 +20,19 @@ export default function Index({ templates }: PageProps<{ templates: TemplateRow[
     return (
         <AuthenticatedLayout
             header={
-                <div className="flex w-full items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-sm">
-                        <Link href={route('contracts.index')} className="text-neutral-400 hover:text-neutral-700">Contracts</Link>
-                        <span className="text-neutral-300">/</span>
-                        <span className="font-semibold text-neutral-900">Templates</span>
-                    </div>
-                    <Link href={route('contracts.templates.create')} className="btn-primary">
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                        </svg>
-                        New template
-                    </Link>
+                <div className="flex items-center gap-2 text-sm">
+                    <Link href={route('contracts.index')} className="text-neutral-400 hover:text-neutral-700">Contracts</Link>
+                    <span className="text-neutral-300">/</span>
+                    <span className="font-semibold text-neutral-900">Templates</span>
                 </div>
+            }
+            actions={
+                <Link href={route('contracts.templates.create')} className="btn-primary">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    New template
+                </Link>
             }
         >
             <Head title="Contract templates" />

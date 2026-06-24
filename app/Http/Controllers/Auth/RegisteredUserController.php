@@ -30,6 +30,7 @@ class RegisteredUserController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
+            'company_name' => 'nullable|string|max:255',
             'email' => 'required|string|lowercase|email|max:255|unique:users',
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'address_line1' => 'required|string|max:255',
@@ -42,7 +43,8 @@ class RegisteredUserController extends Controller
 
         $user = DB::transaction(function () use ($request, $validated) {
             $studio = Studio::create([
-                'name' => $request->name."'s Studio",
+                // Use the company name when given; otherwise default to the person's name.
+                'name' => filled($validated['company_name'] ?? null) ? trim($validated['company_name']) : $request->name."'s Studio",
                 'slug' => Str::slug($request->name.'-'.Str::random(6)),
                 'email' => $request->email,
                 'address_line1' => $validated['address_line1'],

@@ -7,7 +7,6 @@ use App\Models\Collection;
 use App\Models\FavouriteList;
 use App\Support\PhotoArchive;
 use Illuminate\Support\Str;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FavouriteListDownloadController extends Controller
@@ -18,7 +17,7 @@ class FavouriteListDownloadController extends Controller
      * The Collection is resolved through the BelongsToStudio global scope, so a
      * studio can only download lists belonging to its own collections (404 otherwise).
      */
-    public function download(Collection $collection, FavouriteList $list, PhotoArchive $archive): BinaryFileResponse
+    public function download(Collection $collection, FavouriteList $list, PhotoArchive $archive): StreamedResponse
     {
         abort_unless($list->collection_id === $collection->id, 404);
 

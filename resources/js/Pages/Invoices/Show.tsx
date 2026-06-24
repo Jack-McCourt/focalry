@@ -131,7 +131,7 @@ export default function Show({ invoice, email_defaults }: PageProps<{ invoice: I
     return (
         <AuthenticatedLayout
             header={
-                <div className="flex w-full items-center justify-between">
+                <div className="flex w-full flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2 text-sm">
                         <Link href={route('invoices.index')} className="text-neutral-400 hover:text-neutral-700">Invoices</Link>
                         <span className="text-neutral-300">/</span>

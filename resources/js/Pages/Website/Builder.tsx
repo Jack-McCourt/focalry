@@ -1,17 +1,22 @@
 import ColorPicker from '@/Components/ColorPicker';
 import SiteShell from '@/Components/site/SiteShell';
-import { addChildToGrid, BLOCK_LIBRARY, blockLabel, findBlock, makeBlock, moveBlockInTree, removeBlockFromTree, updateBlockInTree } from '@/Components/site/blocks';
+import { addChildToGrid, blockLabel, cloneBlock, findBlock, makeBlock, moveBlockInTree, removeBlockFromTree, reorderTopLevel, updateBlockInTree } from '@/Components/site/blocks';
 import { BlockEditor, ImageField, NavEditor } from '@/Components/site/editors';
+import BlockPicker from '@/Components/site/BlockPicker';
+import GoogleReviewsModal from '@/Components/site/GoogleReviewsModal';
+import PreviewFrame from '@/Components/site/PreviewFrame';
+import { SITE_FONTS } from '@/lib/siteFonts';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { BlockSettings, BlogPostCard, PackageCard, PageProps, SiteBlock, SiteBlockType, SiteData, SiteNavItem, SitePageData, SiteTemplateMeta, SiteTheme } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 // Placeholder posts so the blog block shows something in the builder preview.
 const SAMPLE_POSTS: BlogPostCard[] = [
-    { title: 'A spring wedding at the coast', slug: 'sample-1', excerpt: 'A radiant day by the sea full of colour and joy.', cover_image: null, published_at: new Date().toISOString(), url: '#' },
-    { title: 'Golden hour portraits', slug: 'sample-2', excerpt: 'Why the last hour of light is my favourite.', cover_image: null, published_at: new Date().toISOString(), url: '#' },
-    { title: 'Behind the scenes', slug: 'sample-3', excerpt: 'A peek at how a shoot really comes together.', cover_image: null, published_at: new Date().toISOString(), url: '#' },
+    { title: 'A spring wedding at the coast', slug: 'sample-1', excerpt: 'A radiant day by the sea full of colour and joy.', category: 'Weddings', cover_image: null, published_at: new Date().toISOString(), url: '#' },
+    { title: 'Golden hour portraits', slug: 'sample-2', excerpt: 'Why the last hour of light is my favourite.', category: 'Portraits', cover_image: null, published_at: new Date().toISOString(), url: '#' },
+    { title: 'Behind the scenes', slug: 'sample-3', excerpt: 'A peek at how a shoot really comes together.', category: 'Tips', cover_image: null, published_at: new Date().toISOString(), url: '#' },
 ];
 
 // Placeholder packages so the packages block shows something in the preview.
@@ -31,9 +36,18 @@ export default function Builder({
     const [contactEmail, setContactEmail] = useState(site.contact_email ?? '');
     const [seoTitle, setSeoTitle] = useState(site.seo_title ?? '');
     const [seoDescription, setSeoDescription] = useState(site.seo_description ?? '');
+    const [faviconUrl, setFaviconUrl] = useState(site.favicon_url ?? '');
+    const [ogImageUrl, setOgImageUrl] = useState(site.og_image_url ?? '');
+    const [redirects, setRedirects] = useState<{ from: string; to: string }[]>(site.redirects ?? []);
+    const [savedSections, setSavedSections] = useState<{ id: string; name: string; block: SiteBlock }[]>(site.saved_sections ?? []);
     const [theme, setTheme] = useState<SiteTheme>(site.theme);
     const [headerNav, setHeaderNav] = useState<SiteNavItem[]>(site.header_nav ?? []);
     const [footerNav, setFooterNav] = useState<SiteNavItem[]>(site.footer_nav ?? []);
+    const [headCode, setHeadCode] = useState(site.head_code ?? '');
+    const [bodyCode, setBodyCode] = useState(site.body_code ?? '');
+    const [cookieConsent, setCookieConsent] = useState(!!site.cookie_consent);
+    const [cookieMessage, setCookieMessage] = useState(site.cookie_message ?? '');
+    const [cookiePolicyUrl, setCookiePolicyUrl] = useState(site.cookie_policy_url ?? '');
     const [pages, setPages] = useState<SitePageData[]>(site.pages);
 
     const [activePage, setActivePage] = useState(0);
@@ -42,15 +56,17 @@ export default function Builder({
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [showAddBlock, setShowAddBlock] = useState(false);
-    const [settingsOpen, setSettingsOpen] = useState(false);
-    const [settingsTab, setSettingsTab] = useState<'navigation' | 'theme' | 'general' | 'templates'>('navigation');
+    const [configureBlockId, setConfigureBlockId] = useState<string | null>(null);
+    const [device, setDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
+    // Kept only to dim the active-page highlight; settings is now its own page.
+    const [settingsOpen] = useState(false);
 
-    const openSettings = () => { setSettingsOpen(true); setSelectedBlockId(null); };
-    const selectBlock = (id: string | null) => { setSelectedBlockId(id); setSettingsOpen(false); };
-    const goToPage = (i: number) => { setActivePage(i); setSelectedBlockId(null); setSettingsOpen(false); };
+    const selectBlock = (id: string | null) => { setSelectedBlockId(id); };
+    const goToPage = (i: number) => { setActivePage(i); setSelectedBlockId(null); };
 
     const page = pages[activePage];
     const selectedBlock = page ? findBlock(page.blocks, selectedBlockId ?? '') : null;
+    const configureBlock = page && configureBlockId ? findBlock(page.blocks, configureBlockId) : null;
     const publicUrl = `/site/${slug}`;
 
     // ── Block mutations (immutable, recursive — blocks may be nested in grids) ──
@@ -83,10 +99,47 @@ export default function Builder({
 
     const moveBlock = (id: string, dir: -1 | 1) => writeBlocks(moveBlockInTree(page.blocks, id, dir));
 
+    const duplicateBlock = (id: string) => {
+        const idx = page.blocks.findIndex((b) => b.id === id);
+        if (idx === -1) return; // only top-level blocks are duplicatable from the list
+        const copy = cloneBlock(page.blocks[idx]);
+        const next = [...page.blocks];
+        next.splice(idx + 1, 0, copy);
+        writeBlocks(next);
+        selectBlock(copy.id);
+    };
+
+    const saveAsSection = (id: string) => {
+        const block = findBlock(page.blocks, id);
+        if (!block) return;
+        const name = window.prompt('Name this reusable section', blockLabel(block.type));
+        if (!name) return;
+        const sectionId = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `s_${Date.now()}`;
+        setSavedSections((prev) => [...prev, { id: sectionId, name, block: cloneBlock(block) }]);
+    };
+
+    const insertSection = (sectionId: string) => {
+        const section = savedSections.find((s) => s.id === sectionId);
+        if (!section) return;
+        const block = cloneBlock(section.block);
+        writeBlocks([...page.blocks, block]);
+        selectBlock(block.id);
+        setShowAddBlock(false);
+    };
+
+    const deleteSection = (sectionId: string) => setSavedSections((prev) => prev.filter((s) => s.id !== sectionId));
+
+    const [dragIndex, setDragIndex] = useState<number | null>(null);
+    const dropBlock = (to: number) => {
+        if (dragIndex === null) return;
+        writeBlocks(reorderTopLevel(page.blocks, dragIndex, to));
+        setDragIndex(null);
+    };
+
     // ── Page mutations ──
     const blogPageExists = pages.some((p) => p.is_blog && !p.is_post);
 
-    const selectLast = () => { setActivePage(pages.length); setSelectedBlockId(null); setSettingsOpen(false); };
+    const selectLast = () => { setActivePage(pages.length); setSelectedBlockId(null); };
 
     const addPage = () => {
         const n = pages.filter((p) => !p.is_post).length + 1;
@@ -132,11 +185,35 @@ export default function Builder({
         });
         setActivePage(0);
         setSelectedBlockId(null);
-        setSettingsOpen(false);
+    };
+
+    const duplicatePage = (index: number) => {
+        const src = pages[index];
+        const n = pages.filter((p) => !p.is_post).length + 1;
+        const copy: SitePageData = {
+            ...src,
+            id: undefined,
+            is_home: false,
+            title: `${src.title} copy`,
+            slug: src.is_post ? '' : `${src.slug || 'page'}-${n}`,
+            status: src.is_post ? 'draft' : src.status,
+            blocks: src.blocks.map((b) => cloneBlock(b)),
+        };
+        setPages((prev) => {
+            const next = [...prev];
+            next.splice(index + 1, 0, copy);
+            return next;
+        });
     };
 
     const setHome = (index: number) =>
         setPages((prev) => prev.map((p, i) => ({ ...p, is_home: !p.is_post && i === index })));
+
+    const set404 = (index: number, value: boolean) =>
+        setPages((prev) => prev.map((p, i) => {
+            if (i === index) return { ...p, is_404: value };
+            return value ? { ...p, is_404: false } : p; // only one 404 page
+        }));
 
     const setBlog = (index: number, value: boolean) => {
         if (!value && pages.some((p) => p.is_post)) {
@@ -149,7 +226,14 @@ export default function Builder({
     };
 
     // ── Persistence ──
+    // A stable snapshot of everything that gets saved — drives autosave + the
+    // "saved/unsaved" indicator.
+    const snapshot = JSON.stringify({ name, slug, contactEmail, seoTitle, seoDescription, faviconUrl, ogImageUrl, redirects, savedSections, theme, headerNav, footerNav, headCode, bodyCode, cookieConsent, cookieMessage, cookiePolicyUrl, pages });
+    const savedSnapshotRef = useRef(snapshot);
+    const dirty = snapshot !== savedSnapshotRef.current;
+
     const save = () => {
+        const saving = snapshot;
         setSaving(true);
         setErrors({});
         router.put(
@@ -160,19 +244,83 @@ export default function Builder({
                 contact_email: contactEmail || null,
                 seo_title: seoTitle || null,
                 seo_description: seoDescription || null,
+                favicon_url: faviconUrl || null,
+                og_image_url: ogImageUrl || null,
+                redirects,
+                saved_sections: savedSections,
                 theme,
                 header_nav: headerNav,
                 footer_nav: footerNav,
+                head_code: headCode || null,
+                body_code: bodyCode || null,
+                cookie_consent: cookieConsent,
+                cookie_message: cookieMessage || null,
+                cookie_policy_url: cookiePolicyUrl || null,
                 pages,
             } as any,
             {
                 preserveScroll: true,
                 preserveState: true,
+                onSuccess: () => { savedSnapshotRef.current = saving; },
                 onError: (e) => setErrors(e as Record<string, string>),
                 onFinish: () => setSaving(false),
             },
         );
     };
+
+    // ── Autosave (debounced) ──
+    useEffect(() => {
+        if (!dirty) return;
+        const t = setTimeout(() => save(), 2000);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [snapshot]);
+
+    // ── Undo / redo (history of the page tree) ──
+    const undoStack = useRef<SitePageData[][]>([]);
+    const redoStack = useRef<SitePageData[][]>([]);
+    const lastPages = useRef<SitePageData[]>(pages);
+    const restoring = useRef(false);
+
+    useEffect(() => {
+        if (restoring.current) { restoring.current = false; lastPages.current = pages; return; }
+        if (lastPages.current !== pages) {
+            undoStack.current.push(lastPages.current);
+            if (undoStack.current.length > 60) undoStack.current.shift();
+            redoStack.current = [];
+            lastPages.current = pages;
+        }
+    }, [pages]);
+
+    const restorePages = (next: SitePageData[]) => {
+        restoring.current = true;
+        setPages(next);
+        setSelectedBlockId(null);
+        setActivePage((a) => Math.min(a, next.length - 1));
+    };
+    const undo = () => {
+        if (undoStack.current.length === 0) return;
+        redoStack.current.push(lastPages.current);
+        restorePages(undoStack.current.pop()!);
+    };
+    const redo = () => {
+        if (redoStack.current.length === 0) return;
+        undoStack.current.push(lastPages.current);
+        restorePages(redoStack.current.pop()!);
+    };
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return;
+            const el = e.target as HTMLElement;
+            if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return; // let fields handle their own undo
+            e.preventDefault();
+            e.shiftKey ? redo() : undo();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const togglePublish = () => {
         const next = !isPublished;
@@ -183,9 +331,12 @@ export default function Builder({
         });
     };
 
-    const applyTemplate = (key: string) => {
-        if (!window.confirm('Replace all pages and content with this template? This cannot be undone.')) return;
-        router.post(route('website.template'), { template: key }, { onSuccess: () => location.reload() });
+    const applyTemplate = (key: string, replace = false) => {
+        const msg = replace
+            ? 'Replace all pages and content with this template’s sample pages? This cannot be undone.'
+            : 'Apply this template’s colours & fonts? Your pages and content are kept.';
+        if (!window.confirm(msg)) return;
+        router.post(route('website.template'), { template: key, replace }, { onSuccess: () => location.reload() });
     };
 
     const pageRefs = pages.filter((p) => !p.is_post).map((p) => ({ title: p.title, slug: p.slug, is_home: p.is_home }));
@@ -208,20 +359,16 @@ export default function Builder({
                         </span>
                     </div>
                     <div className="flex items-center gap-2">
-                        <Link href={route('website.leads')} className="btn-secondary">
-                            Leads{leads_count > 0 ? ` (${leads_count})` : ''}
-                        </Link>
-                        <button
-                            onClick={openSettings}
-                            className={`btn-secondary ${settingsOpen ? 'border-neutral-900 text-neutral-900' : ''}`}
-                            title="Site settings"
-                        >
-                            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            Settings
-                        </button>
+                        <div className="mr-1 flex items-center gap-0.5">
+                            <button onClick={undo} title="Undo (Ctrl+Z)" aria-label="Undo" className="rounded-md p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700">
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" /></svg>
+                            </button>
+                            <button onClick={redo} title="Redo (Ctrl+Shift+Z)" aria-label="Redo" className="rounded-md p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700">
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15 15l6-6m0 0l-6-6m6 6H9a6 6 0 000 12h3" /></svg>
+                            </button>
+                        </div>
+                        <span className="text-xs text-neutral-400">{saving ? 'Saving…' : dirty ? 'Unsaved' : 'Saved'}</span>
+                        <Link href={route('website.settings')} className="btn-secondary">Settings</Link>
                         {isPublished ? (
                             <a href={publicUrl} target="_blank" rel="noreferrer" className="btn-secondary">View site</a>
                         ) : (
@@ -281,28 +428,27 @@ export default function Builder({
                     <div className="flex-1 p-3">
                         <div className="mb-2 flex items-center justify-between">
                             <span className="label">Blocks</span>
-                            <div className="relative">
-                                <button onClick={() => setShowAddBlock((s) => !s)} className="text-xs font-medium text-neutral-500 hover:text-neutral-900">+ Add block</button>
-                                {showAddBlock && (
-                                    <div className="absolute right-0 z-30 mt-1 w-60 rounded-lg border border-neutral-200 bg-white p-1 shadow-lg">
-                                        {BLOCK_LIBRARY.map((b) => (
-                                            <button key={b.type} onClick={() => addBlock(b.type)} className="block w-full rounded-md px-2.5 py-2 text-left hover:bg-neutral-50">
-                                                <span className="block text-sm font-medium text-neutral-800">{b.label}</span>
-                                                <span className="block text-xs text-neutral-400">{b.hint}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                            <button onClick={() => setShowAddBlock(true)} className="text-xs font-medium text-neutral-500 hover:text-neutral-900">+ Add block</button>
                         </div>
 
                         <div className="space-y-1">
-                            {page?.blocks.map((b) => (
+                            {page?.blocks.map((b, i) => (
                                 <div
                                     key={b.id}
-                                    className={`group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm transition ${b.id === selectedBlockId ? 'bg-blue-50 text-blue-800' : 'text-neutral-700 hover:bg-neutral-100'}`}
+                                    draggable
+                                    onDragStart={() => setDragIndex(i)}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={() => dropBlock(i)}
+                                    onDragEnd={() => setDragIndex(null)}
+                                    className={`group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm transition ${b.id === selectedBlockId ? 'bg-blue-50 text-blue-800' : 'text-neutral-700 hover:bg-neutral-100'} ${dragIndex === i ? 'opacity-40' : ''}`}
                                 >
+                                    <span className="cursor-grab text-neutral-300 group-hover:text-neutral-400" title="Drag to reorder">
+                                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M7 4a1 1 0 110-2 1 1 0 010 2zM7 11a1 1 0 110-2 1 1 0 010 2zM7 18a1 1 0 110-2 1 1 0 010 2zM13 4a1 1 0 110-2 1 1 0 010 2zM13 11a1 1 0 110-2 1 1 0 010 2zM13 18a1 1 0 110-2 1 1 0 010 2z" /></svg>
+                                    </span>
                                     <button onClick={() => selectBlock(b.id)} className="flex-1 truncate text-left">{blockLabel(b.type)}</button>
+                                    <button onClick={() => duplicateBlock(b.id)} className="opacity-0 group-hover:opacity-100" title="Duplicate">
+                                        <svg className="h-3.5 w-3.5 text-neutral-400 hover:text-neutral-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V9.375c0-.621.504-1.125 1.125-1.125H6.75M15.75 17.25h3.375c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125h-9.75A1.125 1.125 0 008.25 5.625v3.375" /></svg>
+                                    </button>
                                     <button onClick={() => moveBlock(b.id, -1)} className="opacity-0 group-hover:opacity-100" title="Move up">
                                         <svg className="h-3.5 w-3.5 text-neutral-400 hover:text-neutral-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /></svg>
                                     </button>
@@ -324,62 +470,80 @@ export default function Builder({
                     <div className="flex shrink-0 items-center gap-2 border-b border-neutral-200 bg-white px-4 py-2">
                         <div className="flex gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-neutral-200" /><span className="h-2.5 w-2.5 rounded-full bg-neutral-200" /><span className="h-2.5 w-2.5 rounded-full bg-neutral-200" /></div>
                         <div className="mx-auto truncate rounded-md bg-neutral-100 px-3 py-1 text-xs text-neutral-500">{previewPath}</div>
+                        <div className="flex items-center gap-0.5 rounded-md bg-neutral-100 p-0.5">
+                            {([['desktop', 'M2.25 12.75V6A2.25 2.25 0 014.5 3.75h15A2.25 2.25 0 0121.75 6v6.75m-19.5 0A2.25 2.25 0 004.5 15h15a2.25 2.25 0 002.25-2.25m-19.5 0h19.5M8.25 20.25h7.5'], ['tablet', 'M10.5 19.5h3M6.75 21.75h10.5a1.5 1.5 0 001.5-1.5V3.75a1.5 1.5 0 00-1.5-1.5H6.75a1.5 1.5 0 00-1.5 1.5v16.5a1.5 1.5 0 001.5 1.5z'], ['mobile', 'M10.5 18.75h3M8.25 21.75h7.5a1.5 1.5 0 001.5-1.5V3.75a1.5 1.5 0 00-1.5-1.5h-7.5a1.5 1.5 0 00-1.5 1.5v16.5a1.5 1.5 0 001.5 1.5z']] as const).map(([d, path]) => (
+                                <button key={d} onClick={() => setDevice(d)} title={d} aria-label={d} className={`rounded p-1.5 transition ${device === d ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400 hover:text-neutral-700'}`}>
+                                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d={path} /></svg>
+                                </button>
+                            ))}
+                        </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto">
-                        <div className="mx-auto my-4 max-w-5xl overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-neutral-950/5">
-                            <SiteShell
-                                siteName={name}
-                                siteSlug={slug}
-                                theme={theme}
-                                pages={pageRefs}
-                                headerNav={headerNav}
-                                footerNav={footerNav}
-                                blocks={page?.blocks ?? []}
-                                activeSlug={page?.slug ?? ''}
-                                interactive={false}
-                                posts={SAMPLE_POSTS}
-                                packages={SAMPLE_PACKAGES}
-                                editing={{ selectedId: selectedBlockId, onSelect: selectBlock, onDelete: removeBlock, onAddChild: addChild }}
-                            />
+                    <div className="flex-1 overflow-hidden p-4">
+                        <div className={`mx-auto h-full overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-neutral-950/5 transition-all ${device === 'mobile' ? 'max-w-[390px]' : device === 'tablet' ? 'max-w-[834px]' : 'max-w-none'}`}>
+                            <PreviewFrame>
+                                <SiteShell
+                                    siteName={name}
+                                    siteSlug={slug}
+                                    theme={theme}
+                                    pages={pageRefs}
+                                    headerNav={headerNav}
+                                    footerNav={footerNav}
+                                    blocks={page?.blocks ?? []}
+                                    activeSlug={page?.slug ?? ''}
+                                    interactive={false}
+                                    posts={SAMPLE_POSTS}
+                                    packages={SAMPLE_PACKAGES}
+                                    editing={{ selectedId: selectedBlockId, onSelect: selectBlock, onDelete: removeBlock, onAddChild: addChild, onConfigure: setConfigureBlockId }}
+                                />
+                            </PreviewFrame>
                         </div>
                     </div>
                 </div>
 
-                {/* ── Right: contextual panel (site settings / block / page) ── */}
+                {/* ── Right: contextual panel (block / page) ── */}
                 <aside className="w-80 shrink-0 overflow-y-auto border-l border-neutral-200 bg-white">
-                    {settingsOpen ? (
-                        <SiteSettings
-                            {...{ name, setName, slug, setSlug, contactEmail, setContactEmail, seoTitle, setSeoTitle, seoDescription, setSeoDescription, theme, setTheme, errors, templates, applyTemplate }}
-                            pageRefs={pageRefs}
-                            headerNav={headerNav}
-                            setHeaderNav={setHeaderNav}
-                            footerNav={footerNav}
-                            setFooterNav={setFooterNav}
-                            tab={settingsTab}
-                            setTab={setSettingsTab}
-                            onClose={() => setSettingsOpen(false)}
-                        />
-                    ) : selectedBlock ? (
+                    {selectedBlock ? (
                         <div className="p-4">
                             <div className="mb-4 flex items-center justify-between">
                                 <h2 className="text-sm font-semibold text-neutral-900">{blockLabel(selectedBlock.type)} block</h2>
                                 <button onClick={() => setSelectedBlockId(null)} className="text-xs text-neutral-400 hover:text-neutral-700">Done</button>
                             </div>
-                            <BlockEditor block={selectedBlock} onChange={(data) => updateBlock(selectedBlock.id, data)} onSettings={(s) => updateSettings(selectedBlock.id, s)} />
-                            <button onClick={() => removeBlock(selectedBlock.id)} className="mt-6 w-full rounded-md border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50">Delete block</button>
+                            <BlockEditor block={selectedBlock} onChange={(data) => updateBlock(selectedBlock.id, data)} onSettings={(s) => updateSettings(selectedBlock.id, s)} onConfigure={() => setConfigureBlockId(selectedBlock.id)} pages={pageRefs} />
+                            <button onClick={() => saveAsSection(selectedBlock.id)} className="mt-6 w-full rounded-md border border-neutral-200 px-3 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50">Save as reusable section</button>
+                            <button onClick={() => removeBlock(selectedBlock.id)} className="mt-2 w-full rounded-md border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50">Delete block</button>
                         </div>
                     ) : (
-                        <PagePanel page={page} activePage={activePage} pages={pages} updatePageMeta={updatePageMeta} setHome={setHome} setBlog={setBlog} removePage={removePage} onOpenSettings={openSettings} />
+                        <PagePanel page={page} activePage={activePage} pages={pages} updatePageMeta={updatePageMeta} setHome={setHome} setBlog={setBlog} set404={set404} removePage={removePage} duplicatePage={duplicatePage} />
                     )}
                 </aside>
             </div>
+
+            <BlockPicker
+                open={showAddBlock}
+                onClose={() => setShowAddBlock(false)}
+                onAdd={addBlock}
+                savedSections={savedSections}
+                onInsertSection={insertSection}
+                onDeleteSection={deleteSection}
+            />
+
+            {configureBlock?.type === 'reviews' && (
+                <GoogleReviewsModal
+                    open
+                    theme={theme}
+                    data={configureBlock.data as Record<string, any>}
+                    onChange={(data) => updateBlock(configureBlock.id, data)}
+                    onClose={() => setConfigureBlockId(null)}
+                />
+            )}
+
         </AuthenticatedLayout>
     );
 }
 
 // ─── Page panel (right panel when a page is selected) ─────────────────────────
 
-function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, removePage, onOpenSettings }: any) {
+function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, set404, removePage, duplicatePage }: any) {
     if (!page) return null;
 
     const isPost = !!page.is_post;
@@ -418,8 +582,18 @@ function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, 
                             <span className="label mb-1.5 block">Excerpt</span>
                             <textarea className="input" rows={2} value={page.excerpt ?? ''} onChange={(e) => set({ excerpt: e.target.value })} placeholder="Short summary shown in post listings" />
                         </label>
+                        <label className="block">
+                            <span className="label mb-1.5 block">Category</span>
+                            <input className="input" list="post-categories" value={page.category ?? ''} onChange={(e) => set({ category: e.target.value })} placeholder="e.g. Weddings" />
+                            <datalist id="post-categories">
+                                {Array.from(new Set<string>(pages.filter((p: SitePageData) => p.is_post && p.category).map((p: SitePageData) => p.category as string))).map((c: string) => (
+                                    <option key={c} value={c} />
+                                ))}
+                            </datalist>
+                        </label>
                         <ImageField label="Cover image" value={page.cover_image ?? ''} onChange={(v) => set({ cover_image: v })} />
-                        <div className="pt-1">
+                        <div className="flex gap-3 pt-1">
+                            <button onClick={() => duplicatePage(activePage)} className="text-xs text-neutral-600 hover:underline">Duplicate post</button>
                             <button onClick={() => removePage(activePage)} className="text-xs text-red-600 hover:underline">Delete post</button>
                         </div>
                     </>
@@ -431,125 +605,45 @@ function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, 
                         <label className="flex items-center gap-2 text-sm text-neutral-700">
                             <input type="checkbox" checked={!!page.is_blog} onChange={(e) => setBlog(activePage, e.target.checked)} /> Blog page <span className="text-xs text-neutral-400">(posts live here)</span>
                         </label>
-                        {topCount > 1 && (
-                            <div className="pt-1">
+                        <label className="flex items-center gap-2 text-sm text-neutral-700">
+                            <input type="checkbox" checked={!!page.is_404} onChange={(e) => set404(activePage, e.target.checked)} /> 404 page <span className="text-xs text-neutral-400">(shown for missing URLs)</span>
+                        </label>
+                        <div className="flex gap-3 pt-1">
+                            <button onClick={() => duplicatePage(activePage)} className="text-xs text-neutral-600 hover:underline">Duplicate page</button>
+                            {topCount > 1 && (
                                 <button onClick={() => removePage(activePage)} className="text-xs text-red-600 hover:underline">Delete page</button>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </>
                 )}
             </div>
 
             <div className="mt-6 border-t border-neutral-100 pt-4">
-                <button onClick={onOpenSettings} className="text-xs font-medium text-blue-700 hover:underline">
-                    Site settings (menus, theme, domain) →
-                </button>
-            </div>
-        </div>
-    );
-}
-
-// ─── Site settings (general settings page, opened via the Settings button) ────
-
-const SETTINGS_TABS: { key: 'navigation' | 'theme' | 'general' | 'templates'; label: string }[] = [
-    { key: 'navigation', label: 'Menus' },
-    { key: 'theme', label: 'Theme' },
-    { key: 'general', label: 'General' },
-    { key: 'templates', label: 'Templates' },
-];
-
-function SiteSettings(props: any) {
-    const { name, setName, slug, setSlug, contactEmail, setContactEmail, seoTitle, setSeoTitle, seoDescription, setSeoDescription, theme, setTheme, errors, templates, applyTemplate, pageRefs, headerNav, setHeaderNav, footerNav, setFooterNav, tab, setTab, onClose } = props;
-
-    return (
-        <div>
-            <div className="sticky top-0 z-10 border-b border-neutral-100 bg-white">
-                <div className="flex items-center justify-between px-4 pt-4">
-                    <h2 className="text-sm font-semibold text-neutral-900">Site settings</h2>
-                    <button onClick={onClose} className="text-xs text-neutral-400 hover:text-neutral-700">Done</button>
-                </div>
-                <div className="mt-3 flex gap-1 px-2">
-                    {SETTINGS_TABS.map((t) => (
-                        <button
-                            key={t.key}
-                            onClick={() => setTab(t.key)}
-                            className={`relative -mb-px border-b-2 px-2.5 py-2 text-xs font-medium transition ${tab === t.key ? 'border-neutral-900 text-neutral-900' : 'border-transparent text-neutral-400 hover:text-neutral-700'}`}
-                        >
-                            {t.label}
-                        </button>
-                    ))}
-                </div>
+                <ImageField label="Social share image (this page)" value={page.og_image ?? ''} onChange={(v) => set({ og_image: v })} />
+                <p className="mt-1 text-xs text-neutral-400">Overrides the site default when this page is shared.</p>
             </div>
 
-            <div className="p-4">
-                {tab === 'navigation' && (
+            <details className="mt-6 border-t border-neutral-100 pt-4">
+                <summary className="cursor-pointer text-sm font-semibold text-neutral-900">Header &amp; Footer ({isPost ? 'this post' : 'this page'})</summary>
+                <p className="mt-1 text-xs text-neutral-500">Custom code injected on this {isPost ? 'post' : 'page'} only, in addition to the site-wide code under Site settings.</p>
+                <div className="mt-3 space-y-3">
                     <div>
-                        <h3 className="mb-1 text-sm font-semibold text-neutral-900">Header menu</h3>
-                        <p className="mb-3 text-xs text-neutral-500">Links shown in the site header. Leave empty to list all pages automatically.</p>
-                        <NavEditor items={headerNav} pages={pageRefs} onChange={setHeaderNav} />
-                        <h3 className="mb-3 mt-6 text-sm font-semibold text-neutral-900">Footer menu</h3>
-                        <NavEditor items={footerNav} pages={pageRefs} onChange={setFooterNav} />
+                        <span className="label mb-1.5 block">Header code (&lt;head&gt;)</span>
+                        <textarea className="input font-mono text-xs" rows={4} value={page.head_code ?? ''} onChange={(e) => set({ head_code: e.target.value })} placeholder="<!-- e.g. a page-specific conversion pixel -->" />
                     </div>
-                )}
+                    <div>
+                        <span className="label mb-1.5 block">Footer code (before &lt;/body&gt;)</span>
+                        <textarea className="input font-mono text-xs" rows={4} value={page.body_code ?? ''} onChange={(e) => set({ body_code: e.target.value })} />
+                    </div>
+                </div>
+            </details>
 
-                {tab === 'theme' && (
-                    <div className="space-y-3">
-                        <div>
-                            <span className="label mb-1.5 block">Accent colour</span>
-                            <ColorPicker value={theme.primary_color} onChange={(c) => setTheme({ ...theme, primary_color: c })} />
-                        </div>
-                        <label className="block">
-                            <span className="label mb-1.5 block">Font</span>
-                            <select className="input" value={theme.font} onChange={(e) => setTheme({ ...theme, font: e.target.value })}>
-                                <option value="sans">Sans-serif (modern)</option>
-                                <option value="serif">Serif (classic)</option>
-                            </select>
-                        </label>
-                    </div>
-                )}
-
-                {tab === 'general' && (
-                    <div className="space-y-3">
-                        <label className="block">
-                            <span className="label mb-1.5 block">Site name</span>
-                            <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
-                            {errors.name && <p className="mt-1 text-xs text-red-600">{errors.name}</p>}
-                        </label>
-                        <label className="block">
-                            <span className="label mb-1.5 block">Web address</span>
-                            <div className="flex items-center gap-1 text-sm">
-                                <span className="text-neutral-400">/site/</span>
-                                <input className="input" value={slug} onChange={(e) => setSlug(e.target.value)} />
-                            </div>
-                            {errors.slug && <p className="mt-1 text-xs text-red-600">{errors.slug}</p>}
-                        </label>
-                        <label className="block">
-                            <span className="label mb-1.5 block">Contact email</span>
-                            <input className="input" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="you@studio.com" />
-                        </label>
-                        <div className="mt-2 border-t border-neutral-100 pt-3">
-                            <span className="label mb-1.5 block">SEO meta title</span>
-                            <input className="input" value={seoTitle} onChange={(e) => setSeoTitle(e.target.value)} />
-                        </div>
-                        <label className="block">
-                            <span className="label mb-1.5 block">SEO meta description</span>
-                            <textarea className="input" rows={3} value={seoDescription} onChange={(e) => setSeoDescription(e.target.value)} />
-                        </label>
-                    </div>
-                )}
-
-                {tab === 'templates' && (
-                    <div className="space-y-2">
-                        {templates.map((t: SiteTemplateMeta) => (
-                            <div key={t.key} className="rounded-lg border border-neutral-200 p-3">
-                                <p className="text-sm font-medium text-neutral-800">{t.name}</p>
-                                <p className="mt-0.5 text-xs text-neutral-500">{t.description}</p>
-                                <button onClick={() => applyTemplate(t.key)} className="btn-secondary mt-2 w-full justify-center py-1.5 text-xs">Apply template</button>
-                            </div>
-                        ))}
-                    </div>
-                )}
+            <div className="mt-6 border-t border-neutral-100 pt-4">
+                <Link href={route('website.settings')} className="text-xs font-medium text-blue-700 hover:underline">
+                    Site settings (menus, theme, domain) →
+                </Link>
             </div>
         </div>
     );
 }
+

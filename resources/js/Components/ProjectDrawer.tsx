@@ -53,6 +53,16 @@ interface GalleryLite {
     status: string;
 }
 
+interface MessageLite {
+    id: number;
+    conversation_id: number;
+    conversation_subject: string | null;
+    author_name: string;
+    direction: 'inbound' | 'outbound';
+    body: string;
+    created_at: string;
+}
+
 function csrf(): string {
     const m = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
     return m ? decodeURIComponent(m[1]) : '';
@@ -97,6 +107,8 @@ export default function ProjectDrawer({
     const [invoices, setInvoices] = useState<InvoiceLite[]>([]);
     const [contracts, setContracts] = useState<ContractLite[]>([]);
     const [galleries, setGalleries] = useState<GalleryLite[]>([]);
+    const [messages, setMessages] = useState<MessageLite[]>([]);
+    const [openMessage, setOpenMessage] = useState<MessageLite | null>(null);
     const [loading, setLoading] = useState(false);
     const [name, setName] = useState('');
     const [notes, setNotes] = useState<NoteEntry[]>([]);
@@ -112,7 +124,7 @@ export default function ProjectDrawer({
         setLoading(true);
         axios
             .get(route('projects.show', project.id))
-            .then((r) => { setInvoices(r.data.invoices ?? []); setContracts(r.data.contracts ?? []); setNotes(r.data.notes ?? []); setGalleries(r.data.galleries ?? []); })
+            .then((r) => { setInvoices(r.data.invoices ?? []); setContracts(r.data.contracts ?? []); setNotes(r.data.notes ?? []); setGalleries(r.data.galleries ?? []); setMessages(r.data.messages ?? []); })
             .finally(() => setLoading(false));
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [project?.id]);
@@ -160,24 +172,34 @@ export default function ProjectDrawer({
                         </button>
                     </div>
 
-                    {/* Fields */}
-                    <div className="mt-4 grid grid-cols-[7rem,1fr] items-center gap-x-4 gap-y-3 text-sm">
-                        <span className="text-neutral-400">Client</span>
-                        <SearchSelect options={contacts} value={project.contact_id} onChange={(id) => id && onPatch('contact_id', id)} placeholder="Search clients…" emptyText="No clients found" />
+                    {/* Fields — stacked (label above control) on mobile, 2-col on sm+.
+                        Each pair uses `sm:contents` so the wrapper dissolves into
+                        the parent grid on desktop, preserving the original layout. */}
+                    <div className="mt-4 grid grid-cols-1 gap-y-3 text-sm sm:grid-cols-[7rem,1fr] sm:items-center sm:gap-x-4">
+                        <div className="grid grid-cols-1 gap-1 sm:contents">
+                            <span className="text-neutral-400">Client</span>
+                            <SearchSelect options={contacts} value={project.contact_id} onChange={(id) => id && onPatch('contact_id', id)} placeholder="Search clients…" emptyText="No clients found" />
+                        </div>
 
-                        <span className="text-neutral-400">Type</span>
-                        <PillSelect options={types} value={project.type_id} onChange={(id) => onPatch('type_id', id)} placeholder="Set type" />
+                        <div className="grid grid-cols-1 gap-1 sm:contents">
+                            <span className="text-neutral-400">Type</span>
+                            <PillSelect options={types} value={project.type_id} onChange={(id) => onPatch('type_id', id)} placeholder="Set type" />
+                        </div>
 
-                        <span className="text-neutral-400">Status</span>
-                        <PillSelect options={statuses} value={project.status_id} onChange={(id) => onPatch('status_id', id)} placeholder="Set status" />
+                        <div className="grid grid-cols-1 gap-1 sm:contents">
+                            <span className="text-neutral-400">Status</span>
+                            <PillSelect options={statuses} value={project.status_id} onChange={(id) => onPatch('status_id', id)} placeholder="Set status" />
+                        </div>
 
-                        <span className="text-neutral-400">Event date</span>
-                        <input
-                            type="date"
-                            value={project.event_date ?? ''}
-                            onChange={(e) => onPatch('event_date', e.target.value || null)}
-                            className="input w-44"
-                        />
+                        <div className="grid grid-cols-1 gap-1 sm:contents">
+                            <span className="text-neutral-400">Event date</span>
+                            <input
+                                type="date"
+                                value={project.event_date ?? ''}
+                                onChange={(e) => onPatch('event_date', e.target.value || null)}
+                                className="input w-44"
+                            />
+                        </div>
                     </div>
 
                     {/* Notes timeline */}
@@ -238,13 +260,42 @@ export default function ProjectDrawer({
                         </div>
                     </Section>
 
+                    {/* Tagged messages */}
+                    <Section title="Messages">
+                        {loading ? (
+                            <p className="text-sm text-neutral-400">Loading…</p>
+                        ) : messages.length === 0 ? (
+                            <p className="text-sm text-neutral-400">No messages tagged to this project yet. Tag one from the Messages page.</p>
+                        ) : (
+                            <ul className="space-y-2">
+                                {messages.map((m) => (
+                                    <li key={m.id}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setOpenMessage(m)}
+                                            className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-left transition hover:border-neutral-300"
+                                        >
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="truncate text-xs font-medium text-neutral-700">
+                                                    {m.direction === 'inbound' ? m.author_name : `${m.author_name} (you)`}
+                                                </span>
+                                                <span className="shrink-0 text-[11px] text-neutral-400">{noteTime(m.created_at)}</span>
+                                            </div>
+                                            <p className="mt-0.5 line-clamp-2 whitespace-pre-line text-sm text-neutral-600">{m.body}</p>
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </Section>
+
                     {/* Custom fields */}
                     {fields.length > 0 && (
                         <Section title="Details">
                             <div className="pb-4 text-sm">
                                 {fields.map((f) => (
-                                    <div key={f.id} className="flex items-center gap-4 rounded px-2 py-1.5 odd:bg-neutral-50">
-                                        <span className="w-32 shrink-0 text-neutral-400">{f.label}</span>
+                                    <div key={f.id} className="flex flex-col gap-1 rounded px-2 py-1.5 odd:bg-neutral-50 sm:flex-row sm:items-center sm:gap-4">
+                                        <span className="w-full shrink-0 text-neutral-400 sm:w-32">{f.label}</span>
                                         <div className="flex-1">
                                             <CustomFieldEditor
                                                 field={f}
@@ -377,6 +428,41 @@ export default function ProjectDrawer({
                     </Section>
                 </div>
             )}
+
+            {/* Full tagged-message popup, with a deep link back to its place in the thread */}
+            <Modal show={!!openMessage} onClose={() => setOpenMessage(null)} maxWidth="lg">
+                {openMessage && (
+                    <div className="p-6">
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                                <p className="text-sm font-semibold text-neutral-900">
+                                    {openMessage.direction === 'inbound' ? openMessage.author_name : `${openMessage.author_name} (you)`}
+                                </p>
+                                <p className="truncate text-xs text-neutral-400">
+                                    {openMessage.conversation_subject ?? 'Conversation'} · {noteTime(openMessage.created_at)}
+                                </p>
+                            </div>
+                            <button onClick={() => setOpenMessage(null)} className="shrink-0 text-neutral-400 hover:text-neutral-700">
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <p className="mt-4 max-h-[55vh] overflow-y-auto whitespace-pre-line text-sm leading-relaxed text-neutral-700">
+                            {openMessage.body}
+                        </p>
+                        <div className="mt-6 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => router.visit(`${route('messages.show', openMessage.conversation_id)}#message-${openMessage.id}`)}
+                                className="btn-primary"
+                            >
+                                View in conversation
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
         </Modal>
     );
 }

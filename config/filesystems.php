@@ -67,6 +67,11 @@ return [
             'region' => env('WASABI_REGION', 'us-east-1'),
             'bucket' => env('WASABI_BUCKET'),
             'url' => env('WASABI_URL'),
+            // Public-read CDN (BunnyCDN pull zone with S3 Auth) fronting the bucket.
+            // When set, public assets are served from here; see App\Support\PublicAsset.
+            // Gallery display derivatives also live under the public prefix and are
+            // delivered through this same zone with stable, unguessable URLs.
+            'cdn_url' => env('WASABI_CDN_URL'),
             'endpoint' => env('WASABI_ENDPOINT', 'https://s3.wasabisys.com'),
             'use_path_style_endpoint' => true,
             'throw' => true,

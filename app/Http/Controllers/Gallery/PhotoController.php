@@ -9,6 +9,7 @@ use App\Models\Photo;
 use App\Models\Set;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class PhotoController extends Controller
 {
@@ -131,5 +132,58 @@ class PhotoController extends Controller
         $photo->delete();
 
         return response()->json(null, 204);
+    }
+
+    /**
+     * Persist a new manual order for a group of photos (e.g. one set). The
+     * group's existing position "slots" are reassigned in the new order, so
+     * reordering within a set never disturbs photos in other sets.
+     */
+    public function reorder(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'collection_id' => 'required|integer',
+            'photo_ids' => 'required|array',
+            'photo_ids.*' => 'integer',
+        ]);
+
+        // 404s via the BelongsToStudio scope if it isn't this studio's collection.
+        $collection = Collection::findOrFail($data['collection_id']);
+
+        $slots = Photo::where('collection_id', $collection->id)
+            ->whereIn('id', $data['photo_ids'])
+            ->pluck('position')
+            ->sort()
+            ->values();
+
+        DB::transaction(function () use ($data, $slots, $collection) {
+            foreach (array_values($data['photo_ids']) as $i => $id) {
+                if (isset($slots[$i])) {
+                    Photo::where('collection_id', $collection->id)->where('id', $id)
+                        ->update(['position' => $slots[$i]]);
+                }
+            }
+        });
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Reset a collection's order to capture time (EXIF), falling back to upload
+     * time for shots with no embedded date. Returns the new id order so the
+     * client can update its grid in place.
+     */
+    public function sortByTime(Request $request): JsonResponse
+    {
+        $data = $request->validate(['collection_id' => 'required|integer']);
+        $collection = Collection::findOrFail($data['collection_id']);
+
+        DB::table('photos')
+            ->where('collection_id', $collection->id)
+            ->update(['position' => DB::raw('COALESCE(UNIX_TIMESTAMP(exif_taken_at), UNIX_TIMESTAMP(created_at))')]);
+
+        $order = Photo::where('collection_id', $collection->id)->orderBy('position')->pluck('id');
+
+        return response()->json(['order' => $order]);
     }
 }

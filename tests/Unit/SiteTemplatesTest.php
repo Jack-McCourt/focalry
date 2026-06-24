@@ -2,26 +2,27 @@
 
 use App\Support\SiteTemplates;
 
-$knownBlockTypes = ['hero', 'about', 'services', 'gallery', 'blog', 'packages', 'text', 'image', 'contact', 'grid'];
+$knownBlockTypes = ['hero', 'about', 'services', 'gallery', 'blog', 'packages', 'reviews', 'text', 'image', 'video', 'button', 'cta', 'faq', 'testimonials', 'pricing', 'logos', 'map', 'embed', 'divider', 'contact', 'grid'];
 
-it('registers the editorial and studio templates', function () {
+$customTemplates = ['editorial', 'studio', 'documentary'];
+
+it('registers the editorial, studio and documentary templates', function () {
     $keys = array_column(SiteTemplates::all(), 'key');
 
-    expect($keys)->toContain('portfolio', 'editorial', 'studio');
-    expect(SiteTemplates::exists('editorial'))->toBeTrue();
-    expect(SiteTemplates::exists('studio'))->toBeTrue();
+    expect($keys)->toContain('portfolio', 'editorial', 'studio', 'documentary');
+    expect(SiteTemplates::exists('documentary'))->toBeTrue();
 });
 
-it('gives each template a valid theme', function () {
-    foreach (['editorial', 'studio'] as $key) {
+it('gives each template a valid theme', function () use ($customTemplates) {
+    foreach ($customTemplates as $key) {
         $theme = SiteTemplates::theme($key);
         expect($theme['font'])->toBeIn(['sans', 'serif']);
         expect($theme['primary_color'])->toMatch('/^#[0-9a-fA-F]{6}$/');
     }
 });
 
-it('builds well-formed pages for the new templates', function () use ($knownBlockTypes) {
-    foreach (['editorial', 'studio'] as $key) {
+it('builds well-formed pages for the new templates', function () use ($knownBlockTypes, $customTemplates) {
+    foreach ($customTemplates as $key) {
         $pages = SiteTemplates::pages($key, 'Acme Studio');
 
         // Exactly one home page, and a blog page (for SEO + seeded posts).
@@ -47,8 +48,8 @@ it('builds well-formed pages for the new templates', function () use ($knownBloc
     }
 });
 
-it('points every nav item at a real page', function () {
-    foreach (['editorial', 'studio'] as $key) {
+it('points every nav item at a real page', function () use ($customTemplates) {
+    foreach ($customTemplates as $key) {
         $slugs = collect(SiteTemplates::pages($key, 'Acme'))->pluck('slug')->all();
 
         foreach (SiteTemplates::headerNav($key) as $item) {

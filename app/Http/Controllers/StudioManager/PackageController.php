@@ -22,7 +22,11 @@ class PackageController extends Controller
 
         return Inertia::render('Packages/Index', [
             'packages' => Package::orderBy('sort_order')->orderBy('name')->withCount('bookings')->get()
-                ->map(fn (Package $p) => [...$p->toArray(), 'image_url' => $p->imageUrl()]),
+                ->map(fn (Package $p) => [
+                    ...$p->toArray(),
+                    'image_url' => $p->imageUrl(),
+                    'url' => $studio ? route('packages.public.show', [$studio->slug, $p->slug]) : null,
+                ]),
             'bookings' => PackageBooking::with('package:id,name')->where('status', 'paid')->latest()->limit(50)->get()
                 ->map(fn (PackageBooking $b) => [
                     'id' => $b->id,
@@ -62,7 +66,7 @@ class PackageController extends Controller
     public function destroy(Package $package): RedirectResponse
     {
         if ($package->image_path) {
-            Storage::disk('public')->delete($package->image_path);
+            Storage::disk('wasabi')->delete($package->image_path);
         }
         $package->delete();
 
@@ -72,16 +76,32 @@ class PackageController extends Controller
     /** @return array<string, mixed> */
     private function validated(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:5000',
             'details' => 'nullable|string|max:10000',
-            'price_cents' => 'required|integer|min:0',
+            'pricing_type' => ['nullable', Rule::in(['fixed', 'flexible'])],
+            'price_cents' => 'required_unless:pricing_type,flexible|nullable|integer|min:0',
             'deposit_cents' => 'nullable|integer|min:0|lt:price_cents',
+            'min_amount_cents' => 'nullable|integer|min:0',
+            'suggested_amount_cents' => 'nullable|integer|min:0',
             'currency' => ['required', 'string', Rule::in(Currencies::codes())],
             'active' => 'boolean',
             'sort_order' => 'nullable|integer',
         ]);
+
+        $data['pricing_type'] ??= 'fixed';
+
+        // A flexible "tip jar" link has no fixed price or deposit.
+        if ($data['pricing_type'] === 'flexible') {
+            $data['price_cents'] = 0;
+            $data['deposit_cents'] = null;
+        } else {
+            $data['min_amount_cents'] = null;
+            $data['suggested_amount_cents'] = null;
+        }
+
+        return $data;
     }
 
     private function handleImage(Request $request, Package $package): void
@@ -89,11 +109,7 @@ class PackageController extends Controller
         $request->validate(['image' => 'nullable|image|mimes:png,jpg,jpeg,webp|max:5120']);
 
         if ($request->hasFile('image')) {
-            if ($package->image_path) {
-                Storage::disk('public')->delete($package->image_path);
-            }
-            $path = $request->file('image')->store("studios/{$package->studio_id}/packages", 'public');
-            $package->update(['image_path' => $path]);
+            $package->replaceImage($request->file('image'), 'packages');
         }
     }
 }

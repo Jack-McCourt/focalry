@@ -97,12 +97,15 @@ const POSITION_CLASS: Record<Exclude<CoverStyle['layout'], 'none'>, string> = {
 export function CoverHero({
     style,
     coverUrl,
+    coverSrcset,
     title,
     date,
     preview = false,
 }: {
     style: Partial<CoverStyle> | Record<string, unknown> | null | undefined;
     coverUrl: string | null;
+    /** Responsive sources (e.g. "u 600w, u 1200w, u 1920w") for the banner. */
+    coverSrcset?: string | null;
     title: string;
     /** Pre-formatted date string (or null). */
     date?: string | null;
@@ -143,6 +146,8 @@ export function CoverHero({
         >
             <img
                 src={coverUrl}
+                srcSet={coverSrcset || undefined}
+                sizes="100vw"
                 alt={title}
                 className="absolute inset-0 h-full w-full object-cover"
                 style={{ objectPosition: `${s.focal_x}% ${s.focal_y}%` }}

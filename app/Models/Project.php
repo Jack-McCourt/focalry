@@ -74,4 +74,10 @@ class Project extends Model
     {
         return $this->hasMany(ProjectNote::class)->latest();
     }
+
+    /** Messages a studio user has tagged to this project. */
+    public function taggedMessages(): HasMany
+    {
+        return $this->hasMany(Message::class)->latest();
+    }
 }

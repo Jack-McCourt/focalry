@@ -3,15 +3,15 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToStudio;
+use App\Models\Concerns\HasPublicImage;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class Package extends Model
 {
-    use BelongsToStudio, HasFactory;
+    use BelongsToStudio, HasFactory, HasPublicImage;
 
     protected $fillable = [
         'studio_id',
@@ -21,6 +21,9 @@ class Package extends Model
         'details',
         'image_path',
         'price_cents',
+        'pricing_type',
+        'min_amount_cents',
+        'suggested_amount_cents',
         'deposit_cents',
         'currency',
         'active',
@@ -31,10 +34,18 @@ class Package extends Model
     {
         return [
             'price_cents' => 'integer',
+            'min_amount_cents' => 'integer',
+            'suggested_amount_cents' => 'integer',
             'deposit_cents' => 'integer',
             'active' => 'boolean',
             'sort_order' => 'integer',
         ];
+    }
+
+    /** A "pay what you want" / tip-jar link — the customer chooses the amount. */
+    public function isFlexible(): bool
+    {
+        return $this->pricing_type === 'flexible';
     }
 
     protected static function booted(): void
@@ -62,11 +73,6 @@ class Package extends Model
     public function bookings(): HasMany
     {
         return $this->hasMany(PackageBooking::class);
-    }
-
-    public function imageUrl(): ?string
-    {
-        return $this->image_path ? Storage::disk('public')->url($this->image_path) : null;
     }
 
     /** Whether a deposit option is offered (a deposit smaller than the full price). */

@@ -11,14 +11,17 @@ import {
     Photo,
 } from '@/types';
 import { CoverHero, CoverStyle, DEFAULT_COVER_STYLE, FONT_OPTIONS, normalizeCoverStyle } from '@/lib/coverStyle';
+import { GALLERY_THEMES, GALLERY_THEME_OPTIONS } from '@/lib/galleryTheme';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import {
     ChangeEvent,
     DragEvent,
     FormEventHandler,
+    memo,
     useCallback,
     useEffect,
+    useLayoutEffect,
     useRef,
     useState,
 } from 'react';
@@ -90,6 +93,8 @@ function SetsManager({
     onSetFilter,
     dropHoverSetId,
     selectionActive,
+    onSortByTime,
+    sorting,
 }: {
     collection: Collection;
     sets: GallerySet[];
@@ -97,6 +102,8 @@ function SetsManager({
     onSetFilter: (id: number | null) => void;
     dropHoverSetId: number | null;
     selectionActive: boolean;
+    onSortByTime: () => void;
+    sorting: boolean;
 }) {
     const [creating, setCreating] = useState(false);
     const [newName, setNewName] = useState('');
@@ -230,6 +237,18 @@ function SetsManager({
                         New set
                     </button>
                 )}
+
+                <button
+                    onClick={onSortByTime}
+                    disabled={sorting}
+                    title="Reorder every photo in this gallery by the time it was taken (EXIF)"
+                    className="ml-auto flex items-center gap-1.5 rounded-full border border-neutral-300 px-3.5 py-2 text-sm text-neutral-600 transition hover:border-neutral-400 hover:text-neutral-900 disabled:opacity-50"
+                >
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l3.75 2.25M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {sorting ? 'Sorting…' : 'Sort by capture time'}
+                </button>
             </div>
 
             <p className="text-xs text-neutral-400">
@@ -593,6 +612,12 @@ function CoverPanel({ collection, photos }: { collection: Collection; photos: Ph
 
     const reset = () => setStyle((s) => ({ ...DEFAULT_COVER_STYLE, layout: s.layout }));
 
+    const [themeKey, setThemeKey] = useState(collection.theme ?? 'dark');
+    const saveTheme = (key: string) => {
+        setThemeKey(key);
+        router.patch(route('collections.update', collection.id), { theme: key }, { preserveScroll: true, preserveState: true });
+    };
+
     // Click or drag anywhere on the focal-point image to move the focus.
     const draggingFocal = useRef(false);
 
@@ -643,6 +668,31 @@ function CoverPanel({ collection, photos }: { collection: Collection; photos: Ph
                     }
                     preview
                 />
+            </div>
+
+            <div>
+                <span className="label mb-1.5 block">Gallery theme</span>
+                <div className="flex flex-wrap gap-2">
+                    {GALLERY_THEME_OPTIONS.map((t) => {
+                        const p = GALLERY_THEMES[t.key];
+                        const active = themeKey === t.key;
+                        return (
+                            <button
+                                key={t.key}
+                                type="button"
+                                onClick={() => saveTheme(t.key)}
+                                className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition ${active ? 'border-neutral-900 ring-1 ring-neutral-900' : 'border-neutral-200 hover:border-neutral-400'}`}
+                            >
+                                <span className="flex h-4 w-7 overflow-hidden rounded ring-1 ring-black/10">
+                                    <span className="h-full w-1/2" style={{ background: p['--g-bg'] }} />
+                                    <span className="h-full w-1/2" style={{ background: p['--g-accent'] }} />
+                                </span>
+                                {t.label}
+                            </button>
+                        );
+                    })}
+                </div>
+                <p className="mt-1.5 text-xs text-neutral-400">The colour scheme clients see when viewing this gallery.</p>
             </div>
 
             {!coverPhoto && (
@@ -1037,8 +1087,12 @@ function UploadZone({
 
 // ─── Photo tile ───────────────────────────────────────────────────────────────
 
-function PhotoTile({
+// Memoized so admin gallery state (selection, lightbox, drag) doesn't re-render
+// every tile. All callback props are stable (useCallback / state setters) and
+// `index` lets onOpen avoid a per-tile closure.
+const PhotoTile = memo(function PhotoTile({
     photo,
+    index,
     sets,
     isCover,
     selected,
@@ -1046,15 +1100,20 @@ function PhotoTile({
     onSetChange,
     onSetCover,
     onOpen,
+    dropEdge,
+    spanRows,
 }: {
     photo: Photo;
+    index: number;
     sets: GallerySet[];
     isCover: boolean;
     selected: boolean;
     onDelete: (id: number) => void;
     onSetChange: (photoId: number, setId: number | null) => void;
     onSetCover: (photoId: number) => void;
-    onOpen: (photoId: number) => void;
+    onOpen: (index: number) => void;
+    dropEdge?: 'before' | 'after' | null;
+    spanRows?: number;
 }) {
     const [confirm, setConfirm] = useState(false);
     const [loaded, setLoaded] = useState(false);
@@ -1110,16 +1169,24 @@ function PhotoTile({
     return (
         <div
             data-pid={photo.id}
-            className={`group relative mb-2 block break-inside-avoid select-none ${showMenu ? 'z-30' : ''}`}
+            className={`group relative block select-none ${showMenu ? 'z-30' : ''}`}
+            style={spanRows ? { gridRowEnd: `span ${spanRows}` } : undefined}
         >
+            {/* Drop-position indicator while drag-reordering */}
+            {dropEdge && (
+                <span
+                    className={`pointer-events-none absolute inset-y-0 z-40 w-1 rounded-full bg-blue-500 ${dropEdge === 'before' ? '-left-1' : '-right-1'}`}
+                />
+            )}
+
             {/* Image surface — clipped/rounded; kept separate so menus can escape.
                 Aspect ratio comes from the photo's real dimensions so the masonry
                 columns reserve the right height (square fallback while processing). */}
             <div
-                className={`relative overflow-hidden rounded-lg bg-neutral-100 ${
+                className={`relative h-full overflow-hidden rounded-lg bg-neutral-100 ${
                     selected ? 'ring-2 ring-blue-500 ring-offset-2' : ''
                 }`}
-                style={{ aspectRatio: photo.width && photo.height ? `${photo.width} / ${photo.height}` : '1 / 1' }}
+                style={spanRows ? undefined : { aspectRatio: photo.width && photo.height ? `${photo.width} / ${photo.height}` : '1 / 1' }}
             >
                 {photo.thumb_url && (
                     <img
@@ -1183,7 +1250,7 @@ function PhotoTile({
                         {showMenu && (
                             <div className="absolute right-0 top-full z-30 mt-1 w-40 rounded-lg border border-neutral-100 bg-white py-1 shadow-lg text-xs">
                                 <button
-                                    onClick={() => { setShowMenu(false); onOpen(photo.id); }}
+                                    onClick={() => { setShowMenu(false); onOpen(index); }}
                                     className="flex w-full items-center gap-2 px-3 py-1.5 text-neutral-700 hover:bg-neutral-50"
                                 >
                                     <svg className="h-3.5 w-3.5 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1237,7 +1304,7 @@ function PhotoTile({
             </div>
         </div>
     );
-}
+});
 
 // ─── Activity tab ─────────────────────────────────────────────────────────────
 
@@ -1487,7 +1554,10 @@ export default function Show({
     const [photos, setPhotos] = useState<Photo[]>(initialPhotos);
     const [sets, setSets] = useState<GallerySet[]>(initialSets);
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const [activeTab, setActiveTab] = useState<'photos' | 'settings' | 'activity'>('photos');
+    const initialTab = (new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('tab') ?? 'photos') as 'photos' | 'settings' | 'activity';
+    const [activeTab, setActiveTab] = useState<'photos' | 'settings' | 'activity'>(
+        ['photos', 'settings', 'activity'].includes(initialTab) ? initialTab : 'photos',
+    );
     const [settingsSection, setSettingsSection] = useState<'details' | 'cover' | 'privacy' | 'store'>('details');
     const [activeSetId, setActiveSetId] = useState<number | null>(initialSets[0]?.id ?? null);
     const [showShare, setShowShare] = useState(false);
@@ -1516,6 +1586,32 @@ export default function Show({
     const [dragChip, setDragChip] = useState<{ x: number; y: number; count: number } | null>(null);
     const gridRef = useRef<HTMLDivElement>(null);
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+    // ─── Ordered (row-major) masonry ──────────────────────────────────────────
+    // CSS `columns` flows top-to-bottom per column, so chronological order would
+    // read vertically. Instead we use a CSS grid with a fine row unit and give
+    // each tile a row-span from its aspect ratio — so items flow left-to-right,
+    // top-to-bottom (earliest photos fill the top row first) while keeping the
+    // ragged masonry heights.
+    const GRID_GAP = 8;
+    const GRID_ROW = 8;
+    const [gridWidth, setGridWidth] = useState(0);
+    useLayoutEffect(() => {
+        const el = gridRef.current;
+        if (!el) return;
+        const measure = () => setGridWidth(el.clientWidth);
+        measure();
+        const ro = new ResizeObserver(measure);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [activeTab]);
+    const gridCols = gridWidth >= 1280 ? 6 : gridWidth >= 1024 ? 4 : gridWidth >= 640 ? 3 : 2;
+    const colWidth = gridWidth > 0 ? (gridWidth - (gridCols - 1) * GRID_GAP) / gridCols : 0;
+    const spanFor = (photo: Photo) => {
+        const ratio = photo.width && photo.height ? photo.width / photo.height : 1;
+        const h = colWidth > 0 ? colWidth / ratio : 200;
+        return Math.max(1, Math.round((h + GRID_GAP) / (GRID_ROW + GRID_GAP)));
+    };
     const dragRef = useRef<{
         x: number;
         y: number;
@@ -1554,6 +1650,48 @@ export default function Show({
         },
         [selectedIds, clearSelection],
     );
+
+    // While dragging selected photos over the grid, where they'd be inserted.
+    const [dropTarget, setDropTarget] = useState<{ id: number; after: boolean } | null>(null);
+
+    // Move the current selection to a new spot (before/after `overId`) within the
+    // visible set, then persist the new order.
+    const reorderSelectionTo = useCallback((overId: number, after: boolean) => {
+        if (!selectedIds.size) return;
+        const visible = sets.length === 0
+            ? photos
+            : activeSetId !== null
+            ? photos.filter((p) => p.set_id === activeSetId)
+            : [];
+
+        const overIndex = visible.findIndex((p) => p.id === overId);
+        if (overIndex === -1) return;
+        const insertAt = overIndex + (after ? 1 : 0);
+        const selectedBefore = visible.slice(0, insertAt).filter((p) => selectedIds.has(p.id)).length;
+
+        const sel = visible.filter((p) => selectedIds.has(p.id));
+        const rest = visible.filter((p) => !selectedIds.has(p.id));
+        const restInsert = insertAt - selectedBefore;
+        const newVisible = [...rest.slice(0, restInsert), ...sel, ...rest.slice(restInsert)];
+
+        // No change? bail.
+        if (newVisible.every((p, i) => p.id === visible[i]?.id)) return;
+
+        const visibleSet = new Set(visible.map((p) => p.id));
+        setPhotos((prev) => {
+            const queue = [...newVisible];
+            return prev.map((p) => (visibleSet.has(p.id) ? (queue.shift() as Photo) : p));
+        });
+        clearSelection();
+
+        axios
+            .post(
+                '/api/photos/reorder',
+                { collection_id: collection.id, photo_ids: newVisible.map((p) => p.id) },
+                { headers: { 'X-XSRF-TOKEN': getCsrfToken() } },
+            )
+            .catch(() => {});
+    }, [selectedIds, sets, photos, activeSetId, collection.id, clearSelection]);
 
     const onGridPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
         if (e.button !== 0) return;
@@ -1602,8 +1740,20 @@ export default function Show({
             setSelectedIds(hit);
         } else if (info.mode === 'move') {
             setDragChip({ x: e.clientX, y: e.clientY, count: info.base.size });
-            const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-setdrop]') as HTMLElement | null;
-            setDropHoverSetId(over ? Number(over.dataset.setdrop) : null);
+            const el = document.elementFromPoint(e.clientX, e.clientY);
+            const overSet = el?.closest('[data-setdrop]') as HTMLElement | null;
+            setDropHoverSetId(overSet ? Number(overSet.dataset.setdrop) : null);
+            if (overSet) {
+                setDropTarget(null);
+            } else {
+                const tile = el?.closest('[data-pid]') as HTMLElement | null;
+                if (tile) {
+                    const r = tile.getBoundingClientRect();
+                    setDropTarget({ id: Number(tile.dataset.pid), after: e.clientX > r.left + r.width / 2 });
+                } else {
+                    setDropTarget(null);
+                }
+            }
         }
     };
 
@@ -1612,10 +1762,20 @@ export default function Show({
         dragRef.current = null;
         setMarqueeRect(null);
         setDragChip(null);
+        setDropTarget(null);
 
         if (info?.mode === 'move') {
-            const over = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-setdrop]') as HTMLElement | null;
-            if (over) assignSelectedToSet(Number(over.dataset.setdrop));
+            const el = document.elementFromPoint(e.clientX, e.clientY);
+            const overSet = el?.closest('[data-setdrop]') as HTMLElement | null;
+            if (overSet) {
+                assignSelectedToSet(Number(overSet.dataset.setdrop));
+            } else {
+                const tile = el?.closest('[data-pid]') as HTMLElement | null;
+                if (tile) {
+                    const r = tile.getBoundingClientRect();
+                    reorderSelectionTo(Number(tile.dataset.pid), e.clientX > r.left + r.width / 2);
+                }
+            }
             setDropHoverSetId(null);
             return;
         }
@@ -1650,11 +1810,29 @@ export default function Show({
     const handleUploadsComplete = (newPhotos: Photo[]) =>
         setPhotos((prev) => [...prev, ...newPhotos]);
 
-    const handleDelete = (id: number) =>
-        setPhotos((prev) => prev.filter((p) => p.id !== id));
+    // Stable callbacks so memoized PhotoTiles don't all re-render on every change.
+    const handleDelete = useCallback((id: number) =>
+        setPhotos((prev) => prev.filter((p) => p.id !== id)), []);
 
-    const handleSetChange = (photoId: number, setId: number | null) =>
-        setPhotos((prev) => prev.map((p) => (p.id === photoId ? { ...p, set_id: setId } : p)));
+    const handleSetChange = useCallback((photoId: number, setId: number | null) =>
+        setPhotos((prev) => prev.map((p) => (p.id === photoId ? { ...p, set_id: setId } : p))), []);
+
+    const handleSetCover = useCallback(() => router.reload({ only: ['collection'] }), []);
+
+    const [sorting, setSorting] = useState(false);
+    const sortByTime = () => {
+        setSorting(true);
+        axios
+            .post('/api/photos/sort-by-time', { collection_id: collection.id }, { headers: { 'X-XSRF-TOKEN': getCsrfToken() } })
+            .then((res) => {
+                const order: number[] = res.data.order ?? [];
+                setPhotos((prev) => {
+                    const byId = new Map(prev.map((p) => [p.id, p]));
+                    return order.map((id) => byId.get(id)).filter(Boolean) as Photo[];
+                });
+            })
+            .finally(() => setSorting(false));
+    };
 
     const [publishing, setPublishing] = useState(false);
     const togglePublish = () => {
@@ -1799,6 +1977,12 @@ export default function Show({
                                 )}
                             </button>
                         ))}
+                        <Link
+                            href={route('collections.guest-uploads.index', collection.id)}
+                            className="px-3 py-3.5 text-sm font-medium text-neutral-400 transition-colors hover:text-neutral-700"
+                        >
+                            QR Uploads
+                        </Link>
                     </div>
 
                     {/* Content area */}
@@ -1819,6 +2003,8 @@ export default function Show({
                                     onSetFilter={(id) => { setActiveSetId(id); clearSelection(); }}
                                     dropHoverSetId={dropHoverSetId}
                                     selectionActive={selectedIds.size > 0}
+                                    onSortByTime={sortByTime}
+                                    sorting={sorting}
                                 />
 
                                 {processingCount > 0 && (
@@ -1844,20 +2030,28 @@ export default function Show({
                                         onPointerDown={onGridPointerDown}
                                         onPointerMove={onGridPointerMove}
                                         onPointerUp={onGridPointerUp}
-                                        onPointerCancel={() => { dragRef.current = null; setMarqueeRect(null); setDragChip(null); setDropHoverSetId(null); }}
-                                        className="relative touch-none columns-2 gap-2 sm:columns-3 lg:columns-4 xl:columns-6"
+                                        onPointerCancel={() => { dragRef.current = null; setMarqueeRect(null); setDragChip(null); setDropHoverSetId(null); setDropTarget(null); }}
+                                        className="relative grid touch-none"
+                                        style={{
+                                            gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+                                            gridAutoRows: `${GRID_ROW}px`,
+                                            gap: `${GRID_GAP}px`,
+                                        }}
                                     >
-                                        {visiblePhotos.map((photo) => (
+                                        {visiblePhotos.map((photo, i) => (
                                             <PhotoTile
                                                 key={photo.id}
                                                 photo={photo}
+                                                index={i}
                                                 sets={sets}
                                                 isCover={photo.id === collection.cover_photo_id}
                                                 selected={selectedIds.has(photo.id)}
                                                 onDelete={handleDelete}
                                                 onSetChange={handleSetChange}
-                                                onSetCover={(id) => router.reload({ only: ['collection'] })}
-                                                onOpen={(id) => setLightboxIndex(visiblePhotos.findIndex((p) => p.id === id))}
+                                                onSetCover={handleSetCover}
+                                                onOpen={setLightboxIndex}
+                                                dropEdge={dropTarget?.id === photo.id ? (dropTarget.after ? 'after' : 'before') : null}
+                                                spanRows={spanFor(photo)}
                                             />
                                         ))}
 
@@ -1988,6 +2182,26 @@ export default function Show({
                                             <StorePanel collection={collection} priceSheets={price_sheets} />
                                         </section>
                                     )}
+
+                                    {/* Save the whole gallery's settings as the studio's default for new galleries. */}
+                                    <section className="mt-10 border-t border-neutral-100 pt-6">
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                router.post(
+                                                    route('collections.save-defaults', collection.id),
+                                                    {},
+                                                    { preserveScroll: true, preserveState: true },
+                                                )
+                                            }
+                                            className="btn-secondary"
+                                        >
+                                            Save as defaults for new galleries
+                                        </button>
+                                        <p className="mt-2 text-xs text-neutral-500">
+                                            New galleries will start with this gallery's theme, cover, privacy, downloads, store and QR upload settings.
+                                        </p>
+                                    </section>
                                 </div>
                             </div>
                         )}

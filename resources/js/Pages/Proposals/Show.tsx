@@ -44,7 +44,7 @@ export default function Show({ proposal, public_url }: PageProps<{ proposal: Pro
     return (
         <AuthenticatedLayout
             header={
-                <div className="flex w-full items-center justify-between">
+                <div className="flex w-full flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <h1 className="truncate text-sm font-semibold text-neutral-900">{proposal.title}</h1>
                     {canSend && <button onClick={send} className="btn-primary">{proposal.status === 'draft' ? 'Send proposal' : 'Re-send'}</button>}
                 </div>

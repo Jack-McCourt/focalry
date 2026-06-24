@@ -3,11 +3,20 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\SendConversationMessage;
+use App\Models\Collection;
 use App\Models\Contact;
+use App\Models\Contract;
 use App\Models\Conversation;
+use App\Models\Invoice;
 use App\Models\Message;
+use App\Models\Proposal;
+use App\Models\Questionnaire;
 use App\Models\MessageTemplate;
+use App\Models\Project;
 use App\Models\Studio;
+use App\Support\PublicAsset;
+use App\Support\StudioPaths;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -120,6 +129,30 @@ class ConversationController extends Controller
         return back()->with('success', 'Labels updated.');
     }
 
+    /**
+     * Tag (or untag, with project_id = null) a single message to one of the
+     * conversation contact's projects, so it surfaces in that project's drawer.
+     */
+    public function tagProject(Request $request, Message $message): RedirectResponse
+    {
+        $data = $request->validate(['project_id' => 'nullable|integer']);
+
+        $projectId = $data['project_id'] ?? null;
+        if ($projectId !== null) {
+            // The project must belong to this studio and to the same contact as
+            // the message's conversation — never tag across clients.
+            $contactId = $message->conversation->contact_id;
+            $project = Project::where('id', $projectId)
+                ->when($contactId, fn ($q) => $q->where('contact_id', $contactId))
+                ->firstOrFail();
+            $projectId = $project->id;
+        }
+
+        $message->update(['project_id' => $projectId]);
+
+        return back()->with('success', $projectId ? 'Message tagged to project.' : 'Message untagged.');
+    }
+
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
@@ -172,6 +205,79 @@ class ConversationController extends Controller
     }
 
     /**
+     * Documents that can be linked into a message, restricted to the records
+     * belonging to this conversation's contact (invoices, contracts, galleries).
+     * All queries are studio-scoped via the BelongsToStudio global scope.
+     */
+    public function linkables(Conversation $conversation): JsonResponse
+    {
+        $contactId = $conversation->contact_id;
+        $items = [];
+
+        if ($contactId) {
+            foreach (Invoice::where('contact_id', $contactId)->latest()->limit(50)->get() as $inv) {
+                $items[] = [
+                    'type' => 'invoice',
+                    'label' => $inv->number ? "Invoice {$inv->number}" : "Invoice #{$inv->id}",
+                    'meta' => ucfirst((string) $inv->status),
+                    'url' => route('invoices.public.show', $inv->public_id),
+                ];
+            }
+            foreach (Contract::where('contact_id', $contactId)->latest()->limit(50)->get() as $c) {
+                $items[] = [
+                    'type' => 'contract',
+                    'label' => $c->title ?: 'Contract',
+                    'meta' => ucfirst((string) $c->status),
+                    'url' => route('contracts.public.show', $c->public_id),
+                ];
+            }
+            foreach (Collection::where('contact_id', $contactId)->whereNotNull('slug')->latest()->limit(50)->get() as $col) {
+                $items[] = [
+                    'type' => 'gallery',
+                    'label' => $col->name ?: 'Gallery',
+                    'meta' => 'Gallery',
+                    'url' => route('gallery.show', $col->slug),
+                ];
+            }
+            foreach (Questionnaire::where('contact_id', $contactId)->latest()->limit(50)->get() as $q) {
+                $items[] = [
+                    'type' => 'questionnaire',
+                    'label' => $q->title ?: 'Questionnaire',
+                    'meta' => ucfirst((string) $q->status),
+                    'url' => route('questionnaires.public.show', $q->public_id),
+                ];
+            }
+            foreach (Proposal::where('contact_id', $contactId)->latest()->limit(50)->get() as $p) {
+                $items[] = [
+                    'type' => 'proposal',
+                    'label' => $p->title ?: 'Proposal',
+                    'meta' => ucfirst((string) $p->status),
+                    'url' => route('proposals.public.show', $p->public_id),
+                ];
+            }
+        }
+
+        return response()->json(['items' => $items]);
+    }
+
+    /**
+     * Upload an image to embed inline in a message body. Stored on the public
+     * Wasabi prefix and returned as a hosted URL the composer inserts as a
+     * Markdown image (![](url)); rendered inline in the thread and the email.
+     */
+    public function inlineImage(Request $request): JsonResponse
+    {
+        $request->validate([
+            'image' => 'required|image|mimes:jpg,jpeg,png,gif,webp|max:10240',
+        ]);
+
+        $studioId = app('current.studio.id');
+        $path = $request->file('image')->storePublicly(StudioPaths::asset($studioId, 'messages/inline'), 'wasabi');
+
+        return response()->json(['url' => PublicAsset::url($path)]);
+    }
+
+    /**
      * Record an outbound message and queue the email to the contact (Reply-To
      * carries the conversation token). Sending happens on the Horizon queue;
      * the job flips the message to sent/failed.
@@ -211,7 +317,7 @@ class ConversationController extends Controller
             if (! $file) {
                 continue;
             }
-            $path = $file->store("studios/{$message->studio_id}/messages/{$message->id}", 'public');
+            $path = $file->storePublicly(StudioPaths::asset($message->studio_id, "messages/{$message->id}"), 'wasabi');
             $message->attachments()->create([
                 'studio_id' => $message->studio_id,
                 'name' => $file->getClientOriginalName(),
@@ -244,6 +350,13 @@ class ConversationController extends Controller
      */
     private function detail(Conversation $c): array
     {
+        // Projects belonging to this conversation's contact — the only projects a
+        // message in this thread may be tagged to.
+        $projects = $c->contact_id
+            ? Project::where('contact_id', $c->contact_id)->orderByDesc('id')->get(['id', 'name'])
+                ->map(fn (Project $p) => ['id' => $p->id, 'name' => $p->name])
+            : collect();
+
         return [
             'id' => $c->id,
             'subject' => $c->subject,
@@ -255,10 +368,12 @@ class ConversationController extends Controller
                 'email' => $c->contact->email,
                 'phone' => $c->contact->phone,
             ] : null,
+            'projects' => $projects->values(),
             'messages' => $c->messages->map(fn (Message $m) => [
                 'id' => $m->id,
                 'direction' => $m->direction,
                 'is_internal' => $m->is_internal,
+                'project_id' => $m->project_id,
                 'body' => $m->body,
                 'author_name' => $m->direction === 'inbound' ? ($m->author_name ?: $m->author_email) : ($m->user?->name ?? 'You'),
                 'status' => $m->status,

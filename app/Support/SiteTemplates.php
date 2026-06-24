@@ -29,9 +29,25 @@ class SiteTemplates
             'name' => 'Studio',
             'description' => 'A clean, modern single-scroll template with bold sans-serif type — home, work, journal and contact.',
         ],
+        'documentary' => [
+            'name' => 'Documentary',
+            'description' => 'A minimal, photo-led documentary wedding template — black on white, clean sans-serif type — with home, portfolio, pricing, FAQ, journal and contact pages.',
+        ],
     ];
 
     public const DEFAULT = 'portfolio';
+
+    // Placeholder copy — the starter templates use lorem ipsum for all long-form
+    // text so they ship anonymised (studios replace it with their own words).
+    private const LOREM = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis aute irure.';
+
+    private const LOREM_LEAD = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.';
+
+    private const LOREM_SENTENCE = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit sed do eiusmod tempor.';
+
+    private const LOREM_FEATURES = "Lorem ipsum dolor sit\nConsectetur adipiscing elit\nSed do eiusmod tempor\nUt labore et dolore magna";
+
+    private const LOREM_BULLETS = "• Lorem ipsum dolor sit amet\n• Consectetur adipiscing elit\n• Sed do eiusmod tempor incididunt\n• Ut labore et dolore magna";
 
     /** @return list<array{key: string, name: string, description: string}> */
     public static function all(): array
@@ -47,13 +63,21 @@ class SiteTemplates
         return array_key_exists($key, self::META);
     }
 
-    /** @return array{primary_color: string, font: string} */
+    /** @return array{primary_color: string, font: string, heading_font: string, body_font: string, logo_font: string} */
     public static function theme(string $key): array
     {
         return match ($key) {
-            'editorial' => ['primary_color' => '#b0654f', 'font' => 'serif'],
-            'studio' => ['primary_color' => '#4f46e5', 'font' => 'sans'],
-            default => ['primary_color' => '#171717', 'font' => 'sans'],
+            // Fashion-magazine look: dramatic DM Serif Display headings, Lora body,
+            // a Playfair wordmark, warm ink accent, and the "editorial" style preset
+            // (uppercase tracked nav + ruled centred headings).
+            'editorial' => ['primary_color' => '#8c3b2e', 'font' => 'serif', 'heading_font' => 'dm_serif', 'body_font' => 'lora', 'logo_font' => 'playfair', 'nav_size' => 'sm', 'logo_size' => 'xl', 'style' => 'editorial'],
+            // Boutique studio: clean geometric Montserrat, slate ink, and a centred
+            // masthead (the "studio" style preset) for a gallery-like, modern feel.
+            'studio' => ['primary_color' => '#1f2937', 'font' => 'sans', 'heading_font' => 'montserrat', 'body_font' => 'montserrat', 'logo_font' => 'montserrat', 'nav_size' => 'sm', 'logo_size' => 'md', 'style' => 'studio'],
+            // Matches mccourtphotography.co.uk: Raleway for titles + body. Permanent
+            // Marker (its logo font) is available in the picker but not defaulted.
+            'documentary' => ['primary_color' => '#171717', 'font' => 'sans', 'heading_font' => 'raleway', 'body_font' => 'raleway', 'logo_font' => '', 'nav_size' => 'base', 'logo_size' => 'xl', 'width' => 'wide'],
+            default => ['primary_color' => '#171717', 'font' => 'sans', 'heading_font' => 'sans', 'body_font' => 'sans', 'logo_font' => ''],
         };
     }
 
@@ -73,6 +97,14 @@ class SiteTemplates
                 ['label' => 'Home', 'kind' => 'page', 'target' => 'home'],
                 ['label' => 'Work', 'kind' => 'page', 'target' => 'work'],
                 ['label' => 'Journal', 'kind' => 'page', 'target' => 'journal'],
+                ['label' => 'Contact', 'kind' => 'page', 'target' => 'contact'],
+            ],
+            'documentary' => [
+                ['label' => 'Home', 'kind' => 'page', 'target' => 'home'],
+                ['label' => 'Portfolio', 'kind' => 'page', 'target' => 'portfolio'],
+                ['label' => 'Pricing', 'kind' => 'page', 'target' => 'pricing'],
+                ['label' => 'FAQ', 'kind' => 'page', 'target' => 'faq'],
+                ['label' => 'Blog', 'kind' => 'page', 'target' => 'blog'],
                 ['label' => 'Contact', 'kind' => 'page', 'target' => 'contact'],
             ],
             default => [
@@ -102,6 +134,7 @@ class SiteTemplates
         return match ($key) {
             'editorial' => self::editorialPages($studioName),
             'studio' => self::studioPages($studioName),
+            'documentary' => self::documentaryPages($studioName),
             default => self::portfolioPages($studioName),
         };
     }
@@ -118,7 +151,7 @@ class SiteTemplates
                 'blocks' => [
                     self::block('hero', [
                         'heading' => $studioName,
-                        'subheading' => 'Timeless photography for the moments that matter most.',
+                        'subheading' => self::LOREM_LEAD,
                         'image_url' => '',
                         'cta_label' => 'Enquire now',
                         'cta_link' => '/contact',
@@ -128,9 +161,9 @@ class SiteTemplates
                     self::block('services', [
                         'heading' => 'What I offer',
                         'items' => [
-                            ['title' => 'Weddings', 'description' => 'Full-day coverage telling the story of your celebration.', 'price' => 'From $2,400'],
-                            ['title' => 'Portraits', 'description' => 'Relaxed individual, couple and family sessions.', 'price' => 'From $350'],
-                            ['title' => 'Events', 'description' => 'Corporate and private events, candid and considered.', 'price' => 'From $600'],
+                            ['title' => 'Weddings', 'description' => self::LOREM_SENTENCE, 'price' => 'From $2,400'],
+                            ['title' => 'Portraits', 'description' => self::LOREM_SENTENCE, 'price' => 'From $350'],
+                            ['title' => 'Events', 'description' => self::LOREM_SENTENCE, 'price' => 'From $600'],
                         ],
                     ]),
                     self::block('gallery', [
@@ -154,7 +187,7 @@ class SiteTemplates
                 'blocks' => [
                     self::block('hero', [
                         'heading' => 'About',
-                        'subheading' => 'A little about who I am and how I work.',
+                        'subheading' => self::LOREM_LEAD,
                         'image_url' => '',
                         'cta_label' => '',
                         'cta_link' => '',
@@ -163,17 +196,16 @@ class SiteTemplates
                     ]),
                     self::block('about', [
                         'heading' => "Hi, I'm a photographer",
-                        'body' => "I love telling stories through light and emotion. Whether it's a wedding, a portrait "
-                            .'session or a special event, my goal is to capture authentic moments you can relive for years to come.',
+                        'body' => self::LOREM,
                         'image_url' => '',
                         'image_side' => 'left',
                     ]),
                     self::block('services', [
                         'heading' => 'How it works',
                         'items' => [
-                            ['title' => '1. Get in touch', 'description' => 'Tell me about your day and what you have in mind.', 'price' => ''],
-                            ['title' => '2. The shoot', 'description' => 'Relaxed, unobtrusive and fun — just be yourselves.', 'price' => ''],
-                            ['title' => '3. Your gallery', 'description' => 'A beautifully edited online gallery to keep forever.', 'price' => ''],
+                            ['title' => '1. Get in touch', 'description' => self::LOREM_SENTENCE, 'price' => ''],
+                            ['title' => '2. The shoot', 'description' => self::LOREM_SENTENCE, 'price' => ''],
+                            ['title' => '3. Your gallery', 'description' => self::LOREM_SENTENCE, 'price' => ''],
                         ],
                     ]),
                 ],
@@ -188,7 +220,7 @@ class SiteTemplates
                 'blocks' => [
                     self::block('text', [
                         'heading' => 'Journal',
-                        'body' => 'Recent shoots, stories and behind-the-scenes.',
+                        'body' => self::LOREM,
                         'align' => 'center',
                     ]),
                     self::block('blog', [
@@ -207,7 +239,7 @@ class SiteTemplates
                 'blocks' => [
                     self::block('text', [
                         'heading' => 'Get in touch',
-                        'body' => "Tell me about your day and I'll be in touch within 48 hours.",
+                        'body' => self::LOREM,
                         'align' => 'center',
                     ]),
                     self::block('contact', [
@@ -240,7 +272,7 @@ class SiteTemplates
                 'blocks' => [
                     self::block('hero', [
                         'heading' => $studioName,
-                        'subheading' => 'Fine-art wedding photography for couples who love timeless, editorial imagery.',
+                        'subheading' => self::LOREM_LEAD,
                         'image_url' => '',
                         'cta_label' => 'Enquire',
                         'cta_link' => '/contact',
@@ -249,8 +281,7 @@ class SiteTemplates
                     ]),
                     self::block('about', [
                         'heading' => 'A storyteller at heart',
-                        'body' => 'I photograph weddings the way they feel — unhurried, emotive and full of light. '
-                            ."Every collection is crafted to feel like a piece of art you'll return to for a lifetime.",
+                        'body' => self::LOREM,
                         'image_url' => '',
                         'image_side' => 'right',
                     ]),
@@ -264,9 +295,9 @@ class SiteTemplates
                     self::block('services', [
                         'heading' => 'The experience',
                         'items' => [
-                            ['title' => 'Weddings', 'description' => 'Full-day, narrative coverage from prep to the last dance.', 'price' => 'From $3,200'],
-                            ['title' => 'Elopements', 'description' => 'Intimate ceremonies, captured with care and intention.', 'price' => 'From $1,800'],
-                            ['title' => 'Engagements', 'description' => 'A relaxed session to celebrate the year before the day.', 'price' => 'From $500'],
+                            ['title' => 'Weddings', 'description' => self::LOREM_SENTENCE, 'price' => 'From $3,200'],
+                            ['title' => 'Elopements', 'description' => self::LOREM_SENTENCE, 'price' => 'From $1,800'],
+                            ['title' => 'Engagements', 'description' => self::LOREM_SENTENCE, 'price' => 'From $500'],
                         ],
                     ], ['background' => '#f7efe9']),
                     self::block('blog', [
@@ -276,7 +307,7 @@ class SiteTemplates
                     ]),
                     self::block('text', [
                         'heading' => "Let's tell your story",
-                        'body' => 'Now booking a limited number of weddings each season.',
+                        'body' => self::LOREM,
                         'align' => 'center',
                         'heading_level' => 'h2',
                     ], ['background' => '#b0654f', 'text_color' => '#ffffff', 'padding' => 'lg']),
@@ -291,7 +322,7 @@ class SiteTemplates
                 'blocks' => [
                     self::block('text', [
                         'heading' => 'Portfolio',
-                        'body' => 'A selection of recent weddings, elopements and portraits.',
+                        'body' => self::LOREM,
                         'align' => 'center',
                         'heading_level' => 'h1',
                     ]),
@@ -313,7 +344,7 @@ class SiteTemplates
                 'blocks' => [
                     self::block('hero', [
                         'heading' => 'About',
-                        'subheading' => 'The person behind the camera.',
+                        'subheading' => self::LOREM_LEAD,
                         'image_url' => '',
                         'cta_label' => '',
                         'cta_link' => '',
@@ -322,18 +353,16 @@ class SiteTemplates
                     ]),
                     self::block('about', [
                         'heading' => "Hello, I'm so glad you're here",
-                        'body' => 'I believe the best photographs come from genuine connection. When we work together '
-                            ."you won't be posed and prodded — you'll be free to simply be with the people you love, while "
-                            .'I quietly capture it all.',
+                        'body' => self::LOREM,
                         'image_url' => '',
                         'image_side' => 'left',
                     ]),
                     self::block('services', [
                         'heading' => 'How we work together',
                         'items' => [
-                            ['title' => '01 — Enquire', 'description' => 'Share your date and vision, and we’ll see if we’re a fit.', 'price' => ''],
-                            ['title' => '02 — Plan', 'description' => 'A relaxed consultation to map out your day together.', 'price' => ''],
-                            ['title' => '03 — Relive', 'description' => 'A beautifully edited gallery, delivered with care.', 'price' => ''],
+                            ['title' => '01 — Enquire', 'description' => self::LOREM_SENTENCE, 'price' => ''],
+                            ['title' => '02 — Plan', 'description' => self::LOREM_SENTENCE, 'price' => ''],
+                            ['title' => '03 — Relive', 'description' => self::LOREM_SENTENCE, 'price' => ''],
                         ],
                     ], ['background' => '#f7efe9']),
                 ],
@@ -347,21 +376,21 @@ class SiteTemplates
                 'blocks' => [
                     self::block('text', [
                         'heading' => 'Investment',
-                        'body' => 'Thoughtfully designed collections, tailored to your day.',
+                        'body' => self::LOREM,
                         'align' => 'center',
                         'heading_level' => 'h1',
                     ]),
                     self::block('packages', [
                         'heading' => 'Wedding collections',
-                        'subheading' => 'Every collection can be customised — these are a starting point.',
+                        'subheading' => self::LOREM_LEAD,
                         'columns' => 3,
                     ]),
                     self::block('services', [
                         'heading' => 'Always included',
                         'items' => [
-                            ['title' => 'Pre-wedding consult', 'description' => 'We plan your timeline so the day flows effortlessly.', 'price' => ''],
-                            ['title' => 'A second photographer', 'description' => 'Two perspectives on every meaningful moment.', 'price' => ''],
-                            ['title' => 'Private online gallery', 'description' => 'High-resolution images, ready to download and share.', 'price' => ''],
+                            ['title' => 'Pre-wedding consult', 'description' => self::LOREM_SENTENCE, 'price' => ''],
+                            ['title' => 'A second photographer', 'description' => self::LOREM_SENTENCE, 'price' => ''],
+                            ['title' => 'Private online gallery', 'description' => self::LOREM_SENTENCE, 'price' => ''],
                         ],
                     ], ['background' => '#f7efe9']),
                 ],
@@ -376,7 +405,7 @@ class SiteTemplates
                 'blocks' => [
                     self::block('text', [
                         'heading' => 'Journal',
-                        'body' => 'Real weddings, gentle advice and moments from behind the camera.',
+                        'body' => self::LOREM,
                         'align' => 'center',
                         'heading_level' => 'h1',
                     ]),
@@ -392,7 +421,7 @@ class SiteTemplates
                 'blocks' => [
                     self::block('text', [
                         'heading' => 'Get in touch',
-                        'body' => "Tell me about your day and I'll be in touch within 48 hours.",
+                        'body' => self::LOREM,
                         'align' => 'center',
                         'heading_level' => 'h1',
                     ]),
@@ -426,7 +455,7 @@ class SiteTemplates
                 'blocks' => [
                     self::block('hero', [
                         'heading' => $studioName,
-                        'subheading' => 'Modern wedding & portrait photography — clean, candid and full of life.',
+                        'subheading' => self::LOREM_LEAD,
                         'image_url' => '',
                         'cta_label' => 'Book a call',
                         'cta_link' => '/contact',
@@ -436,9 +465,9 @@ class SiteTemplates
                     self::block('services', [
                         'heading' => 'Services',
                         'items' => [
-                            ['title' => 'Weddings', 'description' => 'Documentary coverage of your whole day.', 'price' => 'From $2,800'],
-                            ['title' => 'Portraits', 'description' => 'Individuals, couples and families.', 'price' => 'From $400'],
-                            ['title' => 'Brand & events', 'description' => 'Editorial imagery for people and businesses.', 'price' => 'From $700'],
+                            ['title' => 'Weddings', 'description' => self::LOREM_SENTENCE, 'price' => 'From $2,800'],
+                            ['title' => 'Portraits', 'description' => self::LOREM_SENTENCE, 'price' => 'From $400'],
+                            ['title' => 'Brand & events', 'description' => self::LOREM_SENTENCE, 'price' => 'From $700'],
                         ],
                     ], ['background' => '#eef2ff']),
                     self::block('gallery', [
@@ -450,14 +479,13 @@ class SiteTemplates
                     ]),
                     self::block('about', [
                         'heading' => 'A little about me',
-                        'body' => 'I’m a photographer who cares less about stiff poses and more about real moments. '
-                            .'Expect a relaxed, easy experience and images that actually look like you.',
+                        'body' => self::LOREM,
                         'image_url' => '',
                         'image_side' => 'left',
                     ]),
                     self::block('packages', [
                         'heading' => 'Packages',
-                        'subheading' => 'Simple, transparent pricing.',
+                        'subheading' => self::LOREM_LEAD,
                         'columns' => 3,
                     ]),
                     self::block('blog', [
@@ -467,7 +495,7 @@ class SiteTemplates
                     ]),
                     self::block('text', [
                         'heading' => 'Ready when you are',
-                        'body' => 'Tell me about your project and let’s make something great.',
+                        'body' => self::LOREM,
                         'align' => 'center',
                         'heading_level' => 'h2',
                     ], ['background' => '#4f46e5', 'text_color' => '#ffffff', 'padding' => 'lg']),
@@ -482,7 +510,7 @@ class SiteTemplates
                 'blocks' => [
                     self::block('text', [
                         'heading' => 'Work',
-                        'body' => 'A look at recent shoots.',
+                        'body' => self::LOREM,
                         'align' => 'center',
                         'heading_level' => 'h1',
                     ]),
@@ -505,7 +533,7 @@ class SiteTemplates
                 'blocks' => [
                     self::block('text', [
                         'heading' => 'Journal',
-                        'body' => 'Recent shoots, stories and the occasional tip.',
+                        'body' => self::LOREM,
                         'align' => 'center',
                         'heading_level' => 'h1',
                     ]),
@@ -521,7 +549,7 @@ class SiteTemplates
                 'blocks' => [
                     self::block('text', [
                         'heading' => 'Contact',
-                        'body' => 'Tell me a little about what you have in mind.',
+                        'body' => self::LOREM,
                         'align' => 'center',
                         'heading_level' => 'h1',
                     ]),
@@ -529,6 +557,209 @@ class SiteTemplates
                         'heading' => '',
                         'subheading' => '',
                         'submit_label' => 'Send message',
+                        'show_phone' => true,
+                        'show_event_date' => true,
+                        'show_event_type' => true,
+                    ]),
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Documentary — a minimal, photo-led wedding template (black on white, clean
+     * sans-serif). Home, portfolio, pricing, FAQ, journal and contact. Modelled
+     * on a documentary wedding studio's site (copy anonymised as lorem ipsum).
+     *
+     * @return list<array{title: string, slug: string, is_home: bool, blocks: array}>
+     */
+    private static function documentaryPages(string $studioName): array
+    {
+        return [
+            // ── Home ──
+            [
+                'title' => 'Home',
+                'slug' => 'home',
+                'is_home' => true,
+                'blocks' => [
+                    self::block('hero', [
+                        'heading' => $studioName,
+                        'subheading' => self::LOREM_LEAD,
+                        'image_url' => '',
+                        'cta_label' => 'Enquire',
+                        'cta_link' => '/contact',
+                        'overlay' => 40,
+                        'align' => 'center',
+                    ]),
+                    self::block('about', [
+                        'heading' => 'Candid moments, beautifully told',
+                        'body' => self::LOREM,
+                        'image_url' => '',
+                        'image_side' => 'left',
+                    ]),
+                    self::block('gallery', [
+                        'heading' => 'Recent weddings',
+                        'columns' => 3,
+                        'layout' => 'square',
+                        'lightbox' => true,
+                        'images' => [],
+                    ]),
+                    self::block('text', [
+                        'heading' => 'Your dream wedding, captured',
+                        'body' => self::LOREM,
+                        'align' => 'center',
+                        'heading_level' => 'h2',
+                    ], ['background' => '#f5f5f4', 'padding' => 'lg']),
+                    self::block('about', [
+                        'heading' => 'Behind the camera',
+                        'body' => self::LOREM,
+                        'image_url' => '',
+                        'image_side' => 'right',
+                    ]),
+                    self::block('about', [
+                        'heading' => 'Our approach',
+                        'body' => self::LOREM,
+                        'image_url' => '',
+                        'image_side' => 'left',
+                    ]),
+                    self::block('cta', [
+                        'heading' => "Let's capture your day",
+                        'subheading' => self::LOREM_LEAD,
+                        'button_label' => 'Check availability',
+                        'button_link' => '/contact',
+                    ]),
+                ],
+            ],
+
+            // ── Portfolio ──
+            [
+                'title' => 'Portfolio',
+                'slug' => 'portfolio',
+                'is_home' => false,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => 'Portfolio',
+                        'body' => self::LOREM,
+                        'align' => 'center',
+                        'heading_level' => 'h1',
+                    ]),
+                    self::block('gallery', [
+                        'heading' => '',
+                        'columns' => 3,
+                        'layout' => 'masonry',
+                        'lightbox' => true,
+                        'images' => [],
+                    ]),
+                ],
+            ],
+
+            // ── Pricing ──
+            [
+                'title' => 'Pricing',
+                'slug' => 'pricing',
+                'is_home' => false,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => 'Pricing',
+                        'body' => self::LOREM_LEAD,
+                        'align' => 'center',
+                        'heading_level' => 'h1',
+                    ]),
+                    // Each package is a full-width image-and-text row (alternating
+                    // sides), mirroring a classic photographer's pricing page.
+                    self::block('about', [
+                        'heading' => 'The Wee One — £800',
+                        'body' => self::LOREM_BULLETS,
+                        'image_url' => '',
+                        'image_side' => 'left',
+                    ]),
+                    self::block('about', [
+                        'heading' => 'The Big One — £1,150',
+                        'body' => self::LOREM_BULLETS,
+                        'image_url' => '',
+                        'image_side' => 'right',
+                    ]),
+                    self::block('about', [
+                        'heading' => 'Both of Us — £1,450',
+                        'body' => self::LOREM_BULLETS,
+                        'image_url' => '',
+                        'image_side' => 'left',
+                    ]),
+                    // The premium tier is featured with a soft background.
+                    self::block('about', [
+                        'heading' => 'All the Bells and Whistles — £1,850',
+                        'body' => self::LOREM_BULLETS,
+                        'image_url' => '',
+                        'image_side' => 'right',
+                    ], ['background' => '#f5f5f4', 'padding' => 'lg']),
+                    self::block('cta', [
+                        'heading' => 'Ready to book?',
+                        'subheading' => self::LOREM_LEAD,
+                        'button_label' => 'Enquire',
+                        'button_link' => '/contact',
+                    ]),
+                ],
+            ],
+
+            // ── FAQ ──
+            [
+                'title' => 'FAQ',
+                'slug' => 'faq',
+                'is_home' => false,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => 'Frequently asked questions',
+                        'body' => '',
+                        'align' => 'center',
+                        'heading_level' => 'h1',
+                    ]),
+                    self::block('faq', [
+                        'heading' => '',
+                        'items' => [
+                            ['q' => 'Do you travel?', 'a' => self::LOREM],
+                            ['q' => 'How long until we get our photos?', 'a' => self::LOREM],
+                            ['q' => 'Why two photographers?', 'a' => self::LOREM],
+                            ['q' => 'Can you help with the dress?', 'a' => self::LOREM],
+                            ['q' => 'Do you offer payment plans?', 'a' => self::LOREM],
+                            ['q' => 'How do we book?', 'a' => self::LOREM],
+                        ],
+                    ]),
+                ],
+            ],
+
+            // ── Blog (designated blog page; posts are child pages) ──
+            [
+                'title' => 'Blog',
+                'slug' => 'blog',
+                'is_home' => false,
+                'is_blog' => true,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => 'Journal',
+                        'body' => self::LOREM,
+                        'align' => 'center',
+                        'heading_level' => 'h1',
+                    ]),
+                    self::block('blog', ['heading' => '', 'columns' => 3, 'limit' => 0]),
+                ],
+            ],
+
+            // ── Contact ──
+            [
+                'title' => 'Contact',
+                'slug' => 'contact',
+                'is_home' => false,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => 'Get in touch',
+                        'body' => self::LOREM,
+                        'align' => 'center',
+                        'heading_level' => 'h1',
+                    ]),
+                    self::block('contact', [
+                        'heading' => '',
+                        'subheading' => '',
+                        'submit_label' => 'Send enquiry',
                         'show_phone' => true,
                         'show_event_date' => true,
                         'show_event_type' => true,
@@ -549,14 +780,14 @@ class SiteTemplates
             [
                 'title' => 'A spring wedding by the sea',
                 'slug' => 'a-spring-wedding-by-the-sea',
-                'excerpt' => 'A radiant coastal celebration full of colour, salt air and happy tears.',
+                'excerpt' => self::LOREM_SENTENCE,
                 'cover_image' => '',
                 'status' => 'published',
                 'days_ago' => 4,
                 'blocks' => [
                     self::block('hero', [
                         'heading' => 'A spring wedding by the sea',
-                        'subheading' => 'Coastal vows, golden light and a day to remember.',
+                        'subheading' => self::LOREM_LEAD,
                         'image_url' => '',
                         'cta_label' => '',
                         'cta_link' => '',
@@ -565,9 +796,7 @@ class SiteTemplates
                     ]),
                     self::block('text', [
                         'heading' => '',
-                        'body' => "There's something magical about a wedding by the water. The light is soft, the air is "
-                            .'fresh, and every frame feels effortless. We spent the golden hour wandering the dunes while '
-                            .'the couple soaked in their first moments as newlyweds.',
+                        'body' => self::LOREM,
                         'align' => 'left',
                     ]),
                     self::block('gallery', ['heading' => 'A few favourites', 'columns' => 3, 'images' => []]),
@@ -576,14 +805,14 @@ class SiteTemplates
             [
                 'title' => 'Why I love golden hour portraits',
                 'slug' => 'why-i-love-golden-hour-portraits',
-                'excerpt' => 'The last hour of light is pure magic — here is how I make the most of it.',
+                'excerpt' => self::LOREM_SENTENCE,
                 'cover_image' => '',
                 'status' => 'published',
                 'days_ago' => 12,
                 'blocks' => [
                     self::block('hero', [
                         'heading' => 'Why I love golden hour portraits',
-                        'subheading' => 'Chasing the best light of the day.',
+                        'subheading' => self::LOREM_LEAD,
                         'image_url' => '',
                         'cta_label' => '',
                         'cta_link' => '',
@@ -592,9 +821,7 @@ class SiteTemplates
                     ]),
                     self::block('text', [
                         'heading' => '',
-                        'body' => 'Golden hour — that fleeting window just after sunrise or before sunset — gives portraits a '
-                            .'warmth and softness that no studio light can quite match. Here are a few reasons it remains my '
-                            .'favourite time to photograph people.',
+                        'body' => self::LOREM,
                         'align' => 'left',
                     ]),
                 ],

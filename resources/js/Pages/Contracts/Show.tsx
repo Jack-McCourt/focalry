@@ -105,7 +105,7 @@ export default function Show({ contract, sign_url, invoice_html, email_defaults,
     return (
         <AuthenticatedLayout
             header={
-                <div className="flex w-full items-center justify-between gap-3">
+                <div className="flex w-full flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between gap-3">
                     <div className="flex items-center gap-2 text-sm">
                         <Link href={route('contracts.index')} className="text-neutral-400 hover:text-neutral-700">Contracts</Link>
                         <span className="text-neutral-300">/</span>

@@ -16,6 +16,7 @@ class NewClientReply extends Notification implements ShouldQueue
         public string $fromName,
         public string $subject,
         public string $preview,
+        public string $body = '',
     ) {}
 
     /** @return array<int, string> */
@@ -37,12 +38,17 @@ class NewClientReply extends Notification implements ShouldQueue
 
     public function toMail(object $notifiable): MailMessage
     {
+        // Render via a markdown view so the message body keeps its line breaks
+        // (the default ->line() helper runs through markdown, which collapses
+        // single newlines into spaces — see mail/studio-message for the same
+        // soft_break treatment).
         return (new MailMessage)
             ->subject("New reply from {$this->fromName}")
-            ->greeting("New message from {$this->fromName}")
-            ->line("Re: {$this->subject}")
-            ->line("\u{201C}{$this->preview}\u{201D}")
-            ->action('View conversation', url('/messages/'.$this->conversationId))
-            ->line('Reply right here in your studio messages.');
+            ->markdown('mail.new-client-reply', [
+                'fromName' => $this->fromName,
+                'subject' => $this->subject,
+                'body' => $this->body !== '' ? $this->body : $this->preview,
+                'url' => url('/messages/'.$this->conversationId),
+            ]);
     }
 }

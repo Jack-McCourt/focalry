@@ -2,10 +2,11 @@ import { GallerySet, PageProps } from '@/types';
 import GalleryStore, { GalleryStoreHandle, StoreData } from '@/Components/gallery/GalleryStore';
 import Lightbox from '@/Components/gallery/Lightbox';
 import { CoverHero } from '@/lib/coverStyle';
+import { galleryThemeVars } from '@/lib/galleryTheme';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { Check, Download, Heart, ShoppingBag } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 interface PublicPhoto {
     id: number;
@@ -14,6 +15,7 @@ interface PublicPhoto {
     height: number | null;
     set_id: number | null;
     thumb_url: string | null;
+    grid_url: string | null;
     web_url: string | null;
 }
 
@@ -23,7 +25,9 @@ interface PublicCollection {
     slug: string;
     event_date: string | null;
     cover_style: Record<string, unknown> | null;
+    theme: string;
     cover_url: string | null;
+    cover_srcset: string | null;
 }
 
 interface VisitorList {
@@ -89,8 +93,8 @@ function TabButton({
             onClick={onClick}
             className={`-mb-px shrink-0 whitespace-nowrap border-b-2 pb-4 text-xs uppercase tracking-[0.18em] transition-colors ${
                 active
-                    ? 'border-white text-white'
-                    : 'border-transparent text-neutral-500 hover:text-neutral-300'
+                    ? 'border-[var(--g-text)] text-[var(--g-text)]'
+                    : 'border-transparent text-[var(--g-faint)] hover:text-[var(--g-muted)]'
             }`}
         >
             {children}
@@ -104,10 +108,14 @@ function NameModal({
     open,
     onClose,
     onSave,
+    title = 'Save your favourites',
+    subtitle = 'Enter your email so you can find your favourites again any time — even on another device.',
 }: {
     open: boolean;
     onClose: () => void;
     onSave: (name: string, email: string) => Promise<void>;
+    title?: string;
+    subtitle?: string;
 }) {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
@@ -115,8 +123,10 @@ function NameModal({
 
     if (!open) return null;
 
+    const validEmail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
+
     const submit = async () => {
-        if (!name.trim()) return;
+        if (!validEmail) return;
         setSaving(true);
         try {
             await onSave(name.trim(), email.trim());
@@ -133,40 +143,40 @@ function NameModal({
         >
             <div
                 className="w-full max-w-sm rounded-lg p-7"
-                style={{ background: '#1a1a1a', color: '#fff' }}
+                style={{ background: 'var(--g-panel)', color: 'var(--g-text)' }}
                 onClick={(e) => e.stopPropagation()}
             >
-                <h2 className="text-lg font-light tracking-wide">Save your favourites</h2>
-                <p className="mt-1.5 text-xs" style={{ color: '#888' }}>
-                    Tell us who you are so the photographer knows which photos you love.
+                <h2 className="text-lg font-light tracking-wide">{title}</h2>
+                <p className="mt-1.5 text-xs" style={{ color: 'var(--g-muted)' }}>
+                    {subtitle}
                 </p>
 
                 <div className="mt-5 space-y-3">
                     <input
                         autoFocus
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && submit()}
-                        placeholder="Your name"
-                        className="w-full border-b bg-transparent py-2 text-sm outline-none placeholder:text-neutral-600"
-                        style={{ borderColor: '#333' }}
-                    />
-                    <input
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && submit()}
-                        placeholder="Email (optional)"
+                        placeholder="Email address"
                         className="w-full border-b bg-transparent py-2 text-sm outline-none placeholder:text-neutral-600"
-                        style={{ borderColor: '#333' }}
+                        style={{ borderColor: 'var(--g-border)' }}
+                    />
+                    <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && submit()}
+                        placeholder="Your name (optional)"
+                        className="w-full border-b bg-transparent py-2 text-sm outline-none placeholder:text-neutral-600"
+                        style={{ borderColor: 'var(--g-border)' }}
                     />
                 </div>
 
                 <button
                     onClick={submit}
-                    disabled={!name.trim() || saving}
-                    className="mt-6 w-full rounded-full bg-white py-2.5 text-xs font-medium uppercase tracking-widest text-neutral-900 transition hover:bg-neutral-200 disabled:opacity-40"
+                    disabled={!validEmail || saving}
+                    className="mt-6 w-full rounded-full bg-[var(--g-text)] py-2.5 text-xs font-medium uppercase tracking-widest text-[var(--g-bg)] transition hover:opacity-90 disabled:opacity-40"
                 >
                     {saving ? 'Saving…' : 'Continue'}
                 </button>
@@ -212,11 +222,11 @@ function PinModal({
         >
             <div
                 className="w-full max-w-xs rounded-lg p-7 text-center"
-                style={{ background: '#1a1a1a', color: '#fff' }}
+                style={{ background: 'var(--g-panel)', color: 'var(--g-text)' }}
                 onClick={(e) => e.stopPropagation()}
             >
                 <h2 className="text-lg font-light tracking-wide">Enter download PIN</h2>
-                <p className="mt-1.5 text-xs" style={{ color: '#888' }}>
+                <p className="mt-1.5 text-xs" style={{ color: 'var(--g-muted)' }}>
                     The photographer protected downloads with a PIN.
                 </p>
 
@@ -228,14 +238,14 @@ function PinModal({
                     onKeyDown={(e) => e.key === 'Enter' && submit()}
                     placeholder="••••"
                     className="mt-5 w-full border-b bg-transparent py-2 text-center font-mono text-lg tracking-[0.4em] outline-none placeholder:text-neutral-700"
-                    style={{ borderColor: error ? '#ef4444' : '#333' }}
+                    style={{ borderColor: error ? '#ef4444' : 'var(--g-border)' }}
                 />
                 {error && <p className="mt-2 text-xs text-red-400">Incorrect PIN. Try again.</p>}
 
                 <button
                     onClick={submit}
                     disabled={!pin.trim() || checking}
-                    className="mt-6 w-full rounded-full bg-white py-2.5 text-xs font-medium uppercase tracking-widest text-neutral-900 transition hover:bg-neutral-200 disabled:opacity-40"
+                    className="mt-6 w-full rounded-full bg-[var(--g-text)] py-2.5 text-xs font-medium uppercase tracking-widest text-[var(--g-bg)] transition hover:opacity-90 disabled:opacity-40"
                 >
                     {checking ? 'Checking…' : 'Unlock downloads'}
                 </button>
@@ -283,7 +293,7 @@ function NoteModal({
         >
             <div
                 className="w-full max-w-md rounded-lg p-6"
-                style={{ background: '#1a1a1a', color: '#fff' }}
+                style={{ background: 'var(--g-panel)', color: 'var(--g-text)' }}
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex gap-4">
@@ -296,7 +306,7 @@ function NoteModal({
                     )}
                     <div className="min-w-0 flex-1">
                         <h2 className="text-sm font-medium tracking-wide">Add a note</h2>
-                        <p className="truncate text-xs" style={{ color: '#777' }}>
+                        <p className="truncate text-xs" style={{ color: 'var(--g-muted)' }}>
                             {photo.filename}
                         </p>
                     </div>
@@ -310,21 +320,21 @@ function NoteModal({
                     maxLength={2000}
                     placeholder="e.g. Please retouch the background, love this one for the album…"
                     className="mt-4 w-full resize-none rounded-md border bg-transparent p-3 text-sm outline-none placeholder:text-neutral-600"
-                    style={{ borderColor: '#333' }}
+                    style={{ borderColor: 'var(--g-border)' }}
                 />
 
                 <div className="mt-4 flex justify-end gap-2">
                     <button
                         onClick={onClose}
                         className="rounded-full px-4 py-2 text-xs uppercase tracking-widest transition hover:bg-white/5"
-                        style={{ color: '#999' }}
+                        style={{ color: 'var(--g-muted)' }}
                     >
                         Cancel
                     </button>
                     <button
                         onClick={submit}
                         disabled={saving}
-                        className="rounded-full bg-white px-5 py-2 text-xs font-medium uppercase tracking-widest text-neutral-900 transition hover:bg-neutral-200 disabled:opacity-40"
+                        className="rounded-full bg-[var(--g-text)] px-5 py-2 text-xs font-medium uppercase tracking-widest text-[var(--g-bg)] transition hover:opacity-90 disabled:opacity-40"
                     >
                         {saving ? 'Saving…' : 'Save note'}
                     </button>
@@ -343,6 +353,8 @@ function ListSelector({
     onCreate,
     favouriteCount,
     canDownload,
+    identified,
+    onIdentify,
     onViewFavourites,
     onDownloadAll,
 }: {
@@ -352,6 +364,8 @@ function ListSelector({
     onCreate: (name: string) => Promise<void>;
     favouriteCount: number;
     canDownload: boolean;
+    identified: boolean;
+    onIdentify: () => void;
     onViewFavourites: () => void;
     onDownloadAll: () => void;
 }) {
@@ -385,15 +399,15 @@ function ListSelector({
     return (
         <div className="relative inline-block" ref={ref}>
             <button
-                onClick={() => setOpen((v) => !v)}
+                onClick={() => (identified ? setOpen((v) => !v) : onIdentify())}
                 className="flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs tracking-widest uppercase transition hover:border-neutral-500"
-                style={{ borderColor: '#333', color: '#ccc' }}
+                style={{ borderColor: 'var(--g-border)', color: 'var(--g-text)' }}
             >
-                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="#f87171">
+                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="var(--g-accent)">
                     <path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0l-.003-.001z" />
                 </svg>
                 {active ? active.name : 'My Favourites'}
-                <span style={{ color: '#666' }}>{active ? `(${active.photo_ids.length})` : ''}</span>
+                <span style={{ color: 'var(--g-faint)' }}>{active ? `(${active.photo_ids.length})` : ''}</span>
                 <svg className={`h-3 w-3 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
@@ -402,14 +416,14 @@ function ListSelector({
             {open && (
                 <div
                     className="absolute left-1/2 top-full z-40 mt-2 w-56 -translate-x-1/2 rounded-lg border py-1.5 text-left shadow-xl"
-                    style={{ background: '#1a1a1a', borderColor: '#2a2a2a' }}
+                    style={{ background: 'var(--g-panel)', borderColor: 'var(--g-border)' }}
                 >
                     {favouriteCount > 0 && (
                         <>
                             <button
                                 onClick={() => { onViewFavourites(); setOpen(false); }}
                                 className="flex w-full items-center gap-2 px-4 py-2 text-xs transition hover:bg-white/5"
-                                style={{ color: '#ddd' }}
+                                style={{ color: 'var(--g-text)' }}
                             >
                                 <svg className="h-3.5 w-3.5 text-rose-400" fill="currentColor" viewBox="0 0 24 24"><path d="M11.645 20.91l-.007-.003-.022-.012a15.247 15.247 0 01-.383-.218 25.18 25.18 0 01-4.244-3.17C4.688 15.36 2.25 12.174 2.25 8.25 2.25 5.322 4.714 3 7.688 3A5.5 5.5 0 0112 5.052 5.5 5.5 0 0116.313 3c2.973 0 5.437 2.322 5.437 5.25 0 3.925-2.438 7.111-4.739 9.256a25.175 25.175 0 01-4.244 3.17 15.247 15.247 0 01-.383.219l-.022.012-.007.004-.003.001a.752.752 0 01-.704 0z" /></svg>
                                 View favourites tab
@@ -418,7 +432,7 @@ function ListSelector({
                                 <button
                                     onClick={() => { onDownloadAll(); setOpen(false); }}
                                     className="flex w-full items-center gap-2 px-4 py-2 text-xs transition hover:bg-white/5"
-                                    style={{ color: '#ddd' }}
+                                    style={{ color: 'var(--g-text)' }}
                                 >
                                     <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
@@ -426,7 +440,7 @@ function ListSelector({
                                     Download all favourites
                                 </button>
                             )}
-                            <div className="my-1 border-t" style={{ borderColor: '#2a2a2a' }} />
+                            <div className="my-1 border-t" style={{ borderColor: 'var(--g-border)' }} />
                         </>
                     )}
                     {lists.map((l) => (
@@ -434,7 +448,7 @@ function ListSelector({
                             key={l.id}
                             onClick={() => { onSelect(l.id); setOpen(false); }}
                             className="flex w-full items-center justify-between px-4 py-2 text-xs transition hover:bg-white/5"
-                            style={{ color: l.id === activeListId ? '#fff' : '#aaa' }}
+                            style={{ color: l.id === activeListId ? 'var(--g-text)' : 'var(--g-muted)' }}
                         >
                             <span className="flex items-center gap-2">
                                 {l.id === activeListId && (
@@ -444,11 +458,11 @@ function ListSelector({
                                 )}
                                 <span className={l.id === activeListId ? '' : 'pl-5'}>{l.name}</span>
                             </span>
-                            <span style={{ color: '#666' }}>{l.photo_ids.length}</span>
+                            <span style={{ color: 'var(--g-faint)' }}>{l.photo_ids.length}</span>
                         </button>
                     ))}
 
-                    <div className="my-1 border-t" style={{ borderColor: '#2a2a2a' }} />
+                    <div className="my-1 border-t" style={{ borderColor: 'var(--g-border)' }} />
 
                     {creating ? (
                         <div className="flex items-center gap-1 px-3 py-1.5">
@@ -462,7 +476,7 @@ function ListSelector({
                                 }}
                                 placeholder="List name"
                                 className="w-full border-b bg-transparent py-1 text-xs outline-none placeholder:text-neutral-600"
-                                style={{ borderColor: '#333', color: '#fff' }}
+                                style={{ borderColor: 'var(--g-border)', color: 'var(--g-text)' }}
                             />
                             <button onClick={create} className="text-xs text-rose-300 hover:text-rose-200">Add</button>
                         </div>
@@ -470,7 +484,7 @@ function ListSelector({
                         <button
                             onClick={() => setCreating(true)}
                             className="flex w-full items-center gap-2 px-4 py-2 text-xs transition hover:bg-white/5"
-                            style={{ color: '#aaa' }}
+                            style={{ color: 'var(--g-muted)' }}
                         >
                             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -486,8 +500,15 @@ function ListSelector({
 
 // ─── Photo ────────────────────────────────────────────────────────────────────
 
-function GalleryPhoto({
+// Memoized so that gallery-wide state changes (selecting a photo, opening the
+// lightbox, toggling a favourite) only re-render the tiles that actually
+// changed — critical for collections with hundreds/thousands of photos. All
+// callback props are stable (useCallback / state setters), and `index` lets
+// onOpen avoid a per-tile closure.
+const GalleryPhoto = memo(function GalleryPhoto({
     photo,
+    index,
+    spanRows,
     isFavourited,
     showHeart,
     showDownload,
@@ -504,6 +525,8 @@ function GalleryPhoto({
     onSelect,
 }: {
     photo: PublicPhoto;
+    index: number;
+    spanRows?: number;
     isFavourited: boolean;
     showHeart: boolean;
     showDownload: boolean;
@@ -515,7 +538,7 @@ function GalleryPhoto({
     onToggle: (photoId: number) => void;
     onDownload: (photoId: number) => void;
     onNote: (photoId: number) => void;
-    onOpen: (photoId: number) => void;
+    onOpen: (index: number) => void;
     onBuy: (photoId: number) => void;
     onSelect: (photoId: number) => void;
 }) {
@@ -523,8 +546,9 @@ function GalleryPhoto({
 
     return (
         <div
-            className={`group relative mb-1.5 cursor-zoom-in break-inside-avoid overflow-hidden rounded-sm ${selected ? 'ring-2 ring-offset-2 ring-offset-[#0e0e0e] ring-white' : ''}`}
-            onClick={() => onOpen(photo.id)}
+            className={`group relative cursor-zoom-in overflow-hidden rounded-sm ${selected ? 'ring-2 ring-offset-2 ring-offset-[var(--g-bg)] ring-[var(--g-text)]' : ''}`}
+            style={spanRows ? { gridRowEnd: `span ${spanRows}` } : undefined}
+            onClick={() => onOpen(index)}
         >
             {/* Multi-select checkbox */}
             <button
@@ -540,20 +564,18 @@ function GalleryPhoto({
             </button>
             {photo.thumb_url ? (
                 <img
-                    src={photo.web_url ?? photo.thumb_url}
+                    src={photo.thumb_url ?? photo.grid_url ?? undefined}
+                    srcSet={[photo.thumb_url ? `${photo.thumb_url} 300w` : '', photo.grid_url ? `${photo.grid_url} 600w` : ''].filter(Boolean).join(', ') || undefined}
+                    sizes="(min-width: 1024px) 20vw, (min-width: 768px) 25vw, (min-width: 640px) 33vw, 50vw"
                     alt={photo.filename}
                     loading="lazy"
                     onLoad={() => setLoaded(true)}
-                    className={`w-full transition-opacity duration-500 ${loaded ? 'opacity-100' : 'opacity-0'}`}
-                    style={
-                        photo.width && photo.height
-                            ? { aspectRatio: `${photo.width}/${photo.height}` }
-                            : undefined
-                    }
+                    className={`w-full transition-opacity duration-500 ${spanRows ? 'h-full object-cover' : ''} ${loaded ? 'opacity-100' : 'opacity-0'}`}
+                    style={!spanRows && photo.width && photo.height ? { aspectRatio: `${photo.width}/${photo.height}` } : undefined}
                     draggable={false}
                 />
             ) : (
-                <div className="w-full bg-neutral-800" style={{ aspectRatio: '3/2' }} />
+                <div className={`w-full bg-neutral-800 ${spanRows ? 'h-full' : ''}`} style={spanRows ? undefined : { aspectRatio: '3/2' }} />
             )}
 
             {showBuy && (
@@ -619,7 +641,7 @@ function GalleryPhoto({
             )}
         </div>
     );
-}
+});
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -658,7 +680,10 @@ export default function GalleryShow({
     const [showingFavourites, setShowingFavourites] = useState(false);
     const [selected, setSelected] = useState<Set<number>>(new Set());
 
-    const canFavourite = favourites_enabled && !!visitor_token;
+    // Identified = the visitor has given their email (the identifier used to find
+    // their favourites later). A session without an email still needs to provide one.
+    const [identified, setIdentified] = useState(!!visitor?.email);
+    const canFavourite = favourites_enabled && identified;
     const canDownload = downloads.enabled;
     const storeEnabled = !!store?.enabled;
     const slug = collection.slug;
@@ -790,20 +815,26 @@ export default function GalleryShow({
 
     const handleHeart = useCallback(
         (photoId: number) => {
-            if (!visitorName) {
+            if (!identified) {
                 setPendingPhotoId(photoId);
                 setNameModalOpen(true);
                 return;
             }
             doToggle(photoId);
         },
-        [visitorName, doToggle],
+        [identified, doToggle],
     );
 
     const saveName = useCallback(
         async (name: string, email: string) => {
             const res = await axios.post(`/g/${slug}/visitor`, { name, email }, authHeaders);
             setVisitorName(res.data.visitor.name);
+            setIdentified(true);
+            // Retrieve any favourites already saved under this email.
+            if (Array.isArray(res.data.lists)) {
+                setLists(res.data.lists as VisitorList[]);
+                setActiveListId((cur) => cur ?? res.data.lists[0]?.id ?? null);
+            }
             setNameModalOpen(false);
             if (pendingPhotoId !== null) {
                 doToggle(pendingPhotoId);
@@ -837,6 +868,33 @@ export default function GalleryShow({
         ? photos.filter((p) => p.set_id === activeSet)
         : [];
     const totalFavourites = lists.reduce((sum, l) => sum + l.photo_ids.length, 0);
+
+    // ─── Ordered (row-major) masonry ──────────────────────────────────────────
+    // CSS `columns` fills each column top-to-bottom, so photos read vertically.
+    // A CSS grid with per-tile row spans flows left-to-right, top-to-bottom so the
+    // gallery reads in order while keeping the ragged masonry heights.
+    const GRID_GAP = 6;
+    const GRID_ROW = 8;
+    const gridRef = useRef<HTMLDivElement>(null);
+    const [gridWidth, setGridWidth] = useState(0);
+    useLayoutEffect(() => {
+        const el = gridRef.current;
+        if (!el) return;
+        const measure = () => setGridWidth(el.clientWidth);
+        measure();
+        const ro = new ResizeObserver(measure);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, [activeSet, onFavView]);
+    const gridCols = gridWidth >= 1024 ? 5 : gridWidth >= 768 ? 4 : gridWidth >= 640 ? 3 : 2;
+    const colWidth = gridWidth > 0 ? (gridWidth - (gridCols - 1) * GRID_GAP) / gridCols : 0;
+    const spanFor = (photo: PublicPhoto) => {
+        const ratio = photo.width && photo.height ? photo.width / photo.height : 3 / 2;
+        const h = colWidth > 0 ? colWidth / ratio : 200;
+        return Math.max(1, Math.round((h + GRID_GAP) / (GRID_ROW + GRID_GAP)));
+    };
+    // Stable so memoized tiles don't re-render every time the page does.
+    const handleBuy = useCallback((photoId: number) => storeRef.current?.shopFor(photoId), []);
     const showFavTab = canFavourite && favouritePhotos.length > 0;
 
     return (
@@ -887,29 +945,31 @@ export default function GalleryShow({
                 </div>
             )}
 
-            <NameModal
-                open={nameModalOpen}
-                onClose={() => { setNameModalOpen(false); setPendingPhotoId(null); }}
-                onSave={saveName}
-            />
+            <div className="min-h-screen" style={{ ...galleryThemeVars(collection.theme), background: 'var(--g-bg)', color: 'var(--g-text)' }}>
+                {/* Modals live inside the themed root so they inherit the --g-* CSS variables */}
+                <NameModal
+                    open={nameModalOpen}
+                    onClose={() => { setNameModalOpen(false); setPendingPhotoId(null); }}
+                    onSave={saveName}
+                />
 
-            <PinModal
-                open={pinModalOpen}
-                onClose={() => { setPinModalOpen(false); setPendingDownload(null); }}
-                onVerify={verifyPin}
-            />
+                <PinModal
+                    open={pinModalOpen}
+                    onClose={() => { setPinModalOpen(false); setPendingDownload(null); }}
+                    onVerify={verifyPin}
+                />
 
-            <NoteModal
-                photo={notePhotoId !== null ? photos.find((p) => p.id === notePhotoId) ?? null : null}
-                initialNote={notePhotoId !== null ? activeNotes[notePhotoId] ?? '' : ''}
-                onClose={() => setNotePhotoId(null)}
-                onSave={saveNote}
-            />
+                <NoteModal
+                    photo={notePhotoId !== null ? photos.find((p) => p.id === notePhotoId) ?? null : null}
+                    initialNote={notePhotoId !== null ? activeNotes[notePhotoId] ?? '' : ''}
+                    onClose={() => setNotePhotoId(null)}
+                    onSave={saveNote}
+                />
 
-            <div className="min-h-screen" style={{ background: '#0e0e0e', color: '#fff' }}>
                 <CoverHero
                     style={collection.cover_style}
                     coverUrl={collection.cover_url}
+                    coverSrcset={collection.cover_srcset}
                     title={collection.title}
                     date={
                         collection.event_date
@@ -923,11 +983,11 @@ export default function GalleryShow({
                 />
 
                 {/* Favourites + download controls */}
-                {(canDownload || (canFavourite && (lists.length > 0 || visitorName))) && (
+                {(canDownload || favourites_enabled) && (
                     <header className="px-6 py-8 text-center">
                         <div className="flex flex-col items-center gap-3">
                             <div className="flex flex-wrap items-center justify-center gap-2">
-                                {canFavourite && (lists.length > 0 || visitorName) && (
+                                {favourites_enabled && (
                                     <ListSelector
                                         lists={lists}
                                         activeListId={activeListId}
@@ -935,6 +995,8 @@ export default function GalleryShow({
                                         onCreate={createList}
                                         favouriteCount={favouritePhotos.length}
                                         canDownload={canDownload}
+                                        identified={identified}
+                                        onIdentify={() => { setPendingPhotoId(null); setNameModalOpen(true); }}
                                         onViewFavourites={() => setShowingFavourites(true)}
                                         onDownloadAll={() => requestDownload(favouritePhotos.map((p) => p.id))}
                                     />
@@ -943,7 +1005,7 @@ export default function GalleryShow({
                                     <button
                                         onClick={() => requestDownload('all')}
                                         className="flex items-center gap-2 rounded-full border px-4 py-1.5 text-xs uppercase tracking-widest transition hover:border-neutral-500"
-                                        style={{ borderColor: '#333', color: '#ccc' }}
+                                        style={{ borderColor: 'var(--g-border)', color: 'var(--g-text)' }}
                                     >
                                         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
@@ -953,7 +1015,7 @@ export default function GalleryShow({
                                 )}
                             </div>
                             {canFavourite && totalFavourites > 0 && (
-                                <p className="text-xs" style={{ color: '#666' }}>
+                                <p className="text-xs" style={{ color: 'var(--g-faint)' }}>
                                     {totalFavourites} favourite{totalFavourites !== 1 ? 's' : ''} across {lists.length} list{lists.length !== 1 ? 's' : ''}
                                 </p>
                             )}
@@ -965,7 +1027,7 @@ export default function GalleryShow({
                 {(sets.length > 0 || showFavTab) && (
                     <nav
                         className="sticky top-0 z-30 mb-2 border-b backdrop-blur"
-                        style={{ borderColor: '#1d1d1d', background: 'rgba(14,14,14,0.88)' }}
+                        style={{ borderColor: 'var(--g-border)', background: 'var(--g-bg-2)' }}
                     >
                         <div className="flex flex-nowrap items-center justify-start gap-7 overflow-x-auto px-6 pt-4 sm:justify-center">
                             {/* When there are no sets, an All tab lets visitors leave the Favourites view. */}
@@ -986,7 +1048,7 @@ export default function GalleryShow({
                             {showFavTab && (
                                 <TabButton active={onFavView} onClick={() => setShowingFavourites(true)}>
                                     <span className="inline-flex items-center gap-1.5">
-                                        <Heart className="h-3.5 w-3.5" color="#fb7185" fill="#fb7185" />
+                                        <Heart className="h-3.5 w-3.5" color="var(--g-accent)" fill="var(--g-accent)" />
                                         Favourites ({favouritePhotos.length})
                                     </span>
                                 </TabButton>
@@ -999,14 +1061,24 @@ export default function GalleryShow({
                 <main className="px-1.5 pb-12">
                     {visiblePhotos.length === 0 ? (
                         <div className="flex h-64 items-center justify-center">
-                            <p style={{ color: '#444', fontSize: '0.875rem' }}>No photos available.</p>
+                            <p style={{ color: 'var(--g-faint)', fontSize: '0.875rem' }}>No photos available.</p>
                         </div>
                     ) : (
-                        <div className="columns-2 gap-1.5 sm:columns-3 md:columns-4 lg:columns-5">
+                        <div
+                            ref={gridRef}
+                            className="grid"
+                            style={{
+                                gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+                                gridAutoRows: `${GRID_ROW}px`,
+                                gap: `${GRID_GAP}px`,
+                            }}
+                        >
                             {visiblePhotos.map((photo, i) => (
                                 <GalleryPhoto
                                     key={photo.id}
                                     photo={photo}
+                                    index={i}
+                                    spanRows={spanFor(photo)}
                                     isFavourited={favouritedSet.has(photo.id)}
                                     showHeart={canFavourite}
                                     showDownload={canDownload}
@@ -1018,8 +1090,8 @@ export default function GalleryShow({
                                     onToggle={handleHeart}
                                     onDownload={requestDownload}
                                     onNote={setNotePhotoId}
-                                    onOpen={() => setLightboxIndex(i)}
-                                    onBuy={(photoId) => storeRef.current?.shopFor(photoId)}
+                                    onOpen={setLightboxIndex}
+                                    onBuy={handleBuy}
                                     onSelect={toggleSelect}
                                 />
                             ))}
@@ -1028,7 +1100,7 @@ export default function GalleryShow({
                 </main>
 
                 <footer className="py-8 text-center">
-                    <p className="text-xs uppercase tracking-widest" style={{ color: '#333' }}>
+                    <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--g-border)' }}>
                         Powered by Studio
                     </p>
                 </footer>

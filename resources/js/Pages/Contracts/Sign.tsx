@@ -1,3 +1,4 @@
+import PublicShell from '@/Components/PublicShell';
 import SignaturePad, { SignatureValue } from '@/Components/SignaturePad';
 import { ContractFieldType, PageProps } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
@@ -85,23 +86,14 @@ export default function Sign({
     };
 
     return (
-        <div className="min-h-screen bg-neutral-100 py-8 sm:py-12">
+        <>
             <Head title={contract.title} />
-            <div className="mx-auto max-w-3xl px-4">
-                {/* Studio header */}
-                <div className="mb-6 text-center">
-                    {studio_logo ? (
-                        <img src={studio_logo} alt={studio_name ?? ''} className="mx-auto mb-2 h-12 object-contain" />
-                    ) : (
-                        <p className="text-lg font-semibold text-neutral-800">{studio_name}</p>
-                    )}
-                </div>
-
+            <PublicShell brand={{ name: studio_name, logo: studio_logo }} maxWidth="lg">
                 {flash?.success && (
                     <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{flash.success}</div>
                 )}
 
-                <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm sm:p-10">
+                <div className="rounded-2xl border border-neutral-200/70 bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.04)] sm:p-10">
                     <h1 className="mb-6 text-2xl font-semibold text-neutral-900">{contract.title}</h1>
 
                     <div
@@ -169,8 +161,7 @@ export default function Sign({
                     )}
                 </div>
 
-                <p className="mt-6 text-center text-xs text-neutral-400">Powered by {studio_name}</p>
-            </div>
-        </div>
+            </PublicShell>
+        </>
     );
 }

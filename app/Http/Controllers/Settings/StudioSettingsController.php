@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Models\Studio;
 use App\Support\Currencies;
+use App\Support\StudioPaths;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -44,10 +45,10 @@ class StudioSettingsController extends Controller
         try {
             // Replace any existing logo.
             if ($studio->logo_path) {
-                Storage::disk('public')->delete($studio->logo_path);
+                Storage::disk('wasabi')->delete($studio->logo_path);
             }
 
-            $path = $request->file('logo')->store("studios/{$studio->id}", 'public');
+            $path = $request->file('logo')->storePublicly(StudioPaths::asset($studio->id), 'wasabi');
             $studio->update(['logo_path' => $path]);
         } catch (\Throwable $e) {
             report($e);
@@ -63,7 +64,7 @@ class StudioSettingsController extends Controller
         $studio = Studio::findOrFail(app('current.studio.id'));
 
         if ($studio->logo_path) {
-            Storage::disk('public')->delete($studio->logo_path);
+            Storage::disk('wasabi')->delete($studio->logo_path);
             $studio->update(['logo_path' => null]);
         }
 

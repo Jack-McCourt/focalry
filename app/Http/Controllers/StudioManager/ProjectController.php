@@ -5,6 +5,7 @@ namespace App\Http\Controllers\StudioManager;
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
 use App\Models\Invoice;
+use App\Models\Message;
 use App\Models\Project;
 use App\Models\ProjectFieldDefinition;
 use App\Models\ProjectStatus;
@@ -59,9 +60,27 @@ class ProjectController extends Controller
 
     public function show(Project $project): JsonResponse
     {
-        $project->load(['invoices' => fn ($q) => $q->orderByDesc('id'), 'contracts' => fn ($q) => $q->orderByDesc('id'), 'noteEntries', 'collections']);
+        $project->load([
+            'invoices' => fn ($q) => $q->orderByDesc('id'),
+            'contracts' => fn ($q) => $q->orderByDesc('id'),
+            'noteEntries',
+            'collections',
+            'taggedMessages.conversation:id,subject',
+            'taggedMessages.user:id,name',
+        ]);
 
         return response()->json([
+            'messages' => $project->taggedMessages->map(fn (Message $m) => [
+                'id' => $m->id,
+                'conversation_id' => $m->conversation_id,
+                'conversation_subject' => $m->conversation?->subject,
+                'author_name' => $m->direction === 'inbound'
+                    ? ($m->author_name ?: $m->author_email ?: 'Client')
+                    : ($m->user?->name ?? 'You'),
+                'direction' => $m->direction,
+                'body' => $m->body,
+                'created_at' => $m->created_at->toIso8601String(),
+            ]),
             'galleries' => $project->collections->map(fn ($c) => [
                 'id' => $c->id,
                 'title' => $c->title,

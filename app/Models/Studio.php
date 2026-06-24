@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\PublicAsset;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -29,6 +30,7 @@ class Studio extends Model
         'default_currency',
         'invoice_settings',
         'store_settings',
+        'gallery_defaults',
         'email_signature',
         'google_calendar',
         'google_calendar_email',
@@ -53,6 +55,7 @@ class Studio extends Model
             'storage_limit_override' => 'integer',
             'invoice_settings' => 'array',
             'store_settings' => 'array',
+            'gallery_defaults' => 'array',
             'google_calendar' => 'array',
             'zoom' => 'array',
             'block_project_dates' => 'boolean',
@@ -110,15 +113,29 @@ class Studio extends Model
 
     public function logoUrl(): ?string
     {
-        return $this->logo_path ? Storage::disk('public')->url($this->logo_path) : null;
+        return PublicAsset::url($this->logo_path);
     }
 
-    /** Absolute filesystem path to the logo, for embedding in PDFs (dompdf). */
+    /**
+     * Absolute filesystem path to the logo, for embedding in PDFs (dompdf needs a
+     * local path). The logo lives in Wasabi, so cache a copy in the temp dir.
+     */
     public function logoPath(): ?string
     {
-        return $this->logo_path && Storage::disk('public')->exists($this->logo_path)
-            ? Storage::disk('public')->path($this->logo_path)
-            : null;
+        if (! $this->logo_path) {
+            return null;
+        }
+
+        try {
+            $tmp = sys_get_temp_dir().'/studio-logo-'.md5($this->logo_path).'.'.pathinfo($this->logo_path, PATHINFO_EXTENSION);
+            if (! file_exists($tmp)) {
+                file_put_contents($tmp, Storage::disk('wasabi')->get($this->logo_path));
+            }
+
+            return $tmp;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     public function users(): HasMany

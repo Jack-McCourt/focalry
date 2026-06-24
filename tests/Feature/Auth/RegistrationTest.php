@@ -69,4 +69,27 @@ class RegistrationTest extends TestCase
         $this->assertSame('owner', $user->role);
         $this->assertNotNull(Studio::find($user->studio_id));
     }
+
+    public function test_company_name_becomes_the_studio_name_when_provided(): void
+    {
+        $this->post('/register', $this->registrationData([
+            'email' => 'co@example.com',
+            'name' => 'Jane Doe',
+            'company_name' => 'Evergreen & Oak Photography',
+        ]));
+
+        $studio = User::where('email', 'co@example.com')->first()->studio;
+        $this->assertSame('Evergreen & Oak Photography', $studio->name);
+    }
+
+    public function test_studio_name_defaults_to_the_users_name_without_a_company(): void
+    {
+        $this->post('/register', $this->registrationData([
+            'email' => 'noco@example.com',
+            'name' => 'Jane Doe',
+        ]));
+
+        $studio = User::where('email', 'noco@example.com')->first()->studio;
+        $this->assertSame("Jane Doe's Studio", $studio->name);
+    }
 }

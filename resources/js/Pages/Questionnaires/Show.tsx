@@ -53,7 +53,7 @@ export default function Show({
     return (
         <AuthenticatedLayout
             header={
-                <div className="flex w-full items-center justify-between">
+                <div className="flex w-full flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <h1 className="truncate text-sm font-semibold text-neutral-900">{questionnaire.title}</h1>
                     <div className="flex items-center gap-2">
                         {!completed && <button onClick={() => setEmailOpen(true)} className="btn-secondary">Email to client</button>}

@@ -9,12 +9,7 @@ function fmtDate(d: string | null) {
 export default function Leads({ leads }: PageProps<{ leads: Paginated<SiteLeadRow>; public_url: string }>) {
     return (
         <AuthenticatedLayout
-            header={
-                <div className="flex w-full items-center justify-between">
-                    <h1 className="text-sm font-semibold text-neutral-900">Website leads</h1>
-                    <Link href={route('website.edit')} className="btn-secondary">Back to builder</Link>
-                </div>
-            }
+            header={<h1 className="text-sm font-semibold text-neutral-900">Website leads</h1>}
         >
             <Head title="Website leads" />
 

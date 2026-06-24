@@ -2,6 +2,82 @@ import StudioManagerNav from '@/Components/StudioManagerNav';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
+import { useRef } from 'react';
+
+// Merge tokens supported by WorkflowEngine::merge(). Friendly label → token.
+const MERGE_TOKENS: { label: string; token: string }[] = [
+    { label: 'First name', token: '{{client_first_name}}' },
+    { label: 'Full name', token: '{{client_name}}' },
+    { label: 'Project', token: '{{project_name}}' },
+    { label: 'Event date', token: '{{event_date}}' },
+    { label: 'Studio name', token: '{{studio_name}}' },
+];
+
+/** A row of chips that insert a merge token into the active field at the cursor. */
+function TokenBar({ onInsert }: { onInsert: (token: string) => void }) {
+    return (
+        <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-neutral-400">Insert:</span>
+            {MERGE_TOKENS.map((t) => (
+                <button
+                    key={t.token}
+                    type="button"
+                    // Keep focus/selection in the target field when clicking the chip.
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => onInsert(t.token)}
+                    title={t.token}
+                    className="rounded-full border border-neutral-200 bg-neutral-50 px-2 py-0.5 text-xs font-medium text-neutral-600 transition hover:border-neutral-400 hover:text-neutral-900"
+                >
+                    {t.label}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+function insertAtCursor(el: HTMLInputElement | HTMLTextAreaElement | null, current: string, token: string): { next: string; caret: number } {
+    const start = el?.selectionStart ?? current.length;
+    const end = el?.selectionEnd ?? current.length;
+    const next = current.slice(0, start) + token + current.slice(end);
+    const caret = start + token.length;
+    if (el) requestAnimationFrame(() => { el.focus(); el.setSelectionRange(caret, caret); });
+    return { next, caret };
+}
+
+/** Subject + body fields with a shared token bar that inserts into whichever is focused. */
+function EmailFields({ subject, body, onChange }: { subject: string; body: string; onChange: (patch: Record<string, string>) => void }) {
+    const subjectRef = useRef<HTMLInputElement>(null);
+    const bodyRef = useRef<HTMLTextAreaElement>(null);
+    const active = useRef<'subject' | 'body'>('body');
+
+    const insert = (token: string) => {
+        const key = active.current;
+        const el = key === 'subject' ? subjectRef.current : bodyRef.current;
+        const { next } = insertAtCursor(el, key === 'subject' ? subject : body, token);
+        onChange({ [key]: next });
+    };
+
+    return (
+        <div className="space-y-2">
+            <input ref={subjectRef} onFocus={() => (active.current = 'subject')} value={subject} onChange={(e) => onChange({ subject: e.target.value })} placeholder="Subject" className="input" />
+            <textarea ref={bodyRef} onFocus={() => (active.current = 'body')} value={body} onChange={(e) => onChange({ body: e.target.value })} placeholder="Email body" rows={5} className="input" />
+            <TokenBar onInsert={insert} />
+        </div>
+    );
+}
+
+/** A single textarea with a token bar (used for the project note). */
+function TokenTextarea({ value, onChange, placeholder, rows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; rows?: number }) {
+    const ref = useRef<HTMLTextAreaElement>(null);
+    const insert = (token: string) => onChange(insertAtCursor(ref.current, value, token).next);
+
+    return (
+        <div className="space-y-2">
+            <textarea ref={ref} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows} className="input" />
+            <TokenBar onInsert={insert} />
+        </div>
+    );
+}
 
 type Config = Record<string, string | number>;
 interface Step {
@@ -74,7 +150,7 @@ export default function Edit({
     return (
         <AuthenticatedLayout
             header={
-                <div className="flex w-full items-center justify-between">
+                <div className="flex w-full flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <h1 className="text-sm font-semibold text-neutral-900">{isNew ? 'New workflow' : 'Edit workflow'}</h1>
                     {!isNew && <button onClick={del} className="text-sm font-medium text-red-500 hover:text-red-700">Delete</button>}
                 </div>
@@ -207,16 +283,15 @@ function StepConfig({
     questionnaireTemplates: Opt[];
 }) {
     const c = step.config;
-    const hint = <p className="mt-1 text-xs text-neutral-400">Tokens: {'{{client_first_name}}'}, {'{{project_name}}'}, {'{{event_date}}'}, {'{{studio_name}}'}</p>;
 
     switch (step.action) {
         case 'send_email':
             return (
-                <div className="space-y-2">
-                    <input value={String(c.subject ?? '')} onChange={(e) => onChange({ subject: e.target.value })} placeholder="Subject" className="input" />
-                    <textarea value={String(c.body ?? '')} onChange={(e) => onChange({ body: e.target.value })} placeholder="Email body" rows={5} className="input" />
-                    {hint}
-                </div>
+                <EmailFields
+                    subject={String(c.subject ?? '')}
+                    body={String(c.body ?? '')}
+                    onChange={onChange}
+                />
             );
         case 'create_task':
             return (
@@ -247,12 +322,7 @@ function StepConfig({
                 </select>
             );
         case 'create_note':
-            return (
-                <div>
-                    <textarea value={String(c.body ?? '')} onChange={(e) => onChange({ body: e.target.value })} placeholder="Note text" rows={3} className="input" />
-                    {hint}
-                </div>
-            );
+            return <TokenTextarea value={String(c.body ?? '')} onChange={(v) => onChange({ body: v })} placeholder="Note text" />;
         default:
             return null;
     }

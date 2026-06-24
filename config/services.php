@@ -49,6 +49,9 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),
         'redirect' => env('GOOGLE_REDIRECT_URI', '/auth/google/callback'),
+        // Server-side key (Places API enabled) used to pull Google reviews into
+        // the website builder's Google Reviews block.
+        'places_key' => env('GOOGLE_PLACES_API_KEY'),
     ],
 
     'stripe' => [
@@ -74,6 +77,13 @@ return [
     'zoom' => [
         'client_id' => env('ZOOM_CLIENT_ID'),
         'client_secret' => env('ZOOM_CLIENT_SECRET'),
+    ],
+
+    // Targets shown to studios when connecting a custom domain. `target` is the
+    // CNAME host (for www/subdomains); `ip` is the A record (for apex domains).
+    'custom_domains' => [
+        'target' => env('CUSTOM_DOMAIN_TARGET', parse_url((string) env('APP_URL'), PHP_URL_HOST)),
+        'ip' => env('CUSTOM_DOMAIN_IP'),
     ],
 
 ];

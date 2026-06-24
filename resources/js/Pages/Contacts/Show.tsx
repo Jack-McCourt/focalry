@@ -50,7 +50,7 @@ export default function Show({
     return (
         <AuthenticatedLayout
             header={
-                <div className="flex w-full items-center justify-between">
+                <div className="flex w-full flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-2 text-sm">
                         <Link href={route('contacts.index')} className="text-neutral-400 hover:text-neutral-700">
                             Contacts

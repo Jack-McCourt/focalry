@@ -19,14 +19,12 @@ export default function Index({ workflows }: PageProps<{ workflows: Row[]; trigg
 
     return (
         <AuthenticatedLayout
-            header={
-                <div className="flex w-full items-center justify-between">
-                    <h1 className="text-sm font-semibold text-neutral-900">Studio Manager</h1>
-                    <Link href={route('workflows.create')} className="btn-primary">
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                        New workflow
-                    </Link>
-                </div>
+            header={<h1 className="text-sm font-semibold text-neutral-900">Studio Manager</h1>}
+            actions={
+                <Link href={route('workflows.create')} className="btn-primary">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                    New workflow
+                </Link>
             }
         >
             <Head title="Workflows" />
