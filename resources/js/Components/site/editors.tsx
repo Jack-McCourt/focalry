@@ -2,7 +2,7 @@ import ColorPicker from '@/Components/ColorPicker';
 import Modal from '@/Components/Modal';
 import { BlockSettings, SiteBlock, SiteNavItem } from '@/types';
 import { useRef, useState } from 'react';
-import { EVENT_TYPES, RetryImg } from './blocks';
+import { EVENT_TYPES, GalleryImage, galleryAlt, galleryCaption, galleryThumb, galleryTitle, RetryImg } from './blocks';
 import GalleryPicker from './GalleryPicker';
 
 // ─── Field primitives ─────────────────────────────────────────────────────────
@@ -129,10 +129,20 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
 
 // ─── Image upload field ───────────────────────────────────────────────────────
 
-export function ImageField({ label, value, onChange, allowGallery = true }: { label: string; value: string; onChange: (url: string) => void; allowGallery?: boolean }) {
+export function ImageField({ label, value, onChange, allowGallery = true, seo, onSeoChange }: {
+    label: string;
+    value: string;
+    onChange: (url: string) => void;
+    allowGallery?: boolean;
+    /** Current SEO metadata; when provided alongside onSeoChange, a pencil on the
+     * preview opens a popup to edit alt text & title (same UX as gallery images). */
+    seo?: { alt?: string; title?: string };
+    onSeoChange?: (patch: { alt?: string; title?: string }) => void;
+}) {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [pickerOpen, setPickerOpen] = useState(false);
+    const [seoOpen, setSeoOpen] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
     const upload = async (file: File) => {
@@ -156,7 +166,21 @@ export function ImageField({ label, value, onChange, allowGallery = true }: { la
         <div className="block">
             {label && <span className="label mb-1.5 block">{label}</span>}
             <div className="space-y-2">
-                {value && <img src={value} alt="" className="h-28 w-full rounded-lg border border-neutral-200 object-cover" />}
+                {value && (
+                    <div className="group relative">
+                        <img src={value} alt={seo?.alt || ''} title={seo?.title || undefined} className="h-28 w-full rounded-lg border border-neutral-200 object-cover" />
+                        {onSeoChange && (
+                            <>
+                                <button type="button" onClick={() => setSeoOpen(true)} className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition group-hover:opacity-100" title="Edit alt text & SEO">
+                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
+                                </button>
+                                {!seo?.alt && (
+                                    <span className="absolute bottom-1.5 left-1.5 rounded bg-amber-500/90 px-1.5 py-0.5 text-[10px] font-medium leading-tight text-white" title="No alt text — add one for SEO">No alt text</span>
+                                )}
+                            </>
+                        )}
+                    </div>
+                )}
                 <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => inputRef.current?.click()} disabled={uploading} className="btn-secondary px-3 py-1.5 text-xs">
                         {uploading ? 'Uploading…' : value ? 'Replace' : 'Upload image'}
@@ -187,6 +211,26 @@ export function ImageField({ label, value, onChange, allowGallery = true }: { la
             </div>
             {allowGallery && (
                 <GalleryPicker open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={(urls) => urls[0] && onChange(urls[0])} />
+            )}
+            {onSeoChange && (
+                <Modal show={seoOpen} maxWidth="md" onClose={() => setSeoOpen(false)}>
+                    <div className="space-y-4 p-5">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-sm font-semibold text-neutral-900">Image SEO</h2>
+                            <button type="button" onClick={() => setSeoOpen(false)} className="text-neutral-400 hover:text-neutral-700">✕</button>
+                        </div>
+                        {value && <img src={value} alt={seo?.alt || ''} className="h-36 w-full rounded-lg border border-neutral-200 object-cover" />}
+                        <Field label="Alt text (describes the image for search engines & screen readers)">
+                            <input className="input" value={seo?.alt ?? ''} onChange={(e) => onSeoChange({ alt: e.target.value })} placeholder="e.g. Bride and groom embracing under autumn trees" />
+                        </Field>
+                        <Field label="Title">
+                            <input className="input" value={seo?.title ?? ''} onChange={(e) => onSeoChange({ title: e.target.value })} />
+                        </Field>
+                        <div className="flex justify-end">
+                            <button type="button" onClick={() => setSeoOpen(false)} className="btn-primary text-sm">Done</button>
+                        </div>
+                    </div>
+                </Modal>
             )}
         </div>
     );
@@ -336,8 +380,14 @@ function ContentFields({ block, onChange, onConfigure, pages }: { block: SiteBlo
                 <div className="space-y-4">
                     <Text label="Heading" value={d.heading} onChange={(v) => set('heading', v)} />
                     <Area label="Subheading" value={d.subheading} onChange={(v) => set('subheading', v)} rows={2} />
-                    <ImageField label="Background image" value={d.image_url} onChange={(v) => set('image_url', v)} />
-                    <p className="-mt-2 text-xs text-neutral-400">For best results use a landscape image around 1920×1080.</p>
+                    <ImageField
+                        label="Background image"
+                        value={d.image_url}
+                        onChange={(v) => set('image_url', v)}
+                        seo={{ alt: d.alt, title: d.title }}
+                        onSeoChange={(patch) => onChange({ ...d, ...patch })}
+                    />
+                    <p className="-mt-2 text-xs text-neutral-400">For best results use a landscape image around 1920×1080. Hover the image and click the pencil to add alt text for SEO.</p>
                     {d.image_url && (
                         <FocalPointPicker imageUrl={d.image_url} x={d.focal_x ?? 50} y={d.focal_y ?? 50} onChange={(x, y) => onChange({ ...d, focal_x: x, focal_y: y })} />
                     )}
@@ -391,6 +441,12 @@ function ContentFields({ block, onChange, onConfigure, pages }: { block: SiteBlo
                     <Text label="Heading" value={d.heading} onChange={(v) => set('heading', v)} />
                     <Area label="Body" value={d.body} onChange={(v) => set('body', v)} rows={6} />
                     <ImageField label="Image" value={d.image_url} onChange={(v) => set('image_url', v)} />
+                    {d.image_url && (
+                        <>
+                            <Text label="Image alt text (for SEO & screen readers)" value={d.alt} onChange={(v) => set('alt', v)} placeholder="Describe the image" />
+                            <Text label="Image title" value={d.title} onChange={(v) => set('title', v)} />
+                        </>
+                    )}
                     <Select label="Image side" value={d.image_side} onChange={(v) => set('image_side', v)} options={[{ value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }]} />
                 </div>
             );
@@ -476,6 +532,7 @@ function ContentFields({ block, onChange, onConfigure, pages }: { block: SiteBlo
                     <ImageField label="Image" value={d.image_url} onChange={(v) => set('image_url', v)} />
                     <Text label="Caption" value={d.caption} onChange={(v) => set('caption', v)} />
                     <Text label="Alt text (for SEO & screen readers)" value={d.alt} onChange={(v) => set('alt', v)} placeholder="Describe the image" />
+                    <Text label="Title" value={d.title} onChange={(v) => set('title', v)} />
                 </div>
             );
 
@@ -894,13 +951,19 @@ function ListEditor<T extends Record<string, any>>({
 
 // ─── Gallery images editor ────────────────────────────────────────────────────
 
-function GalleryImages({ images, onChange }: { images: string[]; onChange: (images: string[]) => void }) {
+function GalleryImages({ images, onChange }: { images: GalleryImage[]; onChange: (images: GalleryImage[]) => void }) {
     const [pickerOpen, setPickerOpen] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const [dragIndex, setDragIndex] = useState<number | null>(null);
+    const [editIndex, setEditIndex] = useState<number | null>(null);
     const remove = (i: number) => onChange(images.filter((_, idx) => idx !== i));
+
+    // Write SEO metadata onto one image, promoting a plain-string image to the
+    // object form (preserving its URL) so alt/title/caption can be stored.
+    const setMeta = (i: number, patch: Partial<{ alt: string; title: string; caption: string }>) =>
+        onChange(images.map((img, idx) => (idx === i ? { ...(typeof img === 'string' ? { full: img } : img), ...patch } : img)));
 
     const move = (from: number, to: number) => {
         if (from === to || from < 0 || to < 0) return;
@@ -946,14 +1009,20 @@ function GalleryImages({ images, onChange }: { images: string[]; onChange: (imag
                                 onDragEnd={() => setDragIndex(null)}
                                 className={`group relative aspect-square cursor-move rounded ring-2 transition ${dragIndex === i ? 'opacity-40 ring-blue-400' : 'ring-transparent'}`}
                             >
-                                <RetryImg src={img} alt="" draggable={false} className="pointer-events-none h-full w-full rounded object-cover" />
+                                <RetryImg src={galleryThumb(img)} alt={galleryAlt(img)} draggable={false} className="pointer-events-none h-full w-full rounded object-cover" />
                                 <button type="button" onClick={() => remove(i)} className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition group-hover:opacity-100" title="Remove">
                                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                                 </button>
+                                <button type="button" onClick={() => setEditIndex(i)} className="absolute left-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition group-hover:opacity-100" title="Edit alt text & SEO">
+                                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
+                                </button>
+                                {!galleryAlt(img) && (
+                                    <span className="absolute bottom-0.5 left-0.5 rounded bg-amber-500/90 px-1 text-[9px] font-medium leading-tight text-white" title="No alt text — add one for SEO">alt?</span>
+                                )}
                             </div>
                         ))}
                     </div>
-                    {images.length > 1 && <p className="text-xs text-neutral-400">Drag to reorder.</p>}
+                    <p className="text-xs text-neutral-400">{images.length > 1 ? 'Drag to reorder. ' : ''}Hover an image and click the pencil to add alt text, a title and a caption for SEO.</p>
                 </>
             )}
             <div className="flex gap-2">
@@ -975,6 +1044,30 @@ function GalleryImages({ images, onChange }: { images: string[]; onChange: (imag
             />
             {error && <p className="text-xs text-red-600">{error}</p>}
             <GalleryPicker open={pickerOpen} multiple onClose={() => setPickerOpen(false)} onSelect={(urls) => onChange([...images, ...urls])} />
+
+            <Modal show={editIndex !== null} maxWidth="md" onClose={() => setEditIndex(null)}>
+                {editIndex !== null && images[editIndex] && (
+                    <div className="space-y-4 p-5">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-sm font-semibold text-neutral-900">Image SEO</h2>
+                            <button type="button" onClick={() => setEditIndex(null)} className="text-neutral-400 hover:text-neutral-700">✕</button>
+                        </div>
+                        <RetryImg src={galleryThumb(images[editIndex])} alt={galleryAlt(images[editIndex])} className="h-36 w-full rounded-lg border border-neutral-200 object-cover" />
+                        <Field label="Alt text (describes the image for search engines & screen readers)">
+                            <input className="input" value={galleryAlt(images[editIndex])} onChange={(e) => setMeta(editIndex, { alt: e.target.value })} placeholder="e.g. Bride and groom embracing under autumn trees" />
+                        </Field>
+                        <Field label="Title">
+                            <input className="input" value={galleryTitle(images[editIndex])} onChange={(e) => setMeta(editIndex, { title: e.target.value })} />
+                        </Field>
+                        <Field label="Caption (shown beneath the image in the lightbox)">
+                            <input className="input" value={galleryCaption(images[editIndex])} onChange={(e) => setMeta(editIndex, { caption: e.target.value })} />
+                        </Field>
+                        <div className="flex justify-end">
+                            <button type="button" onClick={() => setEditIndex(null)} className="btn-primary text-sm">Done</button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 }

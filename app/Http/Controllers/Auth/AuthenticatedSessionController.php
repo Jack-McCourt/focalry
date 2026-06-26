@@ -31,6 +31,20 @@ class AuthenticatedSessionController extends Controller
     {
         $request->authenticate();
 
+        // If the user has 2FA enabled, defer the login: roll back the session
+        // auth and send them to the challenge, which completes the login once a
+        // valid authenticator/recovery code is supplied.
+        $user = $request->user();
+        if ($user->hasEnabledTwoFactorAuthentication()) {
+            $request->session()->put([
+                'login.id' => $user->getKey(),
+                'login.remember' => $request->boolean('remember'),
+            ]);
+            Auth::guard('web')->logout();
+
+            return redirect()->route('two-factor.login');
+        }
+
         $request->session()->regenerate();
 
         return redirect()->intended(route('dashboard', absolute: false));

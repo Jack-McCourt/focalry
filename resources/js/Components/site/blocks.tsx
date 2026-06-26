@@ -1,4 +1,4 @@
-import { BlogPostCard, PackageCard, SiteBlock, SiteBlockType, SiteTheme } from '@/types';
+import { BlogPostCard, PackageCard, SiteBlock, SiteBlockType, SiteCategory, SiteTheme } from '@/types';
 import { formatMoney } from '@/lib/money';
 import { useForm } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
@@ -320,13 +320,15 @@ interface BlockViewProps {
     interactive: boolean;
     /** Published blog posts, injected for `blog` blocks. */
     posts?: BlogPostCard[];
+    /** The site's full category tree, injected for `blog` blocks (filter). */
+    categories?: SiteCategory[];
     /** Active packages, injected for `packages` blocks. */
     packages?: PackageCard[];
     /** Builder-only editing affordances (click-to-select, chrome, nesting). */
     editing?: BlockEditing;
 }
 
-function BlockInner({ block, theme, slug, basePath, interactive, posts, packages, editing }: BlockViewProps) {
+function BlockInner({ block, theme, slug, basePath, interactive, posts, categories, packages, editing }: BlockViewProps) {
     const base = basePath ?? `/site/${slug}`;
     // Block data is intentionally loose (modular/extensible), read with fallbacks.
     const d = block.data as Record<string, any>;
@@ -361,7 +363,7 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, packages
             return (
                 <section id="top" className={`relative flex ${heightCls} flex-col ${vCls} overflow-hidden px-6 py-24 sm:px-10`} style={heightStyle}>
                     {d.image_url ? (
-                        <img src={d.image_url} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: `${focalX}% ${focalY}%` }} />
+                        <img src={d.image_url} alt={d.alt || ''} title={d.title || undefined} className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: `${focalX}% ${focalY}%` }} />
                     ) : (
                         <div className="absolute inset-0 bg-gradient-to-br from-neutral-800 to-neutral-950" />
                     )}
@@ -386,7 +388,7 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, packages
                     <div className={`flex flex-col gap-10 md:items-center ${reverse ? 'md:flex-row-reverse' : 'md:flex-row'}`}>
                         <div className="md:w-1/2">
                             {d.image_url ? (
-                                <img src={d.image_url} alt="" loading="lazy" className="aspect-[4/5] w-full rounded-2xl object-cover" />
+                                <img src={d.image_url} alt={d.alt || ''} title={d.title || undefined} loading="lazy" className="aspect-[4/5] w-full rounded-2xl object-cover" />
                             ) : (
                                 <div className="flex aspect-[4/5] w-full items-center justify-center rounded-2xl bg-neutral-100 text-sm text-neutral-400">Image</div>
                             )}
@@ -427,7 +429,7 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, packages
             return <ReviewsBlock block={block} d={d} primary={primary} editing={editing} />;
 
         case 'blog':
-            return <BlogBlock d={d} posts={posts} slug={slug} interactive={interactive} primary={primary} />;
+            return <BlogBlock d={d} posts={posts} categories={categories} slug={slug} interactive={interactive} primary={primary} />;
 
         case 'packages': {
             const list = packages ?? [];
@@ -489,7 +491,7 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, packages
             return (
                 <section className="mx-auto max-w-5xl px-6 py-12 sm:px-10">
                     {d.image_url ? (
-                        <img src={d.image_url} alt={d.alt || d.caption || ''} loading="lazy" className="w-full rounded-2xl object-cover" />
+                        <img src={d.image_url} alt={d.alt || d.caption || ''} title={d.title || undefined} loading="lazy" className="w-full rounded-2xl object-cover" />
                     ) : (
                         <div className="flex h-64 w-full items-center justify-center rounded-2xl bg-neutral-100 text-sm text-neutral-400">Image</div>
                     )}
@@ -626,7 +628,7 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, packages
         }
 
         case 'logos': {
-            const images: string[] = Array.isArray(d.images) ? d.images.filter(Boolean) : [];
+            const images: GalleryImage[] = Array.isArray(d.images) ? d.images.filter(Boolean) : [];
             return (
                 <section className="mx-auto max-w-6xl px-6 py-16 sm:px-10">
                     {d.heading && <p className="mb-8 text-center text-xs font-medium uppercase tracking-widest text-neutral-400">{d.heading}</p>}
@@ -634,8 +636,8 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, packages
                         <p className="text-center text-sm text-neutral-400">Add some logos.</p>
                     ) : (
                         <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-8">
-                            {images.map((src, i) => (
-                                <img key={i} src={src} alt="" loading="lazy" className="h-10 w-auto object-contain opacity-60 grayscale transition hover:opacity-100 hover:grayscale-0" />
+                            {images.map((img, i) => (
+                                <img key={i} src={galleryThumb(img)} alt={galleryAlt(img)} title={galleryTitle(img) || undefined} loading="lazy" className="h-10 w-auto object-contain opacity-60 grayscale transition hover:opacity-100 hover:grayscale-0" />
                             ))}
                         </div>
                     )}
@@ -690,7 +692,7 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, packages
                         {Array.from({ length: cols }).map((_, col) => (
                             <div key={col} className="min-w-0">
                                 {(children[col] ?? []).map((child) => (
-                                    <BlockView key={child.id} block={child} theme={theme} slug={slug} basePath={base} interactive={interactive} posts={posts} packages={packages} editing={editing} />
+                                    <BlockView key={child.id} block={child} theme={theme} slug={slug} basePath={base} interactive={interactive} posts={posts} categories={categories} packages={packages} editing={editing} />
                                 ))}
                                 {editing && <GridCellAdder onAdd={(type) => editing.onAddChild(block.id, col, type)} />}
                             </div>
@@ -732,6 +734,10 @@ export function BlockView(props: BlockViewProps) {
     const s = block.settings ?? {};
 
     const frameClasses = [
+        // Stable hooks for custom CSS: every block carries `site-block` plus a
+        // type-specific class (e.g. `block-hero`, `block-gallery`).
+        'site-block',
+        `block-${block.type}`,
         s.background ? 'blk-bg' : '',
         s.text_color ? 'blk-text' : '',
         s.text_size && s.text_size !== 'base' ? `blk-size-${s.text_size}` : '',
@@ -743,9 +749,8 @@ export function BlockView(props: BlockViewProps) {
     if (s.text_color) frameStyle.color = s.text_color;
 
     const inner = <BlockInner {...props} />;
-    const content = frameClasses || Object.keys(frameStyle).length ? (
-        <div className={frameClasses} style={frameStyle}>{inner}</div>
-    ) : inner;
+    // Always wrap so the block-type class is present in the DOM for every block.
+    const content = <div className={frameClasses} style={frameStyle}>{inner}</div>;
 
     if (!editing) return content;
 
@@ -1186,17 +1191,47 @@ function ReviewsBlock({ block, d, primary, editing }: { block: SiteBlock; d: Rec
 
 // ─── Blog block (post grid + optional category filter) ────────────────────────
 
-function BlogBlock({ d, posts, slug, interactive, primary }: { d: Record<string, any>; posts?: BlogPostCard[]; slug: string; interactive: boolean; primary: string }) {
+function BlogBlock({ d, posts, categories, slug, interactive, primary }: { d: Record<string, any>; posts?: BlogPostCard[]; categories?: SiteCategory[]; slug: string; interactive: boolean; primary: string }) {
     const all = posts ?? [];
     const cols = Number(d.columns) === 2 ? 'sm:grid-cols-2' : Number(d.columns) === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-2 lg:grid-cols-3';
     const fmt = (s: string | null) => (s ? new Date(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '');
 
-    // Distinct categories, in first-seen order.
-    const categories = Array.from(new Set(all.map((p) => (p.category || '').trim()).filter(Boolean)));
-    const showFilter = d.show_categories !== false && categories.length > 1;
-    const [active, setActive] = useState<string>('');
+    // Build the filter tree. Prefer the site's full category list (so empty parents
+    // still appear); otherwise fall back to the categories the posts reference.
+    const catList: SiteCategory[] = (categories && categories.length)
+        ? categories
+        : Array.from(new Map(all.flatMap((p) => p.categories ?? []).map((c) => [c.id, c])).values());
+    const byId = new Map(catList.map((c) => [c.id, c]));
+    // Only surface categories that actually have a (direct or descendant) post.
+    const directIds = new Set(all.flatMap((p) => (p.categories ?? []).map((c) => c.id)));
+    const ancestors = (id: number): number[] => {
+        const out: number[] = [];
+        let cur = byId.get(id)?.parent_id ?? null;
+        while (cur != null) { out.push(cur); cur = byId.get(cur)?.parent_id ?? null; }
+        return out;
+    };
+    // A category counts if a post sits in it or any of its descendants.
+    const usableIds = new Set<number>();
+    directIds.forEach((id) => { usableIds.add(id); ancestors(id).forEach((a) => usableIds.add(a)); });
 
-    const filtered = active ? all.filter((p) => (p.category || '').trim() === active) : all;
+    const tree = orderedCategoryTree(catList.filter((c) => usableIds.has(c.id)));
+    const showFilter = d.show_categories !== false && tree.length > 1;
+    const [active, setActive] = useState<number | null>(null);
+
+    // Descendant ids of the active category (so a parent shows its children's posts).
+    const descendantsOf = (id: number): Set<number> => {
+        const set = new Set<number>([id]);
+        let added = true;
+        while (added) {
+            added = false;
+            for (const c of catList) {
+                if (c.parent_id != null && set.has(c.parent_id) && !set.has(c.id)) { set.add(c.id); added = true; }
+            }
+        }
+        return set;
+    };
+    const activeSet = active != null ? descendantsOf(active) : null;
+    const filtered = activeSet ? all.filter((p) => (p.categories ?? []).some((c) => activeSet.has(c.id))) : all;
     const limit = Number(d.limit) || 0;
     const list = limit > 0 ? filtered.slice(0, limit) : filtered;
 
@@ -1206,17 +1241,26 @@ function BlogBlock({ d, posts, slug, interactive, primary }: { d: Record<string,
 
             {showFilter && (
                 <div className="mb-10 flex flex-wrap justify-center gap-2">
-                    {['', ...categories].map((c) => {
-                        const isActive = active === c;
+                    <button
+                        type="button"
+                        onClick={() => interactive && setActive(null)}
+                        className={`rounded-full border px-4 py-1.5 text-sm font-medium transition ${active === null ? 'border-transparent text-white' : 'border-neutral-200 text-neutral-600 hover:border-neutral-300'}`}
+                        style={active === null ? { backgroundColor: primary } : undefined}
+                    >
+                        All
+                    </button>
+                    {tree.map(({ cat, depth }) => {
+                        const isActive = active === cat.id;
                         return (
                             <button
-                                key={c || 'all'}
+                                key={cat.id}
                                 type="button"
-                                onClick={() => interactive && setActive(c)}
+                                onClick={() => interactive && setActive(cat.id)}
                                 className={`rounded-full border px-4 py-1.5 text-sm font-medium transition ${isActive ? 'border-transparent text-white' : 'border-neutral-200 text-neutral-600 hover:border-neutral-300'}`}
                                 style={isActive ? { backgroundColor: primary } : undefined}
                             >
-                                {c || 'All'}
+                                {depth > 0 && <span className="mr-1 text-neutral-300">{'—'.repeat(depth)}</span>}
+                                {cat.name}
                             </button>
                         );
                     })}
@@ -1229,6 +1273,7 @@ function BlogBlock({ d, posts, slug, interactive, primary }: { d: Record<string,
                 <div className={`grid grid-cols-1 gap-8 ${cols}`}>
                     {list.map((p) => {
                         const href = p.url ?? `/site/${slug}/blog/${p.slug}`;
+                        const cats = p.categories ?? [];
                         const inner = (
                             <>
                                 {p.cover_image ? (
@@ -1237,8 +1282,8 @@ function BlogBlock({ d, posts, slug, interactive, primary }: { d: Record<string,
                                     <div className="flex aspect-[3/2] w-full items-center justify-center rounded-xl bg-neutral-100 text-xs text-neutral-300">Cover</div>
                                 )}
                                 <div className="mt-3 flex items-center gap-2 text-xs uppercase tracking-wider text-neutral-400">
-                                    {p.category && <span className="font-semibold" style={{ color: primary }}>{p.category}</span>}
-                                    {p.category && p.published_at && <span>·</span>}
+                                    {cats.length > 0 && <span className="font-semibold" style={{ color: primary }}>{cats.map((c) => c.name).join(', ')}</span>}
+                                    {cats.length > 0 && p.published_at && <span>·</span>}
                                     {p.published_at && <span>{fmt(p.published_at)}</span>}
                                 </div>
                                 <h3 className="mt-1 text-lg font-semibold text-neutral-900">{p.title}</h3>
@@ -1255,6 +1300,20 @@ function BlogBlock({ d, posts, slug, interactive, primary }: { d: Record<string,
             )}
         </section>
     );
+}
+
+/** Depth-first category ordering with depth, for indented filter rendering. */
+function orderedCategoryTree(categories: SiteCategory[]): { cat: SiteCategory; depth: number }[] {
+    const out: { cat: SiteCategory; depth: number }[] = [];
+    const present = new Set(categories.map((c) => c.id));
+    const walk = (parentId: number | null, depth: number) => {
+        for (const cat of categories.filter((c) => (c.parent_id != null && present.has(c.parent_id) ? c.parent_id : null) === parentId)) {
+            out.push({ cat, depth });
+            walk(cat.id, depth + 1);
+        }
+    };
+    walk(null, 0);
+    return out;
 }
 
 // ─── Gallery block (layouts + optional lightbox) ──────────────────────────────
@@ -1320,8 +1379,37 @@ export function RetryImg({ src, className, style, ...rest }: React.ImgHTMLAttrib
     );
 }
 
+/**
+ * A gallery image is either a bare URL (hand-added in the builder) or a
+ * `{ thumb, full }` pair produced by the WordPress importer: the small `thumb`
+ * fills the grid tile, the large `full` opens in the lightbox. Helpers below
+ * collapse both shapes so the renderer doesn't care which it got.
+ */
+export type GalleryImage = string | { thumb?: string; full?: string; src?: string; alt?: string; title?: string; caption?: string };
+
+export function galleryThumb(img: GalleryImage): string {
+    return typeof img === 'string' ? img : img?.thumb || img?.full || img?.src || '';
+}
+
+export function galleryFull(img: GalleryImage): string {
+    return typeof img === 'string' ? img : img?.full || img?.src || img?.thumb || '';
+}
+
+/** Per-image SEO metadata. Plain-string images carry none until edited. */
+export function galleryAlt(img: GalleryImage): string {
+    return typeof img === 'string' ? '' : img?.alt || '';
+}
+
+export function galleryTitle(img: GalleryImage): string {
+    return typeof img === 'string' ? '' : img?.title || '';
+}
+
+export function galleryCaption(img: GalleryImage): string {
+    return typeof img === 'string' ? '' : img?.caption || '';
+}
+
 function GalleryBlock({ d, interactive }: { d: Record<string, any>; interactive: boolean }) {
-    const images: string[] = Array.isArray(d.images) ? d.images.filter(Boolean) : [];
+    const images: GalleryImage[] = Array.isArray(d.images) ? d.images.filter(Boolean) : [];
     const cols = Math.min(Math.max(Number(d.columns) || 3, 2), 4);
     const layout = ['square', 'landscape', 'portrait', 'masonry'].includes(d.layout) ? d.layout : 'square';
     const lightbox = d.lightbox !== false;
@@ -1348,33 +1436,45 @@ function GalleryBlock({ d, interactive }: { d: Record<string, any>; interactive:
                 <p className="text-center text-sm text-neutral-400">No images yet.</p>
             ) : layout === 'masonry' ? (
                 <div className={`columns-1 gap-3 ${masonryCols} [&>*]:mb-3`}>
-                    {tiles.map((src, i) =>
-                        src ? (
-                            <RetryImg key={i} src={src} alt="" loading="lazy" onClick={() => open(i)} className={`w-full rounded-lg ${zoom}`} />
+                    {tiles.map((img, i) => {
+                        const t = galleryThumb(img);
+                        return t ? (
+                            <RetryImg key={i} src={t} alt={galleryAlt(img)} title={galleryTitle(img) || undefined} loading="lazy" onClick={() => open(i)} className={`w-full rounded-lg ${zoom}`} />
                         ) : (
                             <div key={i} className="flex h-40 w-full items-center justify-center rounded-lg bg-neutral-100 text-xs text-neutral-300">Photo</div>
-                        ),
-                    )}
+                        );
+                    })}
                 </div>
             ) : (
                 <div className={`grid grid-cols-1 gap-3 ${gridCols}`}>
-                    {tiles.map((src, i) =>
-                        src ? (
-                            <RetryImg key={i} src={src} alt="" loading="lazy" onClick={() => open(i)} className={`${aspect} w-full rounded-lg object-cover ${zoom}`} />
+                    {tiles.map((img, i) => {
+                        const t = galleryThumb(img);
+                        return t ? (
+                            <RetryImg key={i} src={t} alt={galleryAlt(img)} title={galleryTitle(img) || undefined} loading="lazy" onClick={() => open(i)} className={`${aspect} w-full rounded-lg object-cover ${zoom}`} />
                         ) : (
                             <div key={i} className={`${aspect} flex w-full items-center justify-center rounded-lg bg-neutral-100 text-xs text-neutral-300`}>Photo</div>
-                        ),
-                    )}
+                        );
+                    })}
                 </div>
             )}
 
-            {active !== null && <Lightbox images={images} index={active} onClose={() => setActive(null)} onIndex={setActive} />}
+            {active !== null && (
+                <Lightbox
+                    images={images.map((img) => ({ src: galleryFull(img), alt: galleryAlt(img), title: galleryTitle(img), caption: galleryCaption(img) }))}
+                    index={active}
+                    onClose={() => setActive(null)}
+                    onIndex={setActive}
+                />
+            )}
         </section>
     );
 }
 
-function Lightbox({ images, index, onClose, onIndex }: { images: string[]; index: number; onClose: () => void; onIndex: (i: number) => void }) {
+interface LightboxImage { src: string; alt?: string; title?: string; caption?: string }
+
+function Lightbox({ images, index, onClose, onIndex }: { images: LightboxImage[]; index: number; onClose: () => void; onIndex: (i: number) => void }) {
     const go = (delta: number) => onIndex((index + delta + images.length) % images.length);
+    const current = images[index];
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -1407,7 +1507,8 @@ function Lightbox({ images, index, onClose, onIndex }: { images: string[]; index
                     </button>
                 </>
             )}
-            <img src={images[index]} alt="" onClick={(e) => e.stopPropagation()} className="max-h-[90vh] max-w-[92vw] rounded object-contain" />
+            <img src={current.src} alt={current.alt || ''} title={current.title || undefined} onClick={(e) => e.stopPropagation()} className="max-h-[90vh] max-w-[92vw] rounded object-contain" />
+            {current.caption && <div className="absolute bottom-12 left-1/2 max-w-[80vw] -translate-x-1/2 text-center text-sm text-white/80">{current.caption}</div>}
             {images.length > 1 && <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-sm text-white/60">{index + 1} / {images.length}</div>}
         </div>,
         document.body,

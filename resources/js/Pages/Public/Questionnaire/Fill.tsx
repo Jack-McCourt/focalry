@@ -1,3 +1,5 @@
+import FileField, { FileRef } from '@/Components/FileField';
+import ImageField, { ImageRef } from '@/Components/ImageField';
 import PublicShell from '@/Components/PublicShell';
 import { PageProps } from '@/types';
 import { Head, useForm } from '@inertiajs/react';
@@ -5,16 +7,17 @@ import { Head, useForm } from '@inertiajs/react';
 interface Question {
     key: string;
     label: string;
-    type: 'text' | 'textarea' | 'date' | 'select' | 'checkbox';
+    type: 'text' | 'textarea' | 'date' | 'select' | 'checkbox' | 'image' | 'file';
     options: string[];
     required: boolean;
 }
+type AnswerValue = string | boolean | ImageRef[] | FileRef[];
 interface Questionnaire {
     public_id: string;
     title: string;
     status: string;
     questions: Question[];
-    answers: Record<string, string | boolean>;
+    answers: Record<string, AnswerValue>;
     completed: boolean;
 }
 
@@ -24,13 +27,15 @@ export default function Fill({
     studio_logo,
     flash,
 }: PageProps<{ questionnaire: Questionnaire; studio_name: string | null; studio_logo: string | null }>) {
-    const initial: Record<string, string | boolean> = {};
+    const initial: Record<string, AnswerValue> = {};
     questionnaire.questions.forEach((q) => {
-        initial[q.key] = q.type === 'checkbox' ? !!questionnaire.answers[q.key] : (questionnaire.answers[q.key] as string) ?? '';
+        if (q.type === 'checkbox') initial[q.key] = !!questionnaire.answers[q.key];
+        else if (q.type === 'image' || q.type === 'file') initial[q.key] = Array.isArray(questionnaire.answers[q.key]) ? questionnaire.answers[q.key] : [];
+        else initial[q.key] = (questionnaire.answers[q.key] as string) ?? '';
     });
 
-    const form = useForm<{ answers: Record<string, string | boolean> }>({ answers: initial });
-    const setAnswer = (key: string, v: string | boolean) => form.setData('answers', { ...form.data.answers, [key]: v });
+    const form = useForm<{ answers: Record<string, AnswerValue> }>({ answers: initial });
+    const setAnswer = (key: string, v: AnswerValue) => form.setData('answers', { ...form.data.answers, [key]: v });
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -75,6 +80,20 @@ export default function Fill({
                                                         <option value="">Choose…</option>
                                                         {q.options.map((o) => <option key={o} value={o}>{o}</option>)}
                                                     </select>
+                                                ) : q.type === 'image' ? (
+                                                    <ImageField
+                                                        images={(form.data.answers[q.key] as ImageRef[]) ?? []}
+                                                        label={q.label}
+                                                        uploadUrl={route('questionnaires.public.upload-image', questionnaire.public_id)}
+                                                        onChange={(v) => setAnswer(q.key, v)}
+                                                    />
+                                                ) : q.type === 'file' ? (
+                                                    <FileField
+                                                        files={(form.data.answers[q.key] as FileRef[]) ?? []}
+                                                        label={q.label}
+                                                        uploadUrl={route('questionnaires.public.upload-file', questionnaire.public_id)}
+                                                        onChange={(v) => setAnswer(q.key, v)}
+                                                    />
                                                 ) : (
                                                     <input type={q.type === 'date' ? 'date' : 'text'} value={String(form.data.answers[q.key] ?? '')} onChange={(e) => setAnswer(q.key, e.target.value)} className="input" />
                                                 )}

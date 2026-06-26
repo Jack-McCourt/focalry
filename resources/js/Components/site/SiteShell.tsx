@@ -1,5 +1,5 @@
 import { googleFontsHref, siteFont } from '@/lib/siteFonts';
-import { BlogPostCard, PackageCard, SiteBlock, SiteNavItem, SiteTheme } from '@/types';
+import { BlogPostCard, PackageCard, SiteBlock, SiteCategory, SiteNavItem, SiteTheme } from '@/types';
 import { Link } from '@inertiajs/react';
 import { CSSProperties, ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { BlockEditing, BlockView } from './blocks';
@@ -24,6 +24,7 @@ interface SiteShellProps {
     activeSlug: string;
     interactive: boolean;
     posts?: BlogPostCard[];
+    categories?: SiteCategory[];
     packages?: PackageCard[];
     /** Builder-only: makes blocks clickable/editable in the preview. */
     editing?: BlockEditing;
@@ -72,7 +73,7 @@ function styleCss(scope: string, style?: string): string {
 
 /** Renders a full public page: managed global header, the page's blocks, and a
  *  managed global footer. Shared by the live public site and the builder preview. */
-export default function SiteShell({ siteName, siteSlug, basePath, theme, studioLogo, pages, headerNav, footerNav, blocks = [], activeSlug, interactive, posts, packages, editing, children }: SiteShellProps) {
+export default function SiteShell({ siteName, siteSlug, basePath, theme, studioLogo, pages, headerNav, footerNav, blocks = [], activeSlug, interactive, posts, categories, packages, editing, children }: SiteShellProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     // Default to the slug path; custom-domain serving passes "" for root links.
     const base = basePath ?? `/site/${siteSlug}`;
@@ -215,7 +216,7 @@ export default function SiteShell({ siteName, siteSlug, basePath, theme, studioL
                 ) : blocks.length === 0 ? (
                     <div className="flex min-h-[50vh] items-center justify-center text-sm text-neutral-400">This page has no content yet.</div>
                 ) : (
-                    blocks.map((block) => <BlockView key={block.id} block={block} theme={theme} slug={siteSlug} basePath={base} interactive={interactive} posts={posts} packages={packages} editing={editing} />)
+                    blocks.map((block) => <BlockView key={block.id} block={block} theme={theme} slug={siteSlug} basePath={base} interactive={interactive} posts={posts} categories={categories} packages={packages} editing={editing} />)
                 )}
             </main>
 

@@ -4,7 +4,6 @@ export interface ContactFormData {
     email: string;
     phone: string;
     company: string;
-    status: 'lead' | 'client' | 'archived';
     notes: string;
     [key: string]: string;
 }
@@ -72,26 +71,6 @@ export default function ContactFormFields({
                         onChange={(e) => setData('company', e.target.value)}
                         className="input"
                     />
-                </div>
-            </div>
-
-            <div>
-                <label className="label mb-1.5">Status</label>
-                <div className="flex gap-2">
-                    {(['lead', 'client', 'archived'] as const).map((s) => (
-                        <button
-                            key={s}
-                            type="button"
-                            onClick={() => setData('status', s)}
-                            className={`flex-1 rounded-lg border py-2 text-xs font-medium capitalize transition ${
-                                data.status === s
-                                    ? 'border-neutral-900 bg-neutral-900 text-white'
-                                    : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300'
-                            }`}
-                        >
-                            {s}
-                        </button>
-                    ))}
                 </div>
             </div>
 

@@ -21,7 +21,7 @@ export const SETTINGS_TABS: { key: SettingsTabKey; label: string }[] = [
 // Pass `onSave`/`saving` for an explicit Save button (page mode), or `onClose`
 // for a "Done" link.
 export default function SiteSettings(props: any) {
-    const { name, setName, slug, setSlug, contactEmail, setContactEmail, seoTitle, setSeoTitle, seoDescription, setSeoDescription, theme, setTheme, errors, templates, applyTemplate, pageRefs, headerNav, setHeaderNav, footerNav, setFooterNav, headCode, setHeadCode, bodyCode, setBodyCode, cookieConsent, setCookieConsent, cookieMessage, setCookieMessage, cookiePolicyUrl, setCookiePolicyUrl, faviconUrl, setFaviconUrl, ogImageUrl, setOgImageUrl, redirects, setRedirects, site, domainConfig, studioLogo, tab, setTab, onClose, onSave, saving } = props;
+    const { name, setName, slug, setSlug, contactEmail, setContactEmail, autoCreateProject, setAutoCreateProject, seoTitle, setSeoTitle, seoDescription, setSeoDescription, theme, setTheme, errors, templates, applyTemplate, pageRefs, headerNav, setHeaderNav, footerNav, setFooterNav, headCode, setHeadCode, bodyCode, setBodyCode, cookieConsent, setCookieConsent, cookieMessage, setCookieMessage, cookiePolicyUrl, setCookiePolicyUrl, faviconUrl, setFaviconUrl, ogImageUrl, setOgImageUrl, redirects, setRedirects, site, domainConfig, studioLogo, tab, setTab, onClose, onSave, saving } = props;
 
     const uploadLogo = (file: File) => {
         const fd = new FormData();
@@ -229,6 +229,15 @@ export default function SiteSettings(props: any) {
                             <span className="label mb-1.5 block">Contact email</span>
                             <input className="input" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="you@studio.com" />
                         </label>
+                        <div className="border-t border-neutral-100 pt-3">
+                            <label className="flex items-start justify-between gap-3">
+                                <span>
+                                    <span className="label block">Create a project for each enquiry</span>
+                                    <span className="mt-0.5 block text-xs text-neutral-400">Automatically add a CRM project (a “Lead”) when someone submits a contact form. A notification and contact are created either way.</span>
+                                </span>
+                                <input type="checkbox" className="mt-0.5 shrink-0" checked={autoCreateProject} onChange={(e) => setAutoCreateProject(e.target.checked)} />
+                            </label>
+                        </div>
                         <div className="mt-2 border-t border-neutral-100 pt-3">
                             <span className="label mb-1.5 block">SEO meta title</span>
                             <input className="input" value={seoTitle} onChange={(e) => setSeoTitle(e.target.value)} />

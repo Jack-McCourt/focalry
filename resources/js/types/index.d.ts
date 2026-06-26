@@ -77,7 +77,6 @@ export interface Contact {
     email: string | null;
     phone: string | null;
     company: string | null;
-    status: 'lead' | 'client' | 'archived';
     notes: string | null;
     collections_count?: number;
     created_at: string;
@@ -152,7 +151,7 @@ export interface ProjectType {
     color: string;
 }
 
-export type ProjectFieldType = 'text' | 'long_text' | 'number' | 'date' | 'select' | 'checkbox' | 'url';
+export type ProjectFieldType = 'text' | 'long_text' | 'number' | 'date' | 'select' | 'checkbox' | 'url' | 'image' | 'file';
 
 export interface ProjectFieldOption {
     label: string;
@@ -298,11 +297,18 @@ export interface SiteNavItem {
     target: string;
 }
 
+export interface SiteCategory {
+    id: number;
+    name: string;
+    slug: string;
+    parent_id: number | null;
+}
+
 export interface BlogPostCard {
     title: string;
     slug: string;
     excerpt: string | null;
-    category?: string | null;
+    categories?: SiteCategory[];
     cover_image: string | null;
     published_at: string | null;
     url?: string;
@@ -340,7 +346,8 @@ export interface SitePageData {
     status?: 'draft' | 'published';
     published_at?: string | null;
     excerpt?: string | null;
-    category?: string | null;
+    category_ids?: number[];
+    hidden_category_ids?: number[];
     cover_image?: string | null;
     blocks: SiteBlock[];
     seo_title?: string | null;
@@ -372,10 +379,12 @@ export interface SiteData {
     redirects: { from: string; to: string }[];
     saved_sections: { id: string; name: string; block: SiteBlock }[];
     contact_email: string | null;
+    auto_create_project?: boolean;
     seo_title: string | null;
     seo_description: string | null;
     is_published: boolean;
     published_at: string | null;
+    categories: SiteCategory[];
     pages: SitePageData[];
 }
 
@@ -395,6 +404,11 @@ export interface SiteLeadRow {
     message: string | null;
     contact: { id: number; name: string } | null;
     project: { id: number; name: string } | null;
+    payload: {
+        custom_values?: { label?: string; value?: string }[];
+        attachment_url?: string | null;
+        [key: string]: unknown;
+    } | null;
     created_at: string;
 }
 

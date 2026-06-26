@@ -31,6 +31,10 @@ class WorkflowEngine
     /** Guard so a workflow that changes a project's status can't trigger itself. */
     private bool $suppressStatusTrigger = false;
 
+    public function __construct(
+        private readonly WorkflowConditionEvaluator $conditions = new WorkflowConditionEvaluator,
+    ) {}
+
     /**
      * @param  array<string, mixed>  $context
      */
@@ -52,6 +56,11 @@ class WorkflowEngine
             ->get();
 
         foreach ($workflows as $workflow) {
+            // "If" conditions narrow a trigger — e.g. only when the type is Wedding.
+            if (! $this->conditions->passes($workflow, $project)) {
+                continue;
+            }
+
             $this->runWorkflow($workflow, $project);
         }
     }

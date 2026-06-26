@@ -13,6 +13,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Gallery\CollectionController;
 use App\Http\Controllers\Gallery\FavouriteController;
 use App\Http\Controllers\Gallery\FavouriteListDownloadController;
+use App\Http\Controllers\Gallery\FavouritesController;
 use App\Http\Controllers\Gallery\GalleryController;
 use App\Http\Controllers\Gallery\GalleryDownloadController;
 use App\Http\Controllers\Gallery\GuestUploadAdminController;
@@ -26,6 +27,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public\ContractSigningController;
 use App\Http\Controllers\Public\PublicMeetingController;
 use App\Http\Controllers\Public\PublicPackageController;
+use App\Http\Controllers\Public\PublicProjectController;
 use App\Http\Controllers\Public\PublicProposalController;
 use App\Http\Controllers\Public\PublicQuestionnaireController;
 use App\Http\Controllers\Public\PublicSiteController;
@@ -56,6 +58,7 @@ use App\Http\Controllers\StudioManager\ProjectController;
 use App\Http\Controllers\StudioManager\ProjectFieldController;
 use App\Http\Controllers\StudioManager\ProjectNoteController;
 use App\Http\Controllers\StudioManager\ProjectSettingsController;
+use App\Http\Controllers\StudioManager\ProjectShareController;
 use App\Http\Controllers\StudioManager\ProposalController;
 use App\Http\Controllers\StudioManager\QuestionnaireController;
 use App\Http\Controllers\StudioManager\QuestionnaireTemplateController;
@@ -113,6 +116,11 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
         ->name('collections.save-defaults');
     Route::resource('collections', CollectionController::class)->except(['edit']);
 
+    // The photographer's own favourites across all galleries
+    Route::get('favourites', [FavouritesController::class, 'index'])->name('favourites.index');
+    Route::get('favourites/download', [FavouritesController::class, 'downloadAll'])->name('favourites.download-all');
+    Route::get('favourites/{collection}/download', [FavouritesController::class, 'download'])->name('favourites.download');
+
     // Lightroom Classic publish plugin download
     Route::get('lightroom-plugin', [LightroomPluginController::class, 'download'])
         ->name('lightroom.plugin.download');
@@ -128,6 +136,9 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
     Route::resource('projects', ProjectController::class)->only(['index', 'show', 'store', 'update', 'destroy'])
         ->middleware('plan:studio_manager');
     Route::post('projects/{project}/move', [ProjectController::class, 'move'])->name('projects.move');
+    Route::get('projects/{project}/preview', [ProjectController::class, 'preview'])->name('projects.preview')->middleware('plan:studio_manager');
+    Route::post('projects/field-image', [ProjectController::class, 'uploadImage'])->name('projects.field-image');
+    Route::post('projects/field-file', [ProjectController::class, 'uploadFile'])->name('projects.field-file');
     Route::post('projects/{project}/notes', [ProjectNoteController::class, 'store'])->name('projects.notes.store');
     Route::patch('project-notes/{note}', [ProjectNoteController::class, 'update'])->name('project-notes.update');
     Route::delete('project-notes/{note}', [ProjectNoteController::class, 'destroy'])->name('project-notes.destroy');
@@ -137,6 +148,10 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
     Route::post('project-fields/reorder', [ProjectFieldController::class, 'reorder'])->name('project-fields.reorder');
     Route::patch('project-fields/{field}', [ProjectFieldController::class, 'update'])->name('project-fields.update');
     Route::delete('project-fields/{field}', [ProjectFieldController::class, 'destroy'])->name('project-fields.destroy');
+
+    // Project share invitations (read-only, email-restricted)
+    Route::post('projects/{project}/shares', [ProjectShareController::class, 'store'])->name('projects.shares.store')->middleware('plan:studio_manager');
+    Route::delete('project-shares/{share}', [ProjectShareController::class, 'destroy'])->name('project-shares.destroy')->middleware('plan:studio_manager');
 
     // Project statuses (kanban columns) + types — customisable, colour-coded
     Route::post('project-statuses', [ProjectSettingsController::class, 'storeStatus'])->name('project-statuses.store');
@@ -152,6 +167,9 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
     Route::get('messages', [ConversationController::class, 'index'])->name('messages.index');
     Route::post('messages', [ConversationController::class, 'store'])->name('messages.store');
     Route::post('messages/inline-image', [ConversationController::class, 'inlineImage'])->name('messages.inline-image');
+    // Open (or start) the thread for a specific contact — used by the "Message"
+    // button on the contact page.
+    Route::get('messages/with/{contact}', [ConversationController::class, 'withContact'])->name('messages.with-contact');
     Route::get('messages/{conversation}/linkables', [ConversationController::class, 'linkables'])->name('messages.linkables');
     Route::get('messages/{conversation}', [ConversationController::class, 'index'])->name('messages.show');
     Route::post('messages/{conversation}/reply', [ConversationController::class, 'reply'])->name('messages.reply');
@@ -272,6 +290,9 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
         Route::post('website/upload', [SiteController::class, 'uploadImage'])->name('website.upload');
         Route::get('website/gallery-images', [SiteController::class, 'galleryImages'])->name('website.gallery.images');
         Route::post('website/gallery-images', [SiteController::class, 'importGalleryImages'])->name('website.gallery.import');
+        Route::post('website/categories', [SiteController::class, 'storeCategory'])->name('website.categories.store');
+        Route::patch('website/categories/{category}', [SiteController::class, 'updateCategory'])->name('website.categories.update');
+        Route::delete('website/categories/{category}', [SiteController::class, 'destroyCategory'])->name('website.categories.destroy');
         Route::get('website/leads', [SiteController::class, 'leads'])->name('website.leads');
         Route::get('website/analytics', [SiteController::class, 'analytics'])->name('website.analytics');
         Route::post('website/google-reviews/search', [SiteController::class, 'googleReviewsSearch'])->name('website.google-reviews.search');
@@ -405,23 +426,31 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
 
 // Public contract signing (no auth — resolved by unguessable public_id)
 Route::get('/c/{publicId}', [ContractSigningController::class, 'show'])->name('contracts.public.show');
-Route::post('/c/{publicId}/sign', [ContractSigningController::class, 'sign'])->name('contracts.public.sign');
+Route::post('/c/{publicId}/sign', [ContractSigningController::class, 'sign'])->name('contracts.public.sign')->middleware('throttle:public-forms');
 
 // Public questionnaire (no auth — resolved by unguessable public_id)
 Route::get('/q/{publicId}', [PublicQuestionnaireController::class, 'show'])->name('questionnaires.public.show');
-Route::post('/q/{publicId}', [PublicQuestionnaireController::class, 'submit'])->name('questionnaires.public.submit');
+Route::post('/q/{publicId}', [PublicQuestionnaireController::class, 'submit'])->name('questionnaires.public.submit')->middleware('throttle:public-forms');
+Route::post('/q/{publicId}/upload-image', [PublicQuestionnaireController::class, 'uploadImage'])->name('questionnaires.public.upload-image')->middleware('throttle:public-forms');
+Route::post('/q/{publicId}/upload-file', [PublicQuestionnaireController::class, 'uploadFile'])->name('questionnaires.public.upload-file')->middleware('throttle:public-forms');
+
+// Public project share (no auth — resolved by a per-recipient invitation token,
+// then gated behind an emailed one-time code so a forwarded link is useless).
+Route::get('/project/share/{token}', [PublicProjectController::class, 'show'])->name('projects.public.show');
+Route::post('/project/share/{token}/code', [PublicProjectController::class, 'sendCode'])->name('projects.public.code')->middleware('throttle:5,1');
+Route::post('/project/share/{token}/verify', [PublicProjectController::class, 'verify'])->name('projects.public.verify')->middleware('throttle:10,1');
 
 // Public proposal (no auth — resolved by unguessable public_id)
 Route::get('/p/{publicId}', [PublicProposalController::class, 'show'])->name('proposals.public.show');
-Route::post('/p/{publicId}/sign', [PublicProposalController::class, 'sign'])->name('proposals.public.sign');
+Route::post('/p/{publicId}/sign', [PublicProposalController::class, 'sign'])->name('proposals.public.sign')->middleware('throttle:public-forms');
 
 // Public invoice payment (no auth — resolved by unguessable public_id)
 Route::get('/i/{publicId}', [PublicInvoiceController::class, 'show'])->name('invoices.public.show');
 Route::get('/i/{publicId}/pdf', [PublicInvoiceController::class, 'pdf'])->name('invoices.public.pdf');
-Route::post('/i/{publicId}/checkout', [PublicInvoiceController::class, 'checkout'])->name('invoices.public.checkout');
+Route::post('/i/{publicId}/checkout', [PublicInvoiceController::class, 'checkout'])->name('invoices.public.checkout')->middleware('throttle:public-checkout');
 
 // Public studio website (no auth — resolved by slug, only if published)
-Route::post('/site/{slug}/contact', [PublicSiteController::class, 'submitLead'])->name('sites.public.lead');
+Route::post('/site/{slug}/contact', [PublicSiteController::class, 'submitLead'])->name('sites.public.lead')->middleware('throttle:public-forms');
 Route::get('/site/{slug}/sitemap.xml', [PublicSiteController::class, 'sitemap'])->name('sites.public.sitemap');
 Route::get('/site/{slug}/robots.txt', [PublicSiteController::class, 'robots'])->name('sites.public.robots');
 Route::get('/site/{slug}/pay/{package}', [PublicSiteController::class, 'paymentLink'])->name('sites.public.pay');
@@ -473,18 +502,18 @@ Route::middleware('throttle:60,1')->group(function () {
 // Public booking site (no auth) — studio resolved by slug.
 Route::get('/book/{slug}', [PublicMeetingController::class, 'index'])->name('meetings.public.studio');
 Route::get('/book/{slug}/{type}', [PublicMeetingController::class, 'show'])->name('meetings.public.show');
-Route::post('/book/{slug}/{type}', [PublicMeetingController::class, 'store'])->name('meetings.public.store');
+Route::post('/book/{slug}/{type}', [PublicMeetingController::class, 'store'])->name('meetings.public.store')->middleware('throttle:public-forms');
 Route::get('/booking/{meeting}', [PublicMeetingController::class, 'confirmation'])->name('meetings.public.confirmation');
 
 // Public packages / booking shop (no auth) — studio resolved by slug. Embeddable via ?embed=1.
 Route::get('/packages/{slug}', [PublicPackageController::class, 'index'])->name('packages.public');
 Route::get('/packages/{slug}/{package}', [PublicPackageController::class, 'show'])->name('packages.public.show');
-Route::post('/packages/{slug}/{package}/checkout', [PublicPackageController::class, 'checkout'])->name('packages.public.checkout');
+Route::post('/packages/{slug}/{package}/checkout', [PublicPackageController::class, 'checkout'])->name('packages.public.checkout')->middleware('throttle:public-checkout');
 Route::get('/package-booking/{booking}', [PublicPackageController::class, 'confirmation'])->name('packages.public.confirmation');
 
 // Public store checkout (no auth) — in-gallery cart → Stripe Connect checkout.
-Route::post('/g/{slug}/store/quote', [StoreCheckoutController::class, 'quote'])->name('store.public.quote');
-Route::post('/g/{slug}/store/checkout', [StoreCheckoutController::class, 'checkout'])->name('store.public.checkout');
+Route::post('/g/{slug}/store/quote', [StoreCheckoutController::class, 'quote'])->name('store.public.quote')->middleware('throttle:public-checkout');
+Route::post('/g/{slug}/store/checkout', [StoreCheckoutController::class, 'checkout'])->name('store.public.checkout')->middleware('throttle:public-checkout');
 Route::get('/order/{publicId}', [StoreCheckoutController::class, 'confirmation'])->name('store.public.confirmation');
 // Purchased digital download (token-gated, no auth).
 Route::get('/d/{token}', [StoreDownloadController::class, 'download'])->name('store.public.download');

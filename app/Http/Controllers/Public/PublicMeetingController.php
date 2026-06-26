@@ -95,7 +95,6 @@ class PublicMeetingController extends Controller
                     'last_name' => $last,
                     'email' => $data['client_email'],
                     'phone' => $data['client_phone'] ?? null,
-                    'status' => 'lead',
                 ]);
             }
 

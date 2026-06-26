@@ -50,7 +50,7 @@ class GuestUploadAdminController extends Controller
             ],
             'settings' => $settings,
             'upload_url' => $uploadUrl,
-            'qr_data_uri' => $this->qrDataUri($uploadUrl),
+            'qr_data_uri' => $this->qrDataUri($uploadUrl, 600),
             'photos' => $photos,
         ]);
     }

@@ -10,7 +10,10 @@ use App\Models\Project;
 use App\Models\ProjectFieldDefinition;
 use App\Models\ProjectStatus;
 use App\Models\ProjectType;
+use App\Models\Task;
 use App\Services\WorkflowEngine;
+use App\Support\PublicAsset;
+use App\Support\StudioPaths;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -65,11 +68,20 @@ class ProjectController extends Controller
             'contracts' => fn ($q) => $q->orderByDesc('id'),
             'noteEntries',
             'collections',
+            'shares',
+            'tasks.assignee:id,name',
             'taggedMessages.conversation:id,subject',
             'taggedMessages.user:id,name',
         ]);
 
         return response()->json([
+            'tasks' => $project->tasks->map(fn (Task $t) => [
+                'id' => $t->id,
+                'title' => $t->title,
+                'due_date' => $t->due_date?->toDateString(),
+                'completed' => $t->completed_at !== null,
+                'assignee' => $t->assignee?->name,
+            ]),
             'messages' => $project->taggedMessages->map(fn (Message $m) => [
                 'id' => $m->id,
                 'conversation_id' => $m->conversation_id,
@@ -106,6 +118,25 @@ class ProjectController extends Controller
                 'body' => $n->body,
                 'created_at' => $n->created_at->toIso8601String(),
             ]),
+            'shares' => $project->shares->map(fn ($s) => [
+                'id' => $s->id,
+                'email' => $s->email,
+                'code' => $s->code,
+                'last_viewed_at' => $s->last_viewed_at?->toIso8601String(),
+                'url' => $s->url(),
+            ]),
+            // Other projects for the same client (empty when there's no contact).
+            'related_projects' => Project::where('contact_id', $project->contact_id)
+                ->where('id', '!=', $project->id)
+                ->with('status:id,label,color')
+                ->latest('event_date')
+                ->get()
+                ->map(fn (Project $p) => [
+                    'id' => $p->id,
+                    'name' => $p->name,
+                    'event_date' => $p->event_date?->toDateString(),
+                    'status' => $p->status ? ['label' => $p->status->label, 'color' => $p->status->color] : null,
+                ]),
         ]);
     }
 
@@ -143,6 +174,75 @@ class ProjectController extends Controller
         $project->delete();
 
         return back()->with('success', 'Project deleted.');
+    }
+
+    /**
+     * Read-only, printable view for the studio — the same page recipients see via
+     * a share link, but without the email gate since the user is authenticated.
+     */
+    public function preview(Project $project): Response
+    {
+        $project->load(['contact', 'status', 'type']);
+        $studio = $project->studio;
+
+        return Inertia::render('Public/ProjectShare', [
+            'project' => [
+                'name' => $project->name,
+                'event_date' => $project->event_date?->toDateString(),
+                'status' => $project->status?->label,
+                'type' => $project->type?->label,
+                'notes' => $project->notes,
+                'custom_fields' => $project->custom_fields ?? [],
+                'client' => $project->contact ? [
+                    'name' => $project->contact->name,
+                    'email' => $project->contact->email,
+                    'phone' => $project->contact->phone,
+                ] : null,
+            ],
+            'fields' => ProjectFieldDefinition::orderBy('position')->get(['key', 'label', 'type', 'options']),
+            'studio_name' => $studio?->name,
+            'studio_logo' => $studio?->logoUrl(),
+        ]);
+    }
+
+    /**
+     * Upload an image for an "image" custom field. Stored on the public Wasabi
+     * prefix; the returned {url, name} is appended to the field's value array.
+     */
+    public function uploadImage(Request $request): JsonResponse
+    {
+        $request->validate([
+            'image' => 'required|image|mimes:jpg,jpeg,png,gif,webp|max:15360',
+        ]);
+
+        $studioId = app('current.studio.id');
+        $path = $request->file('image')->storePublicly(StudioPaths::asset($studioId, 'projects/fields'), 'wasabi');
+
+        return response()->json([
+            'url' => PublicAsset::url($path),
+            'name' => $request->file('image')->getClientOriginalName(),
+        ]);
+    }
+
+    /**
+     * Upload a document/asset for a "file" custom field. Stored on the public
+     * Wasabi prefix; the returned {url, name, size} is appended to the value array.
+     */
+    public function uploadFile(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => 'required|file|max:25600',
+        ]);
+
+        $file = $request->file('file');
+        $studioId = app('current.studio.id');
+        $path = $file->storePublicly(StudioPaths::asset($studioId, 'projects/files'), 'wasabi');
+
+        return response()->json([
+            'url' => PublicAsset::url($path),
+            'name' => $file->getClientOriginalName(),
+            'size' => $file->getSize(),
+        ]);
     }
 
     /**

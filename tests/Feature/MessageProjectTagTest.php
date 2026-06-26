@@ -15,7 +15,7 @@ function tagSetup(): array
     app()->instance('current.studio.id', $studio->id);
 
     $contact = Contact::withoutGlobalScopes()->create([
-        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com', 'status' => 'client',
+        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com',
     ]);
     $conversation = Conversation::create([
         'studio_id' => $studio->id, 'contact_id' => $contact->id, 'subject' => 'Your wedding',
@@ -42,7 +42,7 @@ it('tags a message to a project belonging to the same contact', function () {
 it('refuses to tag a message to another contact\'s project', function () {
     [$studio, $user, , , $message] = tagSetup();
     $otherContact = Contact::withoutGlobalScopes()->create([
-        'studio_id' => $studio->id, 'first_name' => 'Bob', 'email' => 'bob@example.com', 'status' => 'client',
+        'studio_id' => $studio->id, 'first_name' => 'Bob', 'email' => 'bob@example.com',
     ]);
     $foreign = Project::create(['studio_id' => $studio->id, 'name' => 'Bob Project', 'contact_id' => $otherContact->id]);
 

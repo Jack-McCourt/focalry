@@ -1,6 +1,6 @@
 import { galleryThemeVars } from '@/lib/galleryTheme';
 import { PageProps } from '@/types';
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { ChangeEvent, useMemo, useRef, useState } from 'react';
 
@@ -62,7 +62,14 @@ export default function GuestUpload({
     const [name, setName] = useState('');
     const [caption, setCaption] = useState('');
     const [uploads, setUploads] = useState<UploadItem[]>([]);
+    const [localPhotos, setLocalPhotos] = useState<{ key: string; url: string; caption: string | null; uploader_name: string | null }[]>([]);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    // Newest first: this guest's just-uploaded previews, then the saved wall.
+    const wall = [
+        ...localPhotos.map((p) => ({ id: p.key, thumb_url: p.url, caption: p.caption, uploader_name: p.uploader_name })),
+        ...photos.map((p) => ({ id: String(p.id), thumb_url: p.thumb_url, caption: p.caption, uploader_name: p.uploader_name })),
+    ];
 
     const decodedToken = () => decodeURIComponent(getCsrfToken());
 
@@ -128,6 +135,13 @@ export default function GuestUpload({
             );
 
             patch({ status: 'done', progress: 100 });
+
+            // Show it on the wall immediately (no refresh) using a local preview —
+            // the processed version will be there next time the page loads.
+            setLocalPhotos((prev) => [
+                { key: id, url: URL.createObjectURL(file), caption: caption.trim() || null, uploader_name: name.trim() || null },
+                ...prev,
+            ]);
         } catch {
             patch({ status: 'error' });
         }
@@ -138,11 +152,7 @@ export default function GuestUpload({
         const files = Array.from(e.target.files).filter((f) => ALLOWED.includes(f.type));
         e.target.value = '';
         // Upload sequentially — guests are usually on phones / weak connections.
-        // Refresh the shared wall once everything finishes (newly-processed photos
-        // appear; the guest's own may need a moment while derivatives generate).
-        files
-            .reduce((chain, f) => chain.then(() => uploadOne(f)), Promise.resolve())
-            .then(() => router.reload({ only: ['photos'] }));
+        files.reduce((chain, f) => chain.then(() => uploadOne(f)), Promise.resolve());
     };
 
     const doneCount = uploads.filter((u) => u.status === 'done').length;
@@ -153,14 +163,14 @@ export default function GuestUpload({
         <>
             <Head title={`${title} — ${collection.title}`} />
             <div
-                className="flex min-h-screen flex-col items-center px-6 py-12"
+                className="flex min-h-screen flex-col items-center px-4 py-8 sm:px-6 sm:py-12"
                 style={{ ...themeVars, background: 'var(--g-bg)', color: 'var(--g-text)' }}
             >
                 <div className="w-full max-w-sm text-center">
                     <p className="mb-2 text-xs uppercase tracking-widest" style={{ color: 'var(--g-muted)' }}>
                         {collection.title}
                     </p>
-                    <h1 className="text-2xl font-light tracking-wide">{title}</h1>
+                    <h1 className="text-2xl font-light tracking-wide sm:text-3xl">{title}</h1>
                     <p className="mt-2 text-sm" style={{ color: 'var(--g-muted)' }}>
                         {message}
                     </p>
@@ -266,32 +276,34 @@ export default function GuestUpload({
                     )}
                 </div>
 
-                {/* Shared wall — everything guests have uploaded */}
-                {photos.length > 0 && (
-                    <div className="mt-14 w-full max-w-3xl">
+                {/* Shared wall — newest first, masonry at each photo's natural ratio */}
+                {wall.length > 0 && (
+                    <div className="mt-12 w-full max-w-4xl sm:mt-14">
                         <p className="mb-4 text-center text-xs uppercase tracking-widest" style={{ color: 'var(--g-muted)' }}>
                             Shared by guests
                         </p>
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-                            {photos.map((p) => (
-                                <div key={p.id} className="overflow-hidden rounded-lg" style={{ background: 'var(--g-panel)' }}>
-                                    <div className="aspect-square" style={{ background: 'var(--g-border)' }}>
-                                        {p.thumb_url && (
-                                            <img
-                                                src={p.thumb_url}
-                                                alt={p.uploader_name ?? ''}
-                                                loading="lazy"
-                                                className="h-full w-full object-cover"
-                                            />
-                                        )}
-                                    </div>
+                        <div className="gap-2 [column-fill:_balance] columns-2 sm:columns-3 sm:gap-3 lg:columns-4">
+                            {wall.map((p) => (
+                                <div
+                                    key={p.id}
+                                    className="mb-2 break-inside-avoid overflow-hidden rounded-lg sm:mb-3"
+                                    style={{ background: 'var(--g-panel)' }}
+                                >
+                                    {p.thumb_url && (
+                                        <img
+                                            src={p.thumb_url}
+                                            alt={p.uploader_name ?? ''}
+                                            loading="lazy"
+                                            className="w-full"
+                                        />
+                                    )}
                                     {(p.caption || p.uploader_name) && (
                                         <div className="px-2.5 py-2 text-left">
                                             {p.caption && (
-                                                <p className="text-xs leading-snug" style={{ color: 'var(--g-text)' }}>{p.caption}</p>
+                                                <p className="break-words text-xs leading-snug" style={{ color: 'var(--g-text)' }}>{p.caption}</p>
                                             )}
                                             {p.uploader_name && (
-                                                <p className="mt-0.5 text-[11px]" style={{ color: 'var(--g-muted)' }}>— {p.uploader_name}</p>
+                                                <p className="mt-0.5 break-words text-[11px]" style={{ color: 'var(--g-muted)' }}>— {p.uploader_name}</p>
                                             )}
                                         </div>
                                     )}

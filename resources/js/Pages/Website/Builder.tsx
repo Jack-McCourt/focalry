@@ -7,16 +7,16 @@ import GoogleReviewsModal from '@/Components/site/GoogleReviewsModal';
 import PreviewFrame from '@/Components/site/PreviewFrame';
 import { SITE_FONTS } from '@/lib/siteFonts';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import { BlockSettings, BlogPostCard, PackageCard, PageProps, SiteBlock, SiteBlockType, SiteData, SiteNavItem, SitePageData, SiteTemplateMeta, SiteTheme } from '@/types';
+import { BlockSettings, BlogPostCard, PackageCard, PageProps, SiteBlock, SiteBlockType, SiteCategory, SiteData, SiteNavItem, SitePageData, SiteTemplateMeta, SiteTheme } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 // Placeholder posts so the blog block shows something in the builder preview.
 const SAMPLE_POSTS: BlogPostCard[] = [
-    { title: 'A spring wedding at the coast', slug: 'sample-1', excerpt: 'A radiant day by the sea full of colour and joy.', category: 'Weddings', cover_image: null, published_at: new Date().toISOString(), url: '#' },
-    { title: 'Golden hour portraits', slug: 'sample-2', excerpt: 'Why the last hour of light is my favourite.', category: 'Portraits', cover_image: null, published_at: new Date().toISOString(), url: '#' },
-    { title: 'Behind the scenes', slug: 'sample-3', excerpt: 'A peek at how a shoot really comes together.', category: 'Tips', cover_image: null, published_at: new Date().toISOString(), url: '#' },
+    { title: 'A spring wedding at the coast', slug: 'sample-1', excerpt: 'A radiant day by the sea full of colour and joy.', categories: [{ id: -1, name: 'Weddings', slug: 'weddings', parent_id: null }], cover_image: null, published_at: new Date().toISOString(), url: '#' },
+    { title: 'Golden hour portraits', slug: 'sample-2', excerpt: 'Why the last hour of light is my favourite.', categories: [{ id: -2, name: 'Portraits', slug: 'portraits', parent_id: null }], cover_image: null, published_at: new Date().toISOString(), url: '#' },
+    { title: 'Behind the scenes', slug: 'sample-3', excerpt: 'A peek at how a shoot really comes together.', categories: [{ id: -3, name: 'Tips', slug: 'tips', parent_id: null }], cover_image: null, published_at: new Date().toISOString(), url: '#' },
 ];
 
 // Placeholder packages so the packages block shows something in the preview.
@@ -49,6 +49,41 @@ export default function Builder({
     const [cookieMessage, setCookieMessage] = useState(site.cookie_message ?? '');
     const [cookiePolicyUrl, setCookiePolicyUrl] = useState(site.cookie_policy_url ?? '');
     const [pages, setPages] = useState<SitePageData[]>(site.pages);
+    // Blog categories are managed over ajax (not part of the page save payload) so
+    // adding/renaming/deleting one never clobbers unsaved page edits — like WP.
+    const [categories, setCategories] = useState<SiteCategory[]>(site.categories ?? []);
+    const [categoryBusy, setCategoryBusy] = useState(false);
+
+    const createCategory = async (name: string, parentId: number | null): Promise<SiteCategory | null> => {
+        setCategoryBusy(true);
+        try {
+            const before = categories.map((c) => c.id);
+            const { data } = await (window as any).axios.post(route('website.categories.store'), { name, parent_id: parentId });
+            setCategories(data.categories);
+            // Return the newly created category so the caller can tick it on the post.
+            return (data.categories as SiteCategory[]).find((c) => !before.includes(c.id)) ?? null;
+        } finally {
+            setCategoryBusy(false);
+        }
+    };
+    const renameCategory = async (id: number, name: string, parentId: number | null) => {
+        setCategoryBusy(true);
+        try {
+            const { data } = await (window as any).axios.patch(route('website.categories.update', id), { name, parent_id: parentId });
+            setCategories(data.categories);
+        } finally {
+            setCategoryBusy(false);
+        }
+    };
+    const deleteCategory = async (id: number) => {
+        setCategoryBusy(true);
+        try {
+            const { data } = await (window as any).axios.delete(route('website.categories.destroy', id));
+            setCategories(data.categories);
+        } finally {
+            setCategoryBusy(false);
+        }
+    };
 
     const [activePage, setActivePage] = useState(0);
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
@@ -513,7 +548,7 @@ export default function Builder({
                             <button onClick={() => removeBlock(selectedBlock.id)} className="mt-2 w-full rounded-md border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50">Delete block</button>
                         </div>
                     ) : (
-                        <PagePanel page={page} activePage={activePage} pages={pages} updatePageMeta={updatePageMeta} setHome={setHome} setBlog={setBlog} set404={set404} removePage={removePage} duplicatePage={duplicatePage} />
+                        <PagePanel page={page} activePage={activePage} pages={pages} updatePageMeta={updatePageMeta} setHome={setHome} setBlog={setBlog} set404={set404} removePage={removePage} duplicatePage={duplicatePage} categories={categories} categoryBusy={categoryBusy} createCategory={createCategory} renameCategory={renameCategory} deleteCategory={deleteCategory} />
                     )}
                 </aside>
             </div>
@@ -541,9 +576,161 @@ export default function Builder({
     );
 }
 
+// ─── Category metabox (WordPress-style checkbox tree + add-new) ───────────────
+
+/** Order categories as a depth-first tree, carrying each node's depth. */
+function orderedTree(categories: SiteCategory[]): { cat: SiteCategory; depth: number }[] {
+    const out: { cat: SiteCategory; depth: number }[] = [];
+    const walk = (parentId: number | null, depth: number) => {
+        for (const cat of categories.filter((c) => c.parent_id === parentId)) {
+            out.push({ cat, depth });
+            walk(cat.id, depth + 1);
+        }
+    };
+    walk(null, 0);
+    return out;
+}
+
+function CategoryMetabox({
+    categories,
+    selected,
+    onChange,
+    busy,
+    createCategory,
+    renameCategory,
+    deleteCategory,
+}: {
+    categories: SiteCategory[];
+    selected: number[];
+    onChange: (ids: number[]) => void;
+    busy: boolean;
+    createCategory: (name: string, parentId: number | null) => Promise<SiteCategory | null>;
+    renameCategory: (id: number, name: string, parentId: number | null) => Promise<void>;
+    deleteCategory: (id: number) => Promise<void>;
+}) {
+    const [adding, setAdding] = useState(false);
+    const [newName, setNewName] = useState('');
+    const [newParent, setNewParent] = useState<string>('');
+    const [manage, setManage] = useState(false);
+    const [editingId, setEditingId] = useState<number | null>(null);
+    const [editName, setEditName] = useState('');
+
+    const tree = orderedTree(categories);
+    const toggle = (id: number) => onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+
+    const submitNew = async () => {
+        const name = newName.trim();
+        if (!name) return;
+        const created = await createCategory(name, newParent ? Number(newParent) : null);
+        if (created) onChange([...selected, created.id]);
+        setNewName('');
+        setNewParent('');
+        setAdding(false);
+    };
+
+    const saveEdit = async (cat: SiteCategory) => {
+        const name = editName.trim();
+        if (name && name !== cat.name) await renameCategory(cat.id, name, cat.parent_id);
+        setEditingId(null);
+    };
+
+    return (
+        <div className="rounded-md border border-neutral-200">
+            <div className="max-h-52 overflow-y-auto p-2">
+                {tree.length === 0 ? (
+                    <p className="px-1 py-2 text-xs text-neutral-400">No categories yet. Add one below.</p>
+                ) : (
+                    tree.map(({ cat, depth }) => (
+                        <div key={cat.id} className="group flex items-center gap-2 rounded py-0.5 pr-1 hover:bg-neutral-50" style={{ paddingLeft: depth * 18 }}>
+                            {editingId === cat.id ? (
+                                <input
+                                    autoFocus
+                                    className="input h-7 flex-1 py-0.5 text-sm"
+                                    value={editName}
+                                    onChange={(e) => setEditName(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(cat); if (e.key === 'Escape') setEditingId(null); }}
+                                    onBlur={() => saveEdit(cat)}
+                                />
+                            ) : (
+                                <>
+                                    <label className="flex flex-1 items-center gap-2 text-sm text-neutral-700">
+                                        <input type="checkbox" className="rounded border-neutral-300" checked={selected.includes(cat.id)} onChange={() => toggle(cat.id)} />
+                                        {cat.name}
+                                    </label>
+                                    {manage && (
+                                        <span className="flex items-center gap-2 opacity-0 transition group-hover:opacity-100">
+                                            <button type="button" title="Rename" onClick={() => { setEditingId(cat.id); setEditName(cat.name); }} className="text-neutral-400 hover:text-neutral-700">
+                                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
+                                            </button>
+                                            <button type="button" title="Delete" disabled={busy} onClick={() => { if (window.confirm(`Delete category “${cat.name}”? Posts keep their other categories; any sub-categories move up a level.`)) deleteCategory(cat.id); }} className="text-neutral-400 hover:text-red-500">
+                                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                            </button>
+                                        </span>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    ))
+                )}
+            </div>
+
+            <div className="border-t border-neutral-100 px-2 py-2">
+                {adding ? (
+                    <div className="space-y-2">
+                        <input autoFocus className="input h-8 py-1 text-sm" placeholder="New category name" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') submitNew(); }} />
+                        <select className="input h-8 py-1 text-sm" value={newParent} onChange={(e) => setNewParent(e.target.value)}>
+                            <option value="">— Parent category: none —</option>
+                            {tree.map(({ cat, depth }) => (
+                                <option key={cat.id} value={cat.id}>{'— '.repeat(depth)}{cat.name}</option>
+                            ))}
+                        </select>
+                        <div className="flex items-center gap-2">
+                            <button type="button" disabled={busy || !newName.trim()} onClick={submitNew} className="btn-primary h-7 px-3 py-0 text-xs disabled:opacity-40">Add</button>
+                            <button type="button" onClick={() => { setAdding(false); setNewName(''); setNewParent(''); }} className="text-xs text-neutral-500 hover:text-neutral-800">Cancel</button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-between">
+                        <button type="button" onClick={() => setAdding(true)} className="text-xs font-medium text-blue-600 hover:text-blue-800">+ Add New Category</button>
+                        {categories.length > 0 && (
+                            <button type="button" onClick={() => { setManage((m) => !m); setEditingId(null); }} className="text-xs text-neutral-400 hover:text-neutral-700">{manage ? 'Done' : 'Manage'}</button>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ─── Blog page: which category filter links to show ──────────────────────────
+
+/** Every category is shown by default; unticking one hides its filter link. */
+function BlogCategoryVisibility({ categories, hidden, onChange }: { categories: SiteCategory[]; hidden: number[]; onChange: (ids: number[]) => void }) {
+    const tree = orderedTree(categories);
+    const toggle = (id: number) => onChange(hidden.includes(id) ? hidden.filter((x) => x !== id) : [...hidden, id]);
+
+    return (
+        <div className="rounded-md border border-neutral-200 p-2">
+            <p className="px-1 pb-1.5 text-xs text-neutral-500">Categories shown in the blog filter</p>
+            {tree.length === 0 ? (
+                <p className="px-1 py-1 text-xs text-neutral-400">No categories yet. Add them from a post’s settings.</p>
+            ) : (
+                <div className="max-h-48 overflow-y-auto">
+                    {tree.map(({ cat, depth }) => (
+                        <label key={cat.id} className="flex items-center gap-2 rounded py-0.5 pr-1 text-sm text-neutral-700 hover:bg-neutral-50" style={{ paddingLeft: depth * 18 + 4 }}>
+                            <input type="checkbox" className="rounded border-neutral-300" checked={!hidden.includes(cat.id)} onChange={() => toggle(cat.id)} />
+                            {cat.name}
+                        </label>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ─── Page panel (right panel when a page is selected) ─────────────────────────
 
-function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, set404, removePage, duplicatePage }: any) {
+function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, set404, removePage, duplicatePage, categories, categoryBusy, createCategory, renameCategory, deleteCategory }: any) {
     if (!page) return null;
 
     const isPost = !!page.is_post;
@@ -582,15 +769,18 @@ function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, 
                             <span className="label mb-1.5 block">Excerpt</span>
                             <textarea className="input" rows={2} value={page.excerpt ?? ''} onChange={(e) => set({ excerpt: e.target.value })} placeholder="Short summary shown in post listings" />
                         </label>
-                        <label className="block">
-                            <span className="label mb-1.5 block">Category</span>
-                            <input className="input" list="post-categories" value={page.category ?? ''} onChange={(e) => set({ category: e.target.value })} placeholder="e.g. Weddings" />
-                            <datalist id="post-categories">
-                                {Array.from(new Set<string>(pages.filter((p: SitePageData) => p.is_post && p.category).map((p: SitePageData) => p.category as string))).map((c: string) => (
-                                    <option key={c} value={c} />
-                                ))}
-                            </datalist>
-                        </label>
+                        <div className="block">
+                            <span className="label mb-1.5 block">Categories</span>
+                            <CategoryMetabox
+                                categories={categories}
+                                selected={page.category_ids ?? []}
+                                onChange={(ids: number[]) => set({ category_ids: ids })}
+                                busy={categoryBusy}
+                                createCategory={createCategory}
+                                renameCategory={renameCategory}
+                                deleteCategory={deleteCategory}
+                            />
+                        </div>
                         <ImageField label="Cover image" value={page.cover_image ?? ''} onChange={(v) => set({ cover_image: v })} />
                         <div className="flex gap-3 pt-1">
                             <button onClick={() => duplicatePage(activePage)} className="text-xs text-neutral-600 hover:underline">Duplicate post</button>
@@ -605,6 +795,13 @@ function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, 
                         <label className="flex items-center gap-2 text-sm text-neutral-700">
                             <input type="checkbox" checked={!!page.is_blog} onChange={(e) => setBlog(activePage, e.target.checked)} /> Blog page <span className="text-xs text-neutral-400">(posts live here)</span>
                         </label>
+                        {page.is_blog && (
+                            <BlogCategoryVisibility
+                                categories={categories}
+                                hidden={page.hidden_category_ids ?? []}
+                                onChange={(ids: number[]) => set({ hidden_category_ids: ids })}
+                            />
+                        )}
                         <label className="flex items-center gap-2 text-sm text-neutral-700">
                             <input type="checkbox" checked={!!page.is_404} onChange={(e) => set404(activePage, e.target.checked)} /> 404 page <span className="text-xs text-neutral-400">(shown for missing URLs)</span>
                         </label>

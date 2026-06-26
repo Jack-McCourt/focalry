@@ -54,6 +54,14 @@ class PhotoController extends Controller
         return response()->json(['photo' => $photo], 201);
     }
 
+    /** Toggle the photographer's own "favourite" star on a photo. */
+    public function star(Photo $photo): JsonResponse
+    {
+        $photo->update(['starred' => ! $photo->starred]);
+
+        return response()->json(['starred' => $photo->starred]);
+    }
+
     public function update(Request $request, Photo $photo): JsonResponse
     {
         $validated = $request->validate([

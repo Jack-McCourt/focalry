@@ -87,16 +87,31 @@ interface Step {
     offset_value: number;
     offset_unit: string;
 }
+/** Relative date offset for date-field conditions, e.g. "2 weeks after today". */
+interface RelativeDate {
+    amount: number;
+    unit: string;
+    anchor: string; // 'after' (future) | 'before' (past), relative to today
+}
+type ConditionValue = string | RelativeDate;
+interface Condition {
+    field: string;
+    operator: string;
+    value: ConditionValue;
+}
 interface Workflow {
     id: number | null;
     name: string;
     description: string | null;
     trigger: string;
     trigger_status_id: number | null;
+    conditions: Condition[];
+    condition_match: string;
     is_active: boolean;
     steps: Step[];
 }
 interface Opt { id: number; name?: string; label?: string }
+interface ConditionField { key: string; label: string; kind: string; options?: { label: string; color?: string }[] }
 
 export default function Edit({
     workflow,
@@ -105,8 +120,12 @@ export default function Edit({
     schedule_modes,
     offset_units,
     statuses,
+    project_types,
     task_templates,
     questionnaire_templates,
+    condition_operators,
+    valueless_operators,
+    condition_fields,
 }: PageProps<{
     workflow: Workflow;
     triggers: Record<string, string>;
@@ -114,8 +133,12 @@ export default function Edit({
     schedule_modes: Record<string, string>;
     offset_units: string[];
     statuses: { id: number; label: string; color: string }[];
+    project_types: { id: number; label: string; color: string }[];
     task_templates: Opt[];
     questionnaire_templates: Opt[];
+    condition_operators: Record<string, string>;
+    valueless_operators: string[];
+    condition_fields: ConditionField[];
 }>) {
     const form = useForm<Workflow>({
         id: workflow.id,
@@ -123,6 +146,8 @@ export default function Edit({
         description: workflow.description ?? '',
         trigger: workflow.trigger ?? 'project_status_changed',
         trigger_status_id: workflow.trigger_status_id,
+        conditions: workflow.conditions ?? [],
+        condition_match: workflow.condition_match ?? 'all',
         is_active: workflow.is_active ?? true,
         steps: workflow.steps?.length ? workflow.steps : [],
     });
@@ -136,6 +161,15 @@ export default function Edit({
 
     const addStep = () => form.setData('steps', [...form.data.steps, { action: 'send_email', config: {}, schedule_mode: 'after_trigger', offset_value: 0, offset_unit: 'day' }]);
     const removeStep = (i: number) => form.setData('steps', form.data.steps.filter((_, j) => j !== i));
+
+    const setCondition = (i: number, patch: Partial<Condition>) =>
+        form.setData('conditions', form.data.conditions.map((c, j) => (j === i ? { ...c, ...patch } : c)));
+    const addCondition = () => {
+        const first = condition_fields[0];
+        form.setData('conditions', [...form.data.conditions, { field: first?.key ?? '', operator: operatorsForKind(first?.kind)[0], value: defaultValueFor(first?.kind) }]);
+    };
+    const removeCondition = (i: number) =>
+        form.setData('conditions', form.data.conditions.filter((_, j) => j !== i));
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -187,6 +221,50 @@ export default function Edit({
                                 {statuses.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                             </select>
                         </div>
+                    )}
+                </div>
+
+                {/* Conditions */}
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-sm font-semibold text-neutral-900">…only if</h2>
+                        {form.data.conditions.length > 1 && (
+                            <div className="flex items-center gap-1.5 text-xs text-neutral-500">
+                                <span>Match</span>
+                                <select
+                                    value={form.data.condition_match}
+                                    onChange={(e) => form.setData('condition_match', e.target.value)}
+                                    className="input w-auto py-1 text-xs"
+                                >
+                                    <option value="all">all conditions</option>
+                                    <option value="any">any condition</option>
+                                </select>
+                            </div>
+                        )}
+                    </div>
+
+                    {form.data.conditions.length === 0 && (
+                        <p className="text-sm text-neutral-400">No conditions — runs every time the trigger fires.</p>
+                    )}
+
+                    {form.data.conditions.map((cond, i) => (
+                        <div key={i} className="rounded-xl border border-neutral-200 bg-white p-4">
+                            <ConditionRow
+                                condition={cond}
+                                fields={condition_fields}
+                                operators={condition_operators}
+                                valuelessOperators={valueless_operators}
+                                offsetUnits={offset_units}
+                                statuses={statuses}
+                                projectTypes={project_types}
+                                onChange={(patch) => setCondition(i, patch)}
+                                onRemove={() => removeCondition(i)}
+                            />
+                        </div>
+                    ))}
+
+                    {condition_fields.length > 0 && (
+                        <button type="button" onClick={addCondition} className="text-sm font-medium text-blue-600 hover:text-blue-800">+ Add condition</button>
                     )}
                 </div>
 
@@ -326,4 +404,141 @@ function StepConfig({
         default:
             return null;
     }
+}
+
+// Which operators make sense for each field kind (keys index into condition_operators).
+const OPERATORS_BY_KIND: Record<string, string[]> = {
+    status: ['equals', 'not_equals', 'is_set', 'is_not_set'],
+    type: ['equals', 'not_equals', 'is_set', 'is_not_set'],
+    select: ['equals', 'not_equals', 'is_set', 'is_not_set'],
+    checkbox: ['equals'],
+    date: ['greater_than', 'less_than', 'is_set', 'is_not_set'],
+    number: ['equals', 'not_equals', 'greater_than', 'less_than', 'is_set', 'is_not_set'],
+};
+const DEFAULT_OPERATORS = ['equals', 'not_equals', 'contains', 'is_set', 'is_not_set'];
+
+// For date fields, "greater/less than" read more naturally as after/before.
+const DATE_OPERATOR_LABELS: Record<string, string> = { greater_than: 'is after', less_than: 'is before' };
+
+const operatorsForKind = (kind?: string): string[] => OPERATORS_BY_KIND[kind ?? ''] ?? DEFAULT_OPERATORS;
+
+const isRelativeDate = (v: ConditionValue): v is RelativeDate => typeof v === 'object' && v !== null;
+const asString = (v: ConditionValue): string => (typeof v === 'string' ? v : '');
+
+/** Sensible starting value when a field (or its kind) changes. */
+const defaultValueFor = (kind?: string): ConditionValue =>
+    kind === 'date' ? { amount: 2, unit: 'week', anchor: 'future' } : '';
+
+/** A single "field — operator — value" rule. The value picker adapts to the field. */
+function ConditionRow({
+    condition,
+    fields,
+    operators,
+    valuelessOperators,
+    offsetUnits,
+    statuses,
+    projectTypes,
+    onChange,
+    onRemove,
+}: {
+    condition: Condition;
+    fields: ConditionField[];
+    operators: Record<string, string>;
+    valuelessOperators: string[];
+    offsetUnits: string[];
+    statuses: { id: number; label: string }[];
+    projectTypes: { id: number; label: string }[];
+    onChange: (patch: Partial<Condition>) => void;
+    onRemove: () => void;
+}) {
+    const field = fields.find((f) => f.key === condition.field);
+    const kind = field?.kind;
+    const needsValue = !valuelessOperators.includes(condition.operator);
+    const allowedOperators = operatorsForKind(kind);
+
+    // When the chosen field changes, keep the operator/value valid for the new kind.
+    const onFieldChange = (key: string) => {
+        const nextKind = fields.find((f) => f.key === key)?.kind;
+        const nextOps = operatorsForKind(nextKind);
+        onChange({
+            field: key,
+            operator: nextOps.includes(condition.operator) ? condition.operator : nextOps[0],
+            value: defaultValueFor(nextKind),
+        });
+    };
+
+    const rel: RelativeDate = isRelativeDate(condition.value) ? condition.value : { amount: 2, unit: 'week', anchor: 'future' };
+    const setRel = (patch: Partial<RelativeDate>) => onChange({ value: { ...rel, ...patch } });
+    const unitLabel = (u: string) => (rel.amount === 1 ? u : `${u}s`);
+
+    const valueInput = () => {
+        switch (kind) {
+            case 'status':
+                return (
+                    <select value={asString(condition.value)} onChange={(e) => onChange({ value: e.target.value })} className="input flex-1">
+                        <option value="">Choose…</option>
+                        {statuses.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                    </select>
+                );
+            case 'type':
+                return (
+                    <select value={asString(condition.value)} onChange={(e) => onChange({ value: e.target.value })} className="input flex-1">
+                        <option value="">Choose…</option>
+                        {projectTypes.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                    </select>
+                );
+            case 'select':
+                return (
+                    <select value={asString(condition.value)} onChange={(e) => onChange({ value: e.target.value })} className="input flex-1">
+                        <option value="">Choose…</option>
+                        {(field?.options ?? []).map((o) => <option key={o.label} value={o.label}>{o.label}</option>)}
+                    </select>
+                );
+            case 'checkbox':
+                return (
+                    <select value={asString(condition.value)} onChange={(e) => onChange({ value: e.target.value })} className="input flex-1">
+                        <option value="1">Ticked</option>
+                        <option value="0">Not ticked</option>
+                    </select>
+                );
+            case 'date':
+                return (
+                    <>
+                        <input type="number" min={0} value={rel.amount} onChange={(e) => setRel({ amount: Math.max(0, Number(e.target.value)) })} className="input w-20" />
+                        <select value={rel.unit} onChange={(e) => setRel({ unit: e.target.value })} className="input w-auto">
+                            {offsetUnits.map((u) => <option key={u} value={u}>{unitLabel(u)}</option>)}
+                        </select>
+                        <select value={rel.anchor} onChange={(e) => setRel({ anchor: e.target.value })} className="input w-auto">
+                            <option value="future">from now</option>
+                            <option value="past">ago</option>
+                        </select>
+                    </>
+                );
+            case 'number':
+                return <input type="number" value={asString(condition.value)} onChange={(e) => onChange({ value: e.target.value })} className="input flex-1" />;
+            default:
+                return <input value={asString(condition.value)} onChange={(e) => onChange({ value: e.target.value })} placeholder="Value" className="input flex-1" />;
+        }
+    };
+
+    return (
+        <div className="flex flex-wrap items-center gap-2">
+            <select
+                value={condition.field}
+                onChange={(e) => onFieldChange(e.target.value)}
+                className="input w-auto min-w-40 flex-1"
+            >
+                {fields.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+            </select>
+            <select value={condition.operator} onChange={(e) => onChange({ operator: e.target.value })} className="input w-auto">
+                {allowedOperators.map((k) => (
+                    <option key={k} value={k}>{(kind === 'date' && DATE_OPERATOR_LABELS[k]) || operators[k]}</option>
+                ))}
+            </select>
+            {needsValue && valueInput()}
+            <button type="button" onClick={onRemove} className="ml-auto text-neutral-300 hover:text-red-500">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+        </div>
+    );
 }

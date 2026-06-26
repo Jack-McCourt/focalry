@@ -3,8 +3,10 @@
 namespace App\Providers;
 
 use App\Models\Studio;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
@@ -27,6 +29,11 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Vite::prefetch(concurrency: 3);
+
+        // Throttle unauthenticated public endpoints (per IP) to blunt spam and
+        // abuse: marketing-site lead forms, client e-sign/submit, and checkout.
+        RateLimiter::for('public-forms', fn (Request $request) => Limit::perMinute(10)->by($request->ip()));
+        RateLimiter::for('public-checkout', fn (Request $request) => Limit::perMinute(20)->by($request->ip()));
 
         // Studio is the Cashier billable entity, not User.
         Cashier::useCustomerModel(Studio::class);

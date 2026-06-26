@@ -10,6 +10,7 @@ use App\Models\Studio;
 use App\Models\User;
 use App\Notifications\NewClientReply;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Mail\Markdown;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -31,7 +32,7 @@ it('starts a conversation and emails the client with a token reply-to', function
     Mail::fake();
     [$studio, $user] = studioUser();
     $contact = Contact::withoutGlobalScopes()->create([
-        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com', 'status' => 'client',
+        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com',
     ]);
 
     $this->actingAs($user)->post(route('messages.store'), [
@@ -51,11 +52,45 @@ it('starts a conversation and emails the client with a token reply-to', function
         && str_contains($m->replyToAddress, $conv->reply_token));
 });
 
+it('starts a conversation without a subject, defaulting it to the studio name', function () {
+    Mail::fake();
+    [$studio, $user] = studioUser();
+    $contact = Contact::withoutGlobalScopes()->create([
+        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com',
+    ]);
+
+    $this->actingAs($user)->post(route('messages.store'), [
+        'contact_id' => $contact->id, 'body' => 'Hello with no subject',
+    ])->assertRedirect();
+
+    $conv = Conversation::withoutGlobalScopes()->first();
+    expect($conv->subject)->toContain($studio->name);
+});
+
+it('opens the existing thread for a contact, else drops into compose', function () {
+    [$studio, $user] = studioUser();
+    $contact = Contact::withoutGlobalScopes()->create([
+        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com',
+    ]);
+
+    // No conversation yet → redirect into the composer for this contact.
+    $this->actingAs($user)->get(route('messages.with-contact', $contact))
+        ->assertRedirect(route('messages.index', ['compose' => $contact->id]));
+
+    $conv = Conversation::withoutGlobalScopes()->create([
+        'studio_id' => $studio->id, 'contact_id' => $contact->id, 'subject' => 'Hi', 'reply_token' => 'with-tok',
+    ]);
+
+    // Existing conversation → open it.
+    $this->actingAs($user)->get(route('messages.with-contact', $contact))
+        ->assertRedirect(route('messages.show', $conv));
+});
+
 it('queues the outbound send on the Horizon queue', function () {
     Queue::fake();
     [$studio, $user] = studioUser();
     $contact = Contact::withoutGlobalScopes()->create([
-        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com', 'status' => 'client',
+        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com',
     ]);
 
     $this->actingAs($user)->post(route('messages.store'), [
@@ -72,7 +107,7 @@ it('stores outbound attachments and attaches them to the email', function () {
     Storage::fake('wasabi');
     [$studio, $user] = studioUser();
     $contact = Contact::withoutGlobalScopes()->create([
-        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com', 'status' => 'client',
+        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com',
     ]);
 
     $this->actingAs($user)->post(route('messages.store'), [
@@ -96,7 +131,7 @@ it('allows an attachment-only message with no body', function () {
     Storage::fake('wasabi');
     [$studio, $user] = studioUser();
     $contact = Contact::withoutGlobalScopes()->create([
-        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com', 'status' => 'client',
+        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com',
     ]);
 
     $this->actingAs($user)->post(route('messages.store'), [
@@ -137,7 +172,7 @@ it('captures inbound Postmark attachments into the thread', function () {
 it('ingests a Postmark inbound reply into the conversation thread', function () {
     [$studio] = studioUser();
     $contact = Contact::withoutGlobalScopes()->create([
-        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com', 'status' => 'client',
+        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com',
     ]);
     $conv = Conversation::withoutGlobalScopes()->create([
         'studio_id' => $studio->id, 'contact_id' => $contact->id, 'subject' => 'Your wedding', 'reply_token' => 'tok123abc',
@@ -181,7 +216,7 @@ it('adds an internal note without emailing the client', function () {
     Mail::fake();
     [$studio, $user] = studioUser();
     $contact = Contact::withoutGlobalScopes()->create([
-        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com', 'status' => 'client',
+        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com',
     ]);
     $conv = Conversation::withoutGlobalScopes()->create([
         'studio_id' => $studio->id, 'contact_id' => $contact->id, 'subject' => 'Hi', 'reply_token' => 'note-tok',
@@ -246,6 +281,21 @@ it('records a database notification when a client replies', function () {
     ]);
 });
 
+it('renders the client-reply email preserving the message line breaks', function () {
+    // The fix lives in the markdown view: single newlines render as <br> instead
+    // of being collapsed to spaces.
+    $html = (string) app(Markdown::class)->render('mail.new-client-reply', [
+        'fromName' => 'Jane',
+        'subject' => 'Re: Your photos',
+        'body' => "line one\nline two\n\npara two",
+        'url' => 'https://example.com/messages/1',
+    ]);
+
+    expect($html)->toContain('<br');
+    expect($html)->toContain('View conversation');
+    expect($html)->not->toContain('line one line two');
+});
+
 it('records an open via the tracking pixel and ignores a bad token', function () {
     [$studio] = studioUser();
     $conv = Conversation::withoutGlobalScopes()->create([
@@ -269,7 +319,7 @@ it('appends the studio signature to outbound mail', function () {
     $studio = Studio::factory()->create(['email_signature' => '— The Studio Team']);
     $user = User::factory()->for($studio)->create();
     $contact = Contact::withoutGlobalScopes()->create([
-        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com', 'status' => 'client',
+        'studio_id' => $studio->id, 'first_name' => 'Jane', 'email' => 'jane@example.com',
     ]);
 
     $this->actingAs($user)->post(route('messages.store'), [

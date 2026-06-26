@@ -80,4 +80,20 @@ class Project extends Model
     {
         return $this->hasMany(Message::class)->latest();
     }
+
+    /** To-do items attached to this project (incomplete first, then by due date). */
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(Task::class)
+            ->orderByRaw('completed_at is not null')
+            ->orderByRaw('due_date is null')
+            ->orderBy('due_date')
+            ->orderBy('position');
+    }
+
+    /** Email invitations to view the read-only share page. */
+    public function shares(): HasMany
+    {
+        return $this->hasMany(ProjectShare::class)->latest();
+    }
 }

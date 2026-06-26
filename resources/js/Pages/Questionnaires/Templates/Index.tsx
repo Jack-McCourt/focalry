@@ -6,7 +6,7 @@ import { useState } from 'react';
 
 interface Question {
     label: string;
-    type: 'text' | 'textarea' | 'date' | 'select' | 'checkbox';
+    type: 'text' | 'textarea' | 'date' | 'select' | 'checkbox' | 'image' | 'file';
     options: string[];
     required: boolean;
 }
@@ -23,6 +23,8 @@ const TYPES = [
     { value: 'date', label: 'Date' },
     { value: 'select', label: 'Dropdown' },
     { value: 'checkbox', label: 'Yes / no' },
+    { value: 'image', label: 'Image upload' },
+    { value: 'file', label: 'File upload' },
 ];
 
 type Editing = { id: number | null; name: string; description: string; questions: Question[] };
@@ -35,6 +37,15 @@ export default function Index({ templates }: PageProps<{ templates: Template[] }
 
     const update = (i: number, patch: Partial<Question>) =>
         editing && setEditing({ ...editing, questions: editing.questions.map((q, j) => (j === i ? { ...q, ...patch } : q)) });
+
+    const move = (i: number, dir: -1 | 1) => {
+        if (!editing) return;
+        const to = i + dir;
+        if (to < 0 || to >= editing.questions.length) return;
+        const questions = [...editing.questions];
+        [questions[i], questions[to]] = [questions[to], questions[i]];
+        setEditing({ ...editing, questions });
+    };
 
     const save = () => {
         if (!editing) return;
@@ -78,6 +89,10 @@ export default function Index({ templates }: PageProps<{ templates: Template[] }
                                 {editing.questions.map((q, i) => (
                                     <div key={i} className="rounded-lg border border-neutral-200 p-3">
                                         <div className="flex items-start gap-2">
+                                            <div className="mt-1 flex flex-col text-neutral-300">
+                                                <button onClick={() => move(i, -1)} disabled={i === 0} className="leading-none hover:text-neutral-700 disabled:opacity-30 disabled:hover:text-neutral-300" title="Move up">↑</button>
+                                                <button onClick={() => move(i, 1)} disabled={i === editing.questions.length - 1} className="leading-none hover:text-neutral-700 disabled:opacity-30 disabled:hover:text-neutral-300" title="Move down">↓</button>
+                                            </div>
                                             <input value={q.label} onChange={(e) => update(i, { label: e.target.value })} placeholder="Question" className="input flex-1" />
                                             <select value={q.type} onChange={(e) => update(i, { type: e.target.value as Question['type'] })} className="input w-36">
                                                 {TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}

@@ -10,7 +10,7 @@ class ProjectFieldDefinition extends Model
 {
     use BelongsToStudio, HasFactory;
 
-    public const TYPES = ['text', 'long_text', 'number', 'date', 'select', 'checkbox', 'url'];
+    public const TYPES = ['text', 'long_text', 'number', 'date', 'select', 'checkbox', 'url', 'image', 'file'];
 
     protected $fillable = ['studio_id', 'key', 'label', 'type', 'options', 'position'];
 

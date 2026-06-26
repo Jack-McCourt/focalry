@@ -10,7 +10,7 @@ import StudioManagerNav from '@/Components/StudioManagerNav';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps, Project, ProjectFieldDefinition, ProjectStatus, ProjectType } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 interface Filters {
     search: string;
@@ -126,6 +126,53 @@ export default function Index({ projects, statuses, types, fields, contacts, fil
     // Resync when the server sends a new list (after create/delete).
     useEffect(() => setRows(projects), [projects]);
 
+    // Grid sorting — click a column title to sort; click again to reverse, a
+    // third time to return to the default (pipeline) order.
+    type SortKey = 'name' | 'type' | 'status' | 'event_date' | 'client';
+    const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' } | null>(null);
+    const toggleSort = (key: SortKey) =>
+        setSort((s) => (s?.key !== key ? { key, dir: 'asc' } : s.dir === 'asc' ? { key, dir: 'desc' } : null));
+
+    // type/status sort by their configured order (position); client by name.
+    const typeOrder = useMemo(() => new Map(types.map((t, i) => [t.id, i])), [types]);
+    const statusOrder = useMemo(() => new Map(statuses.map((s, i) => [s.id, i])), [statuses]);
+    const contactName = useMemo(() => new Map(contacts.map((c) => [c.id, c.name.toLowerCase()])), [contacts]);
+
+    const sortedRows = useMemo(() => {
+        if (!sort) return rows;
+        const dir = sort.dir === 'asc' ? 1 : -1;
+        const val = (p: Project): string | number | null => {
+            switch (sort.key) {
+                case 'name': return p.name?.toLowerCase() ?? '';
+                case 'type': return p.type_id != null ? typeOrder.get(p.type_id) ?? null : null;
+                case 'status': return p.status_id != null ? statusOrder.get(p.status_id) ?? null : null;
+                case 'event_date': return p.event_date ?? null;
+                case 'client': return p.contact_id != null ? contactName.get(p.contact_id) ?? null : null;
+            }
+        };
+        return [...rows].sort((a, b) => {
+            const av = val(a);
+            const bv = val(b);
+            const aEmpty = av === null || av === '';
+            const bEmpty = bv === null || bv === '';
+            if (aEmpty || bEmpty) return aEmpty === bEmpty ? 0 : aEmpty ? 1 : -1; // empties last
+            if (av < bv) return -dir;
+            if (av > bv) return dir;
+            return 0;
+        });
+    }, [rows, sort, typeOrder, statusOrder, contactName]);
+
+    const SortHeader = ({ label, sortKey, className }: { label: string; sortKey: SortKey; className?: string }) => (
+        <th className={className}>
+            <button type="button" onClick={() => toggleSort(sortKey)} className="group inline-flex items-center gap-1 transition hover:text-neutral-700">
+                {label}
+                <span className="text-neutral-400">
+                    {sort?.key === sortKey ? (sort.dir === 'asc' ? '↑' : '↓') : <span className="opacity-0 transition group-hover:opacity-100">↕</span>}
+                </span>
+            </button>
+        </th>
+    );
+
     const go = (params: Partial<{ search: string; status: number | null; type: number | null; view: View }>) => {
         // Use `in` so an explicit null (e.g. "All types") clears the filter — `??` would
         // treat null as "not provided" and fall back to the current value.
@@ -171,7 +218,9 @@ export default function Index({ projects, statuses, types, fields, contacts, fil
                 return { ...r, custom_fields: next };
             }),
         );
-        router.patch(route('projects.update', id), { custom_fields: next }, { preserveScroll: true, preserveState: true });
+        // Sent as JSON — image fields hold arrays of objects, which Inertia's
+        // FormDataConvertible type doesn't model but serialises fine.
+        router.patch(route('projects.update', id), { custom_fields: next } as never, { preserveScroll: true, preserveState: true });
     };
 
     const deleteField = (field: ProjectFieldDefinition) => {
@@ -266,11 +315,11 @@ export default function Index({ projects, statuses, types, fields, contacts, fil
                                 <thead>
                                     <tr className="border-b border-neutral-100 text-left text-xs font-medium text-neutral-400 [&>th]:whitespace-nowrap">
                                         <th className="sticky left-0 z-30 w-[7rem] min-w-[7rem] bg-white px-2 py-3"></th>
-                                        <th className="sticky left-[7rem] z-30 min-w-[14rem] border-r border-neutral-200 bg-white px-4 py-3">Name</th>
-                                        <th className="min-w-[9rem] px-4 py-3">Type</th>
-                                        <th className="min-w-[9rem] px-4 py-3">Status</th>
-                                        <th className="min-w-[9rem] px-4 py-3">Event date</th>
-                                        <th className="min-w-[11rem] px-4 py-3">Client</th>
+                                        <SortHeader label="Name" sortKey="name" className="sticky left-[7rem] z-30 min-w-[14rem] border-r border-neutral-200 bg-white px-4 py-3" />
+                                        <SortHeader label="Type" sortKey="type" className="min-w-[9rem] px-4 py-3" />
+                                        <SortHeader label="Status" sortKey="status" className="min-w-[9rem] px-4 py-3" />
+                                        <SortHeader label="Event date" sortKey="event_date" className="min-w-[9rem] px-4 py-3" />
+                                        <SortHeader label="Client" sortKey="client" className="min-w-[11rem] px-4 py-3" />
                                         {fields.map((f) => (
                                             <th key={f.id} className="group/h min-w-[10rem] px-4 py-3">
                                                 <span className="inline-flex items-center gap-1">
@@ -284,7 +333,7 @@ export default function Index({ projects, statuses, types, fields, contacts, fil
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-neutral-50">
-                                    {rows.map((p) => (
+                                    {sortedRows.map((p) => (
                                         <tr key={p.id} className="group">
                                             <td className="sticky left-0 z-20 w-[7rem] min-w-[7rem] bg-white px-2 py-2 group-hover:bg-neutral-50">
                                                 <div className="flex items-center gap-1.5">
@@ -369,6 +418,12 @@ export default function Index({ projects, statuses, types, fields, contacts, fil
                 onClose={() => setOpenId(null)}
                 onPatch={(field, value) => openId && patchField(openId, field, value)}
                 onPatchCustom={(key, value) => openId && patchCustom(openId, key, value)}
+                onOpenProject={(id) => {
+                    // Open in-place if the project is on the current page; otherwise
+                    // navigate so it opens even when hidden by the active filters.
+                    if (rows.some((r) => r.id === id)) setOpenId(id);
+                    else router.get(route('projects.index'), { open: id }, { preserveScroll: true });
+                }}
             />
 
             <FieldConfigModal show={showAddField} onClose={() => setShowAddField(false)} />

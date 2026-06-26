@@ -18,11 +18,21 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): Response
     {
-        $studio = $request->user()->studio;
+        $user = $request->user();
+        $studio = $user->studio;
 
         return Inertia::render('Profile/Edit', [
-            'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
+            'mustVerifyEmail' => $user instanceof MustVerifyEmail,
             'status' => session('status'),
+            'twoFactor' => [
+                'enabled' => $user->hasEnabledTwoFactorAuthentication(),
+                'pending' => $user->hasPendingTwoFactorAuthentication(),
+                // Only expose the secret/QR while setting up, and recovery codes
+                // once active — never both, and never on an un-configured account.
+                'qrCodeSvg' => $user->hasPendingTwoFactorAuthentication() ? $user->twoFactorQrCodeSvg() : null,
+                'secretKey' => $user->hasPendingTwoFactorAuthentication() ? $user->two_factor_secret : null,
+                'recoveryCodes' => $user->hasEnabledTwoFactorAuthentication() ? $user->recoveryCodes() : [],
+            ],
             'studio' => $studio ? [
                 'name' => $studio->name,
                 'address_line1' => $studio->address_line1,

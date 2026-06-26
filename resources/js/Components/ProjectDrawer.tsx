@@ -1,6 +1,7 @@
 import CustomFieldEditor, { CustomValue } from '@/Components/CustomFieldEditor';
 import Modal from '@/Components/Modal';
 import PillSelect from '@/Components/PillSelect';
+import ShareProjectModal, { ProjectShareItem } from '@/Components/ShareProjectModal';
 import SearchSelect from '@/Components/SearchSelect';
 import { formatMoney } from '@/lib/money';
 import { Project, ProjectFieldDefinition, ProjectStatus, ProjectType } from '@/types';
@@ -63,6 +64,21 @@ interface MessageLite {
     created_at: string;
 }
 
+interface TaskLite {
+    id: number;
+    title: string;
+    due_date: string | null;
+    completed: boolean;
+    assignee: string | null;
+}
+
+interface RelatedProject {
+    id: number;
+    name: string;
+    event_date: string | null;
+    status: { label: string; color: string } | null;
+}
+
 function csrf(): string {
     const m = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
     return m ? decodeURIComponent(m[1]) : '';
@@ -94,6 +110,7 @@ export default function ProjectDrawer({
     onClose,
     onPatch,
     onPatchCustom,
+    onOpenProject,
 }: {
     project: Project | null;
     statuses: ProjectStatus[];
@@ -103,13 +120,17 @@ export default function ProjectDrawer({
     onClose: () => void;
     onPatch: (field: keyof Project, value: string | number | null) => void;
     onPatchCustom: (key: string, value: CustomValue) => void;
+    onOpenProject: (id: number) => void;
 }) {
     const [invoices, setInvoices] = useState<InvoiceLite[]>([]);
     const [contracts, setContracts] = useState<ContractLite[]>([]);
     const [galleries, setGalleries] = useState<GalleryLite[]>([]);
     const [messages, setMessages] = useState<MessageLite[]>([]);
+    const [tasks, setTasks] = useState<TaskLite[]>([]);
+    const [related, setRelated] = useState<RelatedProject[]>([]);
+    const [shares, setShares] = useState<ProjectShareItem[]>([]);
+    const [shareOpen, setShareOpen] = useState(false);
     const [openMessage, setOpenMessage] = useState<MessageLite | null>(null);
-    const [loading, setLoading] = useState(false);
     const [name, setName] = useState('');
     const [notes, setNotes] = useState<NoteEntry[]>([]);
     const [noteText, setNoteText] = useState('');
@@ -121,11 +142,11 @@ export default function ProjectDrawer({
         if (!project) return;
         setName(project.name);
         setNoteText('');
-        setLoading(true);
+        // Clear so the previous project's items don't flash while this one loads.
+        setInvoices([]); setContracts([]); setGalleries([]); setMessages([]); setTasks([]); setNotes([]); setRelated([]); setShares([]);
         axios
             .get(route('projects.show', project.id))
-            .then((r) => { setInvoices(r.data.invoices ?? []); setContracts(r.data.contracts ?? []); setNotes(r.data.notes ?? []); setGalleries(r.data.galleries ?? []); setMessages(r.data.messages ?? []); })
-            .finally(() => setLoading(false));
+            .then((r) => { setInvoices(r.data.invoices ?? []); setContracts(r.data.contracts ?? []); setNotes(r.data.notes ?? []); setGalleries(r.data.galleries ?? []); setMessages(r.data.messages ?? []); setTasks(r.data.tasks ?? []); setRelated(r.data.related_projects ?? []); setShares(r.data.shares ?? []); });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [project?.id]);
 
@@ -165,11 +186,36 @@ export default function ProjectDrawer({
                             onBlur={() => name !== project.name && onPatch('name', name)}
                             className="w-full rounded border-0 bg-transparent px-1 text-lg font-semibold text-neutral-900 focus:ring-1 focus:ring-neutral-300"
                         />
-                        <button onClick={onClose} className="shrink-0 text-neutral-400 hover:text-neutral-700">
-                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                        <div className="flex shrink-0 items-center gap-1">
+                            <a
+                                href={route('projects.preview', project.id)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
+                                title="Open a printable read-only view"
+                            >
+                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                View
+                            </a>
+                            <button
+                                onClick={() => setShareOpen(true)}
+                                className="inline-flex items-center gap-1.5 rounded-md border border-neutral-200 px-2.5 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
+                                title="Share a read-only copy"
+                            >
+                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 100 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186l9.566-5.314m-9.566 7.5l9.566 5.314m0 0a2.25 2.25 0 103.935 2.186 2.25 2.25 0 00-3.935-2.186zm0-12.814a2.25 2.25 0 103.933-2.185 2.25 2.25 0 00-3.933 2.185z" />
+                                </svg>
+                                Share
+                            </button>
+                            <button onClick={onClose} className="text-neutral-400 hover:text-neutral-700">
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
 
                     {/* Fields — stacked (label above control) on mobile, 2-col on sm+.
@@ -178,7 +224,23 @@ export default function ProjectDrawer({
                     <div className="mt-4 grid grid-cols-1 gap-y-3 text-sm sm:grid-cols-[7rem,1fr] sm:items-center sm:gap-x-4">
                         <div className="grid grid-cols-1 gap-1 sm:contents">
                             <span className="text-neutral-400">Client</span>
-                            <SearchSelect options={contacts} value={project.contact_id} onChange={(id) => id && onPatch('contact_id', id)} placeholder="Search clients…" emptyText="No clients found" />
+                            <div className="flex items-center gap-1.5">
+                                <div className="min-w-0 flex-1">
+                                    <SearchSelect options={contacts} value={project.contact_id} onChange={(id) => id && onPatch('contact_id', id)} placeholder="Search clients…" emptyText="No clients found" />
+                                </div>
+                                {project.contact_id && (
+                                    <a
+                                        href={route('contacts.show', project.contact_id)}
+                                        className="shrink-0 rounded-md border border-neutral-200 p-1.5 text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-800"
+                                        title="View client"
+                                        aria-label="View client"
+                                    >
+                                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                                        </svg>
+                                    </a>
+                                )}
+                            </div>
                         </div>
 
                         <div className="grid grid-cols-1 gap-1 sm:contents">
@@ -260,35 +322,6 @@ export default function ProjectDrawer({
                         </div>
                     </Section>
 
-                    {/* Tagged messages */}
-                    <Section title="Messages">
-                        {loading ? (
-                            <p className="text-sm text-neutral-400">Loading…</p>
-                        ) : messages.length === 0 ? (
-                            <p className="text-sm text-neutral-400">No messages tagged to this project yet. Tag one from the Messages page.</p>
-                        ) : (
-                            <ul className="space-y-2">
-                                {messages.map((m) => (
-                                    <li key={m.id}>
-                                        <button
-                                            type="button"
-                                            onClick={() => setOpenMessage(m)}
-                                            className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-left transition hover:border-neutral-300"
-                                        >
-                                            <div className="flex items-center justify-between gap-2">
-                                                <span className="truncate text-xs font-medium text-neutral-700">
-                                                    {m.direction === 'inbound' ? m.author_name : `${m.author_name} (you)`}
-                                                </span>
-                                                <span className="shrink-0 text-[11px] text-neutral-400">{noteTime(m.created_at)}</span>
-                                            </div>
-                                            <p className="mt-0.5 line-clamp-2 whitespace-pre-line text-sm text-neutral-600">{m.body}</p>
-                                        </button>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </Section>
-
                     {/* Custom fields */}
                     {fields.length > 0 && (
                         <Section title="Details">
@@ -310,24 +343,20 @@ export default function ProjectDrawer({
                         </Section>
                     )}
 
-                    {/* Invoices */}
-                    <Section
-                        title="Invoices"
-                        action={
-                            <button
-                                type="button"
-                                onClick={() => router.visit(`/invoices/create?project=${project.id}`)}
-                                className="text-xs font-medium text-neutral-600 hover:text-neutral-900"
-                            >
-                                + New invoice
-                            </button>
-                        }
-                    >
-                        {loading ? (
-                            <p className="text-sm text-neutral-400">Loading…</p>
-                        ) : invoices.length === 0 ? (
-                            <p className="text-sm text-neutral-400">No invoices yet.</p>
-                        ) : (
+                    {/* Invoices — only shown when the project has any */}
+                    {invoices.length > 0 && (
+                        <Section
+                            title="Invoices"
+                            action={
+                                <button
+                                    type="button"
+                                    onClick={() => router.visit(`/invoices/create?project=${project.id}`)}
+                                    className="text-xs font-medium text-neutral-600 hover:text-neutral-900"
+                                >
+                                    + New invoice
+                                </button>
+                            }
+                        >
                             <div className="space-y-2">
                                 {invoices.map((inv) => (
                                     <button
@@ -352,27 +381,23 @@ export default function ProjectDrawer({
                                     </button>
                                 ))}
                             </div>
-                        )}
-                    </Section>
+                        </Section>
+                    )}
 
-                    {/* Contracts */}
-                    <Section
-                        title="Contracts"
-                        action={
-                            <button
-                                type="button"
-                                onClick={() => router.visit(`/contracts/create?project=${project.id}`)}
-                                className="text-xs font-medium text-neutral-600 hover:text-neutral-900"
-                            >
-                                + New contract
-                            </button>
-                        }
-                    >
-                        {loading ? (
-                            <p className="text-sm text-neutral-400">Loading…</p>
-                        ) : contracts.length === 0 ? (
-                            <p className="text-sm text-neutral-400">No contracts yet.</p>
-                        ) : (
+                    {/* Contracts — only shown when the project has any */}
+                    {contracts.length > 0 && (
+                        <Section
+                            title="Contracts"
+                            action={
+                                <button
+                                    type="button"
+                                    onClick={() => router.visit(`/contracts/create?project=${project.id}`)}
+                                    className="text-xs font-medium text-neutral-600 hover:text-neutral-900"
+                                >
+                                    + New contract
+                                </button>
+                            }
+                        >
                             <div className="space-y-2">
                                 {contracts.map((c) => (
                                     <button
@@ -386,26 +411,23 @@ export default function ProjectDrawer({
                                     </button>
                                 ))}
                             </div>
-                        )}
-                    </Section>
-                    {/* Galleries */}
-                    <Section
-                        title="Galleries"
-                        action={
-                            <button
-                                type="button"
-                                onClick={() => router.visit(route('collections.create'))}
-                                className="text-xs font-medium text-neutral-600 hover:text-neutral-900"
-                            >
-                                + New gallery
-                            </button>
-                        }
-                    >
-                        {loading ? (
-                            <p className="text-sm text-neutral-400">Loading…</p>
-                        ) : galleries.length === 0 ? (
-                            <p className="text-sm text-neutral-400">No galleries yet. Attach one from its settings.</p>
-                        ) : (
+                        </Section>
+                    )}
+
+                    {/* Galleries — only shown when the project has any */}
+                    {galleries.length > 0 && (
+                        <Section
+                            title="Galleries"
+                            action={
+                                <button
+                                    type="button"
+                                    onClick={() => router.visit(route('collections.create'))}
+                                    className="text-xs font-medium text-neutral-600 hover:text-neutral-900"
+                                >
+                                    + New gallery
+                                </button>
+                            }
+                        >
                             <div className="space-y-2">
                                 {galleries.map((g) => (
                                     <button
@@ -421,11 +443,110 @@ export default function ProjectDrawer({
                                     </button>
                                 ))}
                             </div>
-                        )}
-                    </Section>
-                    <Section title="Meetings">
-                        <p className="text-sm text-neutral-400">Meetings will appear here.</p>
-                    </Section>
+                        </Section>
+                    )}
+
+                    {/* Tasks — only shown when the project has any */}
+                    {tasks.length > 0 && (
+                        <Section
+                            title="Tasks"
+                            action={
+                                <button
+                                    type="button"
+                                    onClick={() => router.visit(route('tasks.index'))}
+                                    className="text-xs font-medium text-neutral-600 hover:text-neutral-900"
+                                >
+                                    View all
+                                </button>
+                            }
+                        >
+                            <ul className="space-y-1.5">
+                                {tasks.map((t) => (
+                                    <li
+                                        key={t.id}
+                                        className="flex items-center gap-2.5 rounded-lg border border-neutral-200 px-3 py-2"
+                                    >
+                                        <span
+                                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                                                t.completed ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-neutral-300'
+                                            }`}
+                                        >
+                                            {t.completed && (
+                                                <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            )}
+                                        </span>
+                                        <span className={`min-w-0 flex-1 truncate text-sm ${t.completed ? 'text-neutral-400 line-through' : 'text-neutral-800'}`}>
+                                            {t.title}
+                                        </span>
+                                        {t.assignee && <span className="shrink-0 text-[11px] text-neutral-400">{t.assignee}</span>}
+                                        {t.due_date && (
+                                            <span className="shrink-0 text-[11px] text-neutral-400">
+                                                {new Date(t.due_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+                                            </span>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        </Section>
+                    )}
+
+                    {/* Other projects for the same client — above Messages. */}
+                    {related.length > 0 && (
+                        <Section title="Other projects for this client">
+                            <ul className="space-y-2">
+                                {related.map((rp) => (
+                                    <li key={rp.id}>
+                                        <button
+                                            type="button"
+                                            onClick={() => onOpenProject(rp.id)}
+                                            className="flex w-full items-center justify-between gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-left transition hover:border-neutral-300"
+                                        >
+                                            <span className="min-w-0">
+                                                <span className="block truncate text-sm font-medium text-neutral-800">{rp.name}</span>
+                                                {rp.event_date && (
+                                                    <span className="text-xs text-neutral-400">
+                                                        {new Date(rp.event_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    </span>
+                                                )}
+                                            </span>
+                                            {rp.status && (
+                                                <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-medium" style={{ backgroundColor: `${rp.status.color}20`, color: rp.status.color }}>
+                                                    {rp.status.label}
+                                                </span>
+                                            )}
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </Section>
+                    )}
+
+                    {/* Tagged messages — only shown when the project has any */}
+                    {messages.length > 0 && (
+                        <Section title="Messages">
+                            <ul className="space-y-2">
+                                {messages.map((m) => (
+                                    <li key={m.id}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setOpenMessage(m)}
+                                            className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-left transition hover:border-neutral-300"
+                                        >
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="truncate text-xs font-medium text-neutral-700">
+                                                    {m.direction === 'inbound' ? m.author_name : `${m.author_name} (you)`}
+                                                </span>
+                                                <span className="shrink-0 text-[11px] text-neutral-400">{noteTime(m.created_at)}</span>
+                                            </div>
+                                            <p className="mt-0.5 line-clamp-2 whitespace-pre-line text-sm text-neutral-600">{m.body}</p>
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </Section>
+                    )}
                 </div>
             )}
 
@@ -463,6 +584,16 @@ export default function ProjectDrawer({
                     </div>
                 )}
             </Modal>
+
+            {project && (
+                <ShareProjectModal
+                    show={shareOpen}
+                    onClose={() => setShareOpen(false)}
+                    projectId={project.id}
+                    shares={shares}
+                    onChange={setShares}
+                />
+            )}
         </Modal>
     );
 }

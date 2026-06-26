@@ -8,6 +8,7 @@ use App\Models\Collection;
 use App\Models\GalleryRecentPick;
 use App\Models\Photo;
 use App\Models\Site;
+use App\Models\SiteCategory;
 use App\Models\SitePage;
 use App\Models\SiteVisit;
 use App\Models\Studio;
@@ -155,6 +156,7 @@ class SiteController extends Controller
             'name' => $data['name'],
             'slug' => $data['slug'],
             'contact_email' => $data['contact_email'] ?? null,
+            'auto_create_project' => $data['auto_create_project'] ?? true,
             'seo_title' => $data['seo_title'] ?? null,
             'seo_description' => $data['seo_description'] ?? null,
             'favicon_url' => $data['favicon_url'] ?? null,
@@ -532,6 +534,10 @@ class SiteController extends Controller
         $site->pages()->delete();
         $pages = array_values($pages);
 
+        // Categories live in their own table (not wiped here); only keep references
+        // to ids that actually belong to this site, ignoring any stale client data.
+        $validCategoryIds = $site->categories()->pluck('id')->map(fn ($id) => (int) $id)->all();
+
         $used = [];
         $uniqueSlug = function (string $base) use (&$used): string {
             $base = Str::slug($base) ?: 'page';
@@ -569,6 +575,10 @@ class SiteController extends Controller
                 'is_404' => $is404,
                 'position' => $pos++,
                 'blocks' => array_values($page['blocks'] ?? []),
+                'hidden_category_ids' => array_values(array_intersect(
+                    array_map('intval', $page['hidden_category_ids'] ?? []),
+                    $validCategoryIds,
+                )),
                 'seo_title' => $page['seo_title'] ?? null,
                 'seo_description' => $page['seo_description'] ?? null,
                 'head_code' => $page['head_code'] ?? null,
@@ -609,7 +619,10 @@ class SiteController extends Controller
                     'status' => $status,
                     'published_at' => $publishedAt,
                     'excerpt' => $page['excerpt'] ?? null,
-                    'category' => $this->blankToNull($page['category'] ?? null),
+                    'category_ids' => array_values(array_intersect(
+                        array_map('intval', $page['category_ids'] ?? []),
+                        $validCategoryIds,
+                    )),
                     'cover_image' => $page['cover_image'] ?? null,
                     'seo_title' => $page['seo_title'] ?? null,
                     'seo_description' => $page['seo_description'] ?? null,
@@ -619,6 +632,116 @@ class SiteController extends Controller
                 ]);
             }
         }
+    }
+
+    // ── Blog categories (WordPress-style hierarchical taxonomy) ──
+    // Managed over ajax so the builder can add/rename/delete categories without a
+    // full save that would clobber unsaved page edits. Each call returns the whole
+    // (flat) list so the client just replaces its categories state.
+
+    public function storeCategory(Request $request): JsonResponse
+    {
+        $site = $this->resolveSite();
+        $data = $request->validate([
+            'name' => 'required|string|max:80',
+            'parent_id' => ['nullable', 'integer', Rule::exists('site_categories', 'id')->where('site_id', $site->id)],
+        ]);
+
+        $site->categories()->create([
+            'studio_id' => $site->studio_id,
+            'parent_id' => $data['parent_id'] ?? null,
+            'name' => trim($data['name']),
+            'slug' => $this->uniqueCategorySlug($site, $data['name']),
+            'position' => (int) $site->categories()->max('position') + 1,
+        ]);
+
+        return response()->json(['categories' => $this->categoriesPayload($site)]);
+    }
+
+    public function updateCategory(Request $request, SiteCategory $category): JsonResponse
+    {
+        $site = $this->resolveSite();
+        abort_unless($category->site_id === $site->id, 404);
+
+        $data = $request->validate([
+            'name' => 'required|string|max:80',
+            'parent_id' => ['nullable', 'integer', Rule::exists('site_categories', 'id')->where('site_id', $site->id)],
+        ]);
+
+        // A category can't be its own ancestor — block self/descendant parents.
+        $parentId = $data['parent_id'] ?? null;
+        if ($parentId !== null && ($parentId === $category->id || in_array($parentId, $this->descendantIds($site, $category->id), true))) {
+            $parentId = $category->parent_id;
+        }
+
+        $category->update([
+            'name' => trim($data['name']),
+            'parent_id' => $parentId,
+        ]);
+
+        return response()->json(['categories' => $this->categoriesPayload($site)]);
+    }
+
+    public function destroyCategory(SiteCategory $category): JsonResponse
+    {
+        $site = $this->resolveSite();
+        abort_unless($category->site_id === $site->id, 404);
+
+        DB::transaction(function () use ($site, $category) {
+            // WordPress behaviour: children move up to the deleted category's parent.
+            $site->categories()->where('parent_id', $category->id)->update(['parent_id' => $category->parent_id]);
+
+            // Detach the category from every post that referenced it.
+            foreach ($site->pages()->whereNotNull('category_ids')->get() as $post) {
+                $ids = array_values(array_filter($post->category_ids ?? [], fn ($id) => (int) $id !== $category->id));
+                if (count($ids) !== count($post->category_ids ?? [])) {
+                    $post->update(['category_ids' => $ids]);
+                }
+            }
+
+            $category->delete();
+        });
+
+        return response()->json(['categories' => $this->categoriesPayload($site)]);
+    }
+
+    /** @return list<array{id:int,name:string,slug:string,parent_id:int|null}> */
+    private function categoriesPayload(Site $site): array
+    {
+        return $site->categories()->get()->map(fn (SiteCategory $c) => [
+            'id' => $c->id,
+            'name' => $c->name,
+            'slug' => $c->slug,
+            'parent_id' => $c->parent_id,
+        ])->values()->all();
+    }
+
+    /** All descendant category ids of $id within the site (for cycle prevention). */
+    private function descendantIds(Site $site, int $id): array
+    {
+        $all = $site->categories()->get(['id', 'parent_id']);
+        $out = [];
+        $walk = function (int $parent) use (&$walk, $all, &$out): void {
+            foreach ($all->where('parent_id', $parent) as $child) {
+                $out[] = $child->id;
+                $walk($child->id);
+            }
+        };
+        $walk($id);
+
+        return $out;
+    }
+
+    private function uniqueCategorySlug(Site $site, string $name): string
+    {
+        $base = Str::slug($name) ?: 'category';
+        $slug = $base;
+        $n = 1;
+        while ($site->categories()->where('slug', $slug)->exists()) {
+            $slug = $base.'-'.(++$n);
+        }
+
+        return $slug;
     }
 
     private function blankToNull(mixed $value): mixed
@@ -639,6 +762,7 @@ class SiteController extends Controller
                 Rule::unique('sites', 'slug')->ignore($site->id),
             ],
             'contact_email' => 'nullable|email|max:255',
+            'auto_create_project' => 'boolean',
             'seo_title' => 'nullable|string|max:255',
             'seo_description' => 'nullable|string|max:500',
             'favicon_url' => 'nullable|string|max:2048',
@@ -688,7 +812,10 @@ class SiteController extends Controller
             'pages.*.status' => ['nullable', Rule::in(['draft', 'published'])],
             'pages.*.published_at' => 'nullable|date',
             'pages.*.excerpt' => 'nullable|string|max:1000',
-            'pages.*.category' => 'nullable|string|max:60',
+            'pages.*.category_ids' => 'array',
+            'pages.*.category_ids.*' => 'integer',
+            'pages.*.hidden_category_ids' => 'array',
+            'pages.*.hidden_category_ids.*' => 'integer',
             'pages.*.cover_image' => 'nullable|string|max:2048',
             // Validate the blocks array itself only — not its items. Blocks are
             // freeform/nested (grid blocks contain child blocks, every block can
@@ -774,6 +901,7 @@ class SiteController extends Controller
             'cookie_message' => $site->cookie_message,
             'cookie_policy_url' => $site->cookie_policy_url,
             'contact_email' => $site->contact_email,
+            'auto_create_project' => $site->auto_create_project,
             'seo_title' => $site->seo_title,
             'seo_description' => $site->seo_description,
             'favicon_url' => $site->favicon_url,
@@ -782,6 +910,12 @@ class SiteController extends Controller
             'saved_sections' => $site->saved_sections ?? [],
             'is_published' => $site->is_published,
             'published_at' => $site->published_at?->toIso8601String(),
+            'categories' => $site->categories->map(fn (SiteCategory $c) => [
+                'id' => $c->id,
+                'name' => $c->name,
+                'slug' => $c->slug,
+                'parent_id' => $c->parent_id,
+            ])->values(),
             'pages' => $site->pages->map(fn (SitePage $p) => [
                 'id' => $p->id,
                 'parent_id' => $p->parent_id,
@@ -794,7 +928,8 @@ class SiteController extends Controller
                 'status' => $p->status,
                 'published_at' => $p->published_at?->format('Y-m-d'),
                 'excerpt' => $p->excerpt,
-                'category' => $p->category,
+                'category_ids' => array_map('intval', $p->category_ids ?? []),
+                'hidden_category_ids' => array_map('intval', $p->hidden_category_ids ?? []),
                 'cover_image' => $p->cover_image,
                 'blocks' => $p->blocks ?? [],
                 'seo_title' => $p->seo_title,

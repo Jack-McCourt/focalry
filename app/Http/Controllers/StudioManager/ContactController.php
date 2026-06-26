@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Contact;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -15,7 +14,6 @@ class ContactController extends Controller
     public function index(Request $request): Response
     {
         $search = trim((string) $request->input('search', ''));
-        $status = $request->input('status');
 
         $contacts = Contact::query()
             ->when($search !== '', function ($query) use ($search) {
@@ -26,7 +24,6 @@ class ContactController extends Controller
                         ->orWhere('company', 'like', "%{$search}%");
                 });
             })
-            ->when(in_array($status, ['lead', 'client', 'archived'], true), fn ($q) => $q->where('status', $status))
             ->withCount('collections')
             ->orderBy('first_name')
             ->orderBy('last_name')
@@ -37,13 +34,6 @@ class ContactController extends Controller
             'contacts' => $contacts,
             'filters' => [
                 'search' => $search,
-                'status' => $status,
-            ],
-            'counts' => [
-                'all' => Contact::count(),
-                'lead' => Contact::where('status', 'lead')->count(),
-                'client' => Contact::where('status', 'client')->count(),
-                'archived' => Contact::where('status', 'archived')->count(),
             ],
         ]);
     }
@@ -107,7 +97,6 @@ class ContactController extends Controller
             'email' => 'nullable|email|max:255',
             'phone' => 'nullable|string|max:50',
             'company' => 'nullable|string|max:255',
-            'status' => ['required', Rule::in(['lead', 'client', 'archived'])],
             'notes' => 'nullable|string|max:5000',
         ]);
     }

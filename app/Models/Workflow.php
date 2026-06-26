@@ -32,18 +32,40 @@ class Workflow extends Model
         'create_note' => 'Add a note to the project',
     ];
 
+    /**
+     * Operators a condition can use. Some compare a value the user supplies;
+     * the presence operators (`is_set`/`is_not_set`) ignore the value field.
+     */
+    public const CONDITION_OPERATORS = [
+        'equals' => 'is',
+        'not_equals' => 'is not',
+        'contains' => 'contains',
+        'greater_than' => 'is greater than',
+        'less_than' => 'is less than',
+        'is_set' => 'has any value',
+        'is_not_set' => 'is empty',
+    ];
+
+    /** Operators that don't need a comparison value. */
+    public const VALUELESS_OPERATORS = ['is_set', 'is_not_set'];
+
     protected $fillable = [
         'studio_id',
         'name',
         'description',
         'trigger',
         'trigger_status_id',
+        'conditions',
+        'condition_match',
         'is_active',
     ];
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean'];
+        return [
+            'is_active' => 'boolean',
+            'conditions' => 'array',
+        ];
     }
 
     public function steps(): HasMany

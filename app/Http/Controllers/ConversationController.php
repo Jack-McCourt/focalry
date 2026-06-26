@@ -9,10 +9,10 @@ use App\Models\Contract;
 use App\Models\Conversation;
 use App\Models\Invoice;
 use App\Models\Message;
-use App\Models\Proposal;
-use App\Models\Questionnaire;
 use App\Models\MessageTemplate;
 use App\Models\Project;
+use App\Models\Proposal;
+use App\Models\Questionnaire;
 use App\Models\Studio;
 use App\Support\PublicAsset;
 use App\Support\StudioPaths;
@@ -157,7 +157,7 @@ class ConversationController extends Controller
     {
         $data = $request->validate([
             'contact_id' => 'required|integer|exists:contacts,id',
-            'subject' => 'required|string|max:255',
+            'subject' => 'nullable|string|max:255',
             'body' => 'required_without:attachments|nullable|string|max:20000',
             'attachments' => 'nullable|array|max:10',
             'attachments.*' => 'file|max:15360',
@@ -165,15 +165,36 @@ class ConversationController extends Controller
 
         $contact = Contact::findOrFail($data['contact_id']);
 
+        // The composer no longer asks for a subject — default it to the studio
+        // name so the client still sees a sensible email subject line.
+        $subject = trim((string) ($data['subject'] ?? '')) ?: 'Message from '.($request->user()?->studio?->name ?: config('app.name'));
+
         $conversation = Conversation::create([
             'contact_id' => $contact->id,
-            'subject' => $data['subject'],
+            'subject' => $subject,
             'last_message_at' => now(),
         ]);
 
         $this->postOutbound($conversation, $data['body'] ?? '', $request->user()?->id, $request->file('attachments', []));
 
         return redirect()->route('messages.show', $conversation)->with('success', 'Message sent.');
+    }
+
+    /**
+     * Open the message thread for a contact: jump to their most recent
+     * conversation if one exists (preferring an open one), otherwise drop into
+     * the composer pre-addressed to them.
+     */
+    public function withContact(Contact $contact): RedirectResponse
+    {
+        $conversation = Conversation::where('contact_id', $contact->id)
+            ->orderByRaw("status = 'open' DESC")
+            ->orderByRaw('last_message_at IS NULL, last_message_at DESC')
+            ->first();
+
+        return $conversation
+            ? redirect()->route('messages.show', $conversation)
+            : redirect()->route('messages.index', ['compose' => $contact->id]);
     }
 
     public function reply(Request $request, Conversation $conversation): RedirectResponse

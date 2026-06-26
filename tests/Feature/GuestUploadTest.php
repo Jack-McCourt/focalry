@@ -59,8 +59,8 @@ it('shows the shared wall of approved guest photos but hides pending ones', func
         'filename' => 'x.jpg', 'wasabi_key_original' => 'k.jpg', 'status' => 'ready', 'is_guest_upload' => true,
     ], $extra);
 
-    \App\Models\Photo::create($base(['approved' => true]));
-    \App\Models\Photo::create($base(['approved' => false]));
+    Photo::create($base(['approved' => true]));
+    Photo::create($base(['approved' => false]));
 
     $this->get(route('gallery.guest-upload', $collection->slug))
         ->assertOk()
@@ -109,6 +109,22 @@ it('registers an approved guest photo when approval is off', function () {
     expect($photo->approved)->toBeTrue();
     expect($photo->uploader_name)->toBe('Sam');
     Queue::assertPushed(ProcessPhoto::class);
+});
+
+it('stores an optional caption and uploader name with a guest upload', function () {
+    Queue::fake();
+    [$studio] = guestStudio();
+    $collection = publishedCollection($studio, ['enabled' => true]);
+
+    $key = "studios/{$studio->id}/collections/{$collection->id}/originals/abc.jpg";
+
+    $this->postJson(route('gallery.guest-upload.register', $collection->slug), [
+        'filename' => 'beach.jpg', 'wasabi_key' => $key, 'uploader_name' => 'Sam', 'caption' => 'Lovely day!',
+    ])->assertCreated();
+
+    $photo = Photo::where('collection_id', $collection->id)->first();
+    expect($photo->caption)->toBe('Lovely day!');
+    expect($photo->uploader_name)->toBe('Sam');
 });
 
 it('registers a pending guest photo when approval is on', function () {
@@ -201,6 +217,18 @@ it('approves a pending guest photo from the admin', function () {
         ->assertRedirect();
 
     expect($photo->fresh()->approved)->toBeTrue();
+});
+
+it('does not let a studio manage another studio\'s guest uploads', function () {
+    [, $user] = guestStudio();
+    $other = Studio::factory()->create();
+    $foreign = Collection::withoutGlobalScopes()->create([
+        'studio_id' => $other->id, 'title' => 'Theirs', 'slug' => 'theirs-'.uniqid(), 'status' => 'published',
+    ]);
+
+    $this->actingAs($user)->patch(route('collections.guest-uploads.update', $foreign->id), [
+        'enabled' => true, 'require_approval' => false, 'show_as_tab' => true,
+    ])->assertNotFound();
 });
 
 it('returns the A6 PDF card', function () {

@@ -1,7 +1,9 @@
+import FileField, { FileRef } from '@/Components/FileField';
+import ImageField, { ImageRef } from '@/Components/ImageField';
 import { ProjectFieldDefinition } from '@/types';
 import { useEffect, useState } from 'react';
 
-export type CustomValue = string | number | boolean | null;
+export type CustomValue = string | number | boolean | null | ImageRef[] | FileRef[];
 
 /** Renders the right inline editor for a custom field's value. Text-like inputs
  * commit on blur; checkbox/select/date commit immediately. */
@@ -72,6 +74,14 @@ export default function CustomFieldEditor({
             );
         case 'url':
             return <input type="url" value={str} onChange={(e) => setLocal(e.target.value)} onBlur={() => onChange(local)} placeholder="https://" className={base} />;
+        case 'image': {
+            const imgs = Array.isArray(local) ? (local as ImageRef[]) : [];
+            return <ImageField images={imgs} label={field.label} showThumbs={multiline} onChange={(v) => { setLocal(v); onChange(v); }} />;
+        }
+        case 'file': {
+            const files = Array.isArray(local) ? (local as FileRef[]) : [];
+            return <FileField files={files} label={field.label} onChange={(v) => { setLocal(v); onChange(v); }} />;
+        }
         default:
             return <input type="text" value={str} onChange={(e) => setLocal(e.target.value)} onBlur={() => onChange(local)} className={base} />;
     }

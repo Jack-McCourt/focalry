@@ -8,28 +8,6 @@ import { useEffect, useRef, useState } from 'react';
 
 interface Filters {
     search: string;
-    status: string | null;
-}
-
-interface Counts {
-    all: number;
-    lead: number;
-    client: number;
-    archived: number;
-}
-
-const STATUS_STYLES: Record<Contact['status'], string> = {
-    lead: 'bg-amber-50 text-amber-700',
-    client: 'bg-emerald-50 text-emerald-700',
-    archived: 'bg-neutral-100 text-neutral-500',
-};
-
-function StatusBadge({ status }: { status: Contact['status'] }) {
-    return (
-        <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${STATUS_STYLES[status]}`}>
-            {status}
-        </span>
-    );
 }
 
 function AddContactModal({ show, onClose }: { show: boolean; onClose: () => void }) {
@@ -39,7 +17,6 @@ function AddContactModal({ show, onClose }: { show: boolean; onClose: () => void
         email: '',
         phone: '',
         company: '',
-        status: 'lead',
         notes: '',
     });
 
@@ -74,8 +51,7 @@ function AddContactModal({ show, onClose }: { show: boolean; onClose: () => void
 export default function Index({
     contacts,
     filters,
-    counts,
-}: PageProps<{ contacts: Paginated<Contact>; filters: Filters; counts: Counts }>) {
+}: PageProps<{ contacts: Paginated<Contact>; filters: Filters }>) {
     const [search, setSearch] = useState(filters.search);
     const [showAdd, setShowAdd] = useState(false);
     const firstRender = useRef(true);
@@ -89,27 +65,12 @@ export default function Index({
         const t = setTimeout(() => {
             router.get(
                 route('contacts.index'),
-                { search, status: filters.status ?? undefined },
+                { search },
                 { preserveState: true, preserveScroll: true, replace: true },
             );
         }, 300);
         return () => clearTimeout(t);
     }, [search]);
-
-    const setStatus = (status: string | null) => {
-        router.get(
-            route('contacts.index'),
-            { search: search || undefined, status: status ?? undefined },
-            { preserveState: true, preserveScroll: true, replace: true },
-        );
-    };
-
-    const statusTabs: { key: string | null; label: string; count: number }[] = [
-        { key: null, label: 'All', count: counts.all },
-        { key: 'lead', label: 'Leads', count: counts.lead },
-        { key: 'client', label: 'Clients', count: counts.client },
-        { key: 'archived', label: 'Archived', count: counts.archived },
-    ];
 
     return (
         <AuthenticatedLayout
@@ -128,27 +89,7 @@ export default function Index({
 
             <div className="px-4 sm:px-8 py-8">
                 {/* Filters */}
-                <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex flex-wrap gap-1.5">
-                        {statusTabs.map((t) => {
-                            const active = (filters.status ?? null) === t.key;
-                            return (
-                                <button
-                                    key={t.label}
-                                    onClick={() => setStatus(t.key)}
-                                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                                        active
-                                            ? 'bg-neutral-900 text-white'
-                                            : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
-                                    }`}
-                                >
-                                    {t.label}
-                                    <span className={`ml-1.5 ${active ? 'text-neutral-300' : 'text-neutral-400'}`}>{t.count}</span>
-                                </button>
-                            );
-                        })}
-                    </div>
-
+                <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
                     <div className="relative sm:w-64">
                         <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
@@ -171,14 +112,14 @@ export default function Index({
                             </svg>
                         </div>
                         <p className="mt-4 text-base font-medium text-neutral-900">
-                            {filters.search || filters.status ? 'No matching contacts' : 'No contacts yet'}
+                            {filters.search ? 'No matching contacts' : 'No contacts yet'}
                         </p>
                         <p className="mt-1 text-sm text-neutral-500">
-                            {filters.search || filters.status
-                                ? 'Try a different search or filter.'
+                            {filters.search
+                                ? 'Try a different search.'
                                 : 'Add your first lead or client to get started.'}
                         </p>
-                        {!filters.search && !filters.status && (
+                        {!filters.search && (
                             <button onClick={() => setShowAdd(true)} className="btn-primary mt-6">
                                 Add contact
                             </button>
@@ -193,7 +134,6 @@ export default function Index({
                                     <th className="px-4 py-3">Email</th>
                                     <th className="hidden px-4 py-3 sm:table-cell">Phone</th>
                                     <th className="hidden px-4 py-3 md:table-cell">Company</th>
-                                    <th className="px-4 py-3">Status</th>
                                     <th className="px-4 py-3 text-right">Galleries</th>
                                 </tr>
                             </thead>
@@ -208,7 +148,6 @@ export default function Index({
                                         <td className="px-4 py-3 text-neutral-500">{c.email ?? '—'}</td>
                                         <td className="hidden px-4 py-3 text-neutral-500 sm:table-cell">{c.phone ?? '—'}</td>
                                         <td className="hidden px-4 py-3 text-neutral-500 md:table-cell">{c.company ?? '—'}</td>
-                                        <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
                                         <td className="px-4 py-3 text-right text-neutral-500">{c.collections_count ?? 0}</td>
                                     </tr>
                                 ))}

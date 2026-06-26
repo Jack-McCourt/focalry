@@ -10,9 +10,12 @@ use App\Models\Project;
 use App\Models\ProjectStatus;
 use App\Models\ProjectType;
 use App\Models\Site;
+use App\Models\SiteCategory;
 use App\Models\SiteLead;
 use App\Models\SitePage;
 use App\Models\SiteVisit;
+use App\Models\User;
+use App\Notifications\NewLead;
 use App\Support\PublicAsset;
 use App\Support\StudioPaths;
 use Illuminate\Http\RedirectResponse;
@@ -20,6 +23,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -92,6 +96,7 @@ class PublicSiteController extends Controller
             'studio_logo' => $site->studio?->logoUrl(),
             'pages' => $this->topNav($site),
             'posts' => $this->postCards($site),
+            'categories' => $this->siteCategories($site),
             'packages' => $this->packageCards($site),
             'page' => [
                 'title' => $current->title,
@@ -173,6 +178,7 @@ class PublicSiteController extends Controller
             'studio_logo' => $site->studio?->logoUrl(),
             'pages' => $this->topNav($site),
             'posts' => $this->postCards($site),
+            'categories' => $this->siteCategories($site),
             'packages' => $this->packageCards($site),
             // Keep the blog page highlighted in the nav while viewing a post.
             'page' => [
@@ -290,7 +296,7 @@ class PublicSiteController extends Controller
         }
         $notes = $noteLines ? implode("\n", $noteLines) : null;
 
-        $contact = DB::transaction(function () use ($site, $data, $notes) {
+        [$contact, $project] = DB::transaction(function () use ($site, $data, $notes) {
             [$first, $last] = $this->splitName($data['name']);
 
             $contact = Contact::where('email', $data['email'])->first();
@@ -300,46 +306,50 @@ class PublicSiteController extends Controller
                     'last_name' => $last,
                     'email' => $data['email'],
                     'phone' => $data['phone'] ?? null,
-                    'status' => 'lead',
                     'notes' => 'Created from website enquiry.',
                 ]);
             } elseif (! $contact->phone && ! empty($data['phone'])) {
                 $contact->update(['phone' => $data['phone']]);
             }
 
-            // Lazily seed the studio's project statuses/types if they've never
-            // opened the Projects module.
-            if (ProjectStatus::count() === 0) {
-                ProjectStatus::seedDefaults();
+            // A project (a CRM "Lead") is created automatically unless the studio
+            // has turned that off in the site settings.
+            $project = null;
+            if ($site->auto_create_project) {
+                // Lazily seed the studio's project statuses/types if they've never
+                // opened the Projects module.
+                if (ProjectStatus::count() === 0) {
+                    ProjectStatus::seedDefaults();
+                }
+                if (ProjectType::count() === 0) {
+                    ProjectType::seedDefaults();
+                }
+
+                $leadStatus = ProjectStatus::where('label', 'Lead')->first()
+                    ?? ProjectStatus::orderBy('position')->first();
+                $type = ! empty($data['event_type'])
+                    ? ProjectType::where('label', $data['event_type'])->first()
+                    : null;
+
+                $name = ! empty($data['event_type'])
+                    ? "{$data['event_type']} — {$contact->name}"
+                    : "Website enquiry — {$contact->name}";
+
+                $project = Project::create([
+                    'name' => $name,
+                    'contact_id' => $contact->id,
+                    'status_id' => $leadStatus?->id,
+                    'type_id' => $type?->id,
+                    'event_date' => $data['event_date'] ?? null,
+                    'notes' => $notes,
+                    'position' => (int) Project::where('status_id', $leadStatus?->id)->max('position') + 1,
+                ]);
             }
-            if (ProjectType::count() === 0) {
-                ProjectType::seedDefaults();
-            }
-
-            $leadStatus = ProjectStatus::where('label', 'Lead')->first()
-                ?? ProjectStatus::orderBy('position')->first();
-            $type = ! empty($data['event_type'])
-                ? ProjectType::where('label', $data['event_type'])->first()
-                : null;
-
-            $name = ! empty($data['event_type'])
-                ? "{$data['event_type']} — {$contact->name}"
-                : "Website enquiry — {$contact->name}";
-
-            $project = Project::create([
-                'name' => $name,
-                'contact_id' => $contact->id,
-                'status_id' => $leadStatus?->id,
-                'type_id' => $type?->id,
-                'event_date' => $data['event_date'] ?? null,
-                'notes' => $notes,
-                'position' => (int) Project::where('status_id', $leadStatus?->id)->max('position') + 1,
-            ]);
 
             SiteLead::create([
                 'site_id' => $site->id,
                 'contact_id' => $contact->id,
-                'project_id' => $project->id,
+                'project_id' => $project?->id,
                 'name' => $data['name'],
                 'email' => $data['email'],
                 'phone' => $data['phone'] ?? null,
@@ -349,12 +359,43 @@ class PublicSiteController extends Controller
                 'payload' => $data,
             ]);
 
-            return $contact;
+            return [$contact, $project];
         });
 
+        $this->notifyStudioOfLead($site, $data, $contact, $project);
         $this->sendLeadEmails($site, $data, $contact);
 
         return back()->with('success', "Thanks — your enquiry has been sent. We'll be in touch soon!");
+    }
+
+    /**
+     * Raise an in-app (bell) notification for every studio user, pointing at the
+     * new project (or the contact, when auto-create-project is off).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function notifyStudioOfLead(Site $site, array $data, Contact $contact, ?Project $project): void
+    {
+        $users = User::where('studio_id', $site->studio_id)->get();
+        if ($users->isEmpty()) {
+            return;
+        }
+
+        $url = $project
+            ? route('projects.index', ['open' => $project->id])
+            : route('contacts.show', $contact->id);
+
+        $preview = trim((string) ($data['message'] ?? ''));
+        if ($preview === '') {
+            $preview = $data['event_type'] ? "{$data['event_type']} enquiry" : 'New website enquiry';
+        }
+
+        Notification::send($users, new NewLead(
+            fromName: $data['name'],
+            subject: $data['event_type'] ? "{$data['event_type']} enquiry" : 'Website enquiry',
+            preview: str($preview)->limit(140)->value(),
+            url: $url,
+        ));
     }
 
     /**
@@ -519,6 +560,8 @@ class PublicSiteController extends Controller
             return collect();
         }
 
+        $categoriesById = $site->categories->keyBy('id');
+
         return $site->pages
             ->where('parent_id', $blog->id)
             ->filter(fn (SitePage $p) => $this->isLive($p))
@@ -527,11 +570,35 @@ class PublicSiteController extends Controller
                 'title' => $p->title,
                 'slug' => $p->slug,
                 'excerpt' => $p->excerpt,
-                'category' => $p->category,
+                'categories' => collect($p->category_ids ?? [])
+                    ->map(fn ($id) => $categoriesById->get((int) $id))
+                    ->filter()
+                    ->map(fn (SiteCategory $c) => $this->categoryProps($c))
+                    ->values(),
                 'cover_image' => $p->cover_image,
                 'published_at' => $p->published_at?->toDateString(),
                 'url' => $this->basePath($site)."/{$blog->slug}/{$p->slug}",
             ])->values();
+    }
+
+    /**
+     * The category tree for the blog block's filter, minus any the blog page has
+     * hidden. Hiding a category just drops its filter link; posts keep it.
+     */
+    private function siteCategories(Site $site): Collection
+    {
+        $hidden = collect($site->blogPage()?->hidden_category_ids ?? [])->map(fn ($id) => (int) $id);
+
+        return $site->categories
+            ->reject(fn (SiteCategory $c) => $hidden->contains($c->id))
+            ->map(fn (SiteCategory $c) => $this->categoryProps($c))
+            ->values();
+    }
+
+    /** @return array{id:int,name:string,slug:string,parent_id:int|null} */
+    private function categoryProps(SiteCategory $c): array
+    {
+        return ['id' => $c->id, 'name' => $c->name, 'slug' => $c->slug, 'parent_id' => $c->parent_id];
     }
 
     private function isLive(SitePage $p): bool
@@ -543,7 +610,7 @@ class PublicSiteController extends Controller
     private function resolvePublished(string $slug): Site
     {
         return Site::withoutGlobalScopes()
-            ->with(['pages', 'studio'])
+            ->with(['pages', 'studio', 'categories'])
             ->where('slug', $slug)
             ->where('is_published', true)
             ->firstOrFail();

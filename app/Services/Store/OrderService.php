@@ -110,7 +110,6 @@ class OrderService
                 'last_name' => trim(explode(' ', $customer['name'], 2)[1] ?? ''),
                 'email' => $customer['email'],
                 'phone' => $customer['phone'] ?? null,
-                'status' => 'lead',
             ]);
     }
 }

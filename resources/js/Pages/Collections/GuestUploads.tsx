@@ -297,6 +297,13 @@ export default function GuestUploads({
                             >
                                 Download printable card (A6)
                             </a>
+                            <a
+                                href={qr_data_uri}
+                                download={`qr-code-${collection.slug}.png`}
+                                className="btn-secondary mt-2 w-full justify-center"
+                            >
+                                Download QR code (PNG)
+                            </a>
                             <button onClick={copyLink} className="btn-secondary mt-2 w-full justify-center">
                                 {copied ? 'Link copied!' : 'Copy upload link'}
                             </button>

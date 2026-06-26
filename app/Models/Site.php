@@ -29,6 +29,7 @@ class Site extends Model
         'cookie_message',
         'cookie_policy_url',
         'contact_email',
+        'auto_create_project',
         'seo_title',
         'seo_description',
         'favicon_url',
@@ -49,6 +50,7 @@ class Site extends Model
             'saved_sections' => 'array',
             'is_published' => 'boolean',
             'cookie_consent' => 'boolean',
+            'auto_create_project' => 'boolean',
             'published_at' => 'datetime',
             'domain_verified_at' => 'datetime',
             'domain_provisioned_at' => 'datetime',
@@ -120,6 +122,12 @@ class Site extends Model
     public function leads(): HasMany
     {
         return $this->hasMany(SiteLead::class);
+    }
+
+    /** Blog categories for this site (hierarchical; ordered for display). */
+    public function categories(): HasMany
+    {
+        return $this->hasMany(SiteCategory::class)->orderBy('position')->orderBy('name');
     }
 
     public function homePage(): ?SitePage

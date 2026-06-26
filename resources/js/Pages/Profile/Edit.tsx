@@ -4,6 +4,7 @@ import { Head } from '@inertiajs/react';
 import DeleteUserForm from './Partials/DeleteUserForm';
 import StripeConnectCard from './Partials/StripeConnectCard';
 import StudioSettingsForm, { StudioSettings } from './Partials/StudioSettingsForm';
+import TwoFactorAuthenticationForm, { TwoFactorState } from './Partials/TwoFactorAuthenticationForm';
 import UpdatePasswordForm from './Partials/UpdatePasswordForm';
 import UpdateProfileInformationForm from './Partials/UpdateProfileInformationForm';
 
@@ -12,7 +13,8 @@ export default function Edit({
     status,
     studio,
     stripe_key,
-}: PageProps<{ mustVerifyEmail: boolean; status?: string; studio: StudioSettings | null; stripe_key: string }>) {
+    twoFactor,
+}: PageProps<{ mustVerifyEmail: boolean; status?: string; studio: StudioSettings | null; stripe_key: string; twoFactor: TwoFactorState }>) {
     return (
         <AuthenticatedLayout
             header={
@@ -47,6 +49,10 @@ export default function Edit({
 
                     <div className="bg-white p-4 shadow sm:rounded-lg sm:p-8">
                         <UpdatePasswordForm className="max-w-xl" />
+                    </div>
+
+                    <div className="bg-white p-4 shadow sm:rounded-lg sm:p-8">
+                        <TwoFactorAuthenticationForm twoFactor={twoFactor} className="max-w-xl" />
                     </div>
 
                     <div className="bg-white p-4 shadow sm:rounded-lg sm:p-8">

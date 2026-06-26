@@ -103,7 +103,6 @@ it('lets a client book an open slot and creates a lead contact', function () {
 
     $contact = Contact::withoutGlobalScopes()->where('email', 'dana@example.com')->first();
     expect($contact)->not->toBeNull()
-        ->and($contact->status)->toBe('lead')
         ->and($meeting->contact_id)->toBe($contact->id);
 });
 

@@ -8,6 +8,7 @@ export default function Settings({ site, templates, public_url, domain_config, s
     const [name, setName] = useState(site.name);
     const [slug, setSlug] = useState(site.slug);
     const [contactEmail, setContactEmail] = useState(site.contact_email ?? '');
+    const [autoCreateProject, setAutoCreateProject] = useState(site.auto_create_project ?? true);
     const [seoTitle, setSeoTitle] = useState(site.seo_title ?? '');
     const [seoDescription, setSeoDescription] = useState(site.seo_description ?? '');
     const [faviconUrl, setFaviconUrl] = useState(site.favicon_url ?? '');
@@ -40,6 +41,7 @@ export default function Settings({ site, templates, public_url, domain_config, s
             name,
             slug,
             contact_email: contactEmail,
+            auto_create_project: autoCreateProject,
             seo_title: seoTitle,
             seo_description: seoDescription,
             favicon_url: faviconUrl,
@@ -81,7 +83,7 @@ export default function Settings({ site, templates, public_url, domain_config, s
             <div className="mx-auto my-6 max-w-3xl px-4 sm:px-6">
                 <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
                     <SiteSettings
-                        {...{ name, setName, slug, setSlug, contactEmail, setContactEmail, seoTitle, setSeoTitle, seoDescription, setSeoDescription, theme, setTheme, errors, templates, applyTemplate }}
+                        {...{ name, setName, slug, setSlug, contactEmail, setContactEmail, autoCreateProject, setAutoCreateProject, seoTitle, setSeoTitle, seoDescription, setSeoDescription, theme, setTheme, errors, templates, applyTemplate }}
                         faviconUrl={faviconUrl}
                         setFaviconUrl={setFaviconUrl}
                         ogImageUrl={ogImageUrl}

@@ -1,6 +1,6 @@
 import SiteShell from '@/Components/site/SiteShell';
 import CookieConsent, { ConsentChoice, readConsent } from '@/Components/site/CookieConsent';
-import { BlogPostCard, PackageCard, SiteBlock, SiteNavItem, SiteTheme } from '@/types';
+import { BlogPostCard, PackageCard, SiteBlock, SiteCategory, SiteNavItem, SiteTheme } from '@/types';
 import { Head } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 
@@ -49,6 +49,7 @@ export default function Public({
     studio_logo,
     pages,
     posts,
+    categories,
     packages,
     page,
 }: {
@@ -72,6 +73,7 @@ export default function Public({
     studio_logo: string | null;
     pages: PageRef[];
     posts: BlogPostCard[];
+    categories: SiteCategory[];
     packages: PackageCard[];
     page: { title: string; slug: string; blocks: SiteBlock[]; head_code: string | null; body_code: string | null; og_image: string | null; canonical: string };
 }) {
@@ -110,6 +112,7 @@ export default function Public({
                 activeSlug={page.slug}
                 interactive
                 posts={posts}
+                categories={categories}
                 packages={packages}
             />
             {trackingAllowed && site.body_code && <CustomCode html={site.body_code} target="body" />}

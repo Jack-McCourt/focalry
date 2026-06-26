@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ProjectFieldDefinition;
 use App\Models\ProjectStatus;
 use App\Models\ProjectType;
+use App\Models\Studio;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,10 +18,17 @@ class ProjectSettingsController extends Controller
 {
     public function edit(): Response
     {
+        $studio = Studio::find(app('current.studio.id'));
+
         return Inertia::render('Projects/Settings', [
             'statuses' => ProjectStatus::orderBy('position')->get(['id', 'label', 'color', 'position']),
             'types' => ProjectType::orderBy('position')->get(['id', 'label', 'color', 'position']),
             'fields' => ProjectFieldDefinition::orderBy('position')->get(['id', 'key', 'label', 'type', 'options', 'position']),
+            // Studio-level Google Calendar connection (shared with the Meetings page).
+            'calendar' => [
+                'connected' => (bool) $studio?->googleCalendarConnected(),
+                'email' => $studio?->google_calendar_email,
+            ],
         ]);
     }
 

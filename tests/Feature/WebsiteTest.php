@@ -8,6 +8,7 @@ use App\Models\Photo;
 use App\Models\Project;
 use App\Models\ProjectStatus;
 use App\Models\Site;
+use App\Models\SiteCategory;
 use App\Models\SiteLead;
 use App\Models\SitePage;
 use App\Models\SiteVisit;
@@ -17,6 +18,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Inertia\Testing\AssertableInertia;
 
 function publishedSite(Studio $studio): Site
 {
@@ -75,7 +77,6 @@ it('creates a contact, project lead and lead log from a website enquiry', functi
 
     $this->assertDatabaseHas('contacts', [
         'email' => 'jane@example.com',
-        'status' => 'lead',
         'studio_id' => $studio->id,
     ]);
     $this->assertDatabaseHas('site_leads', [
@@ -93,6 +94,43 @@ it('creates a contact, project lead and lead log from a website enquiry', functi
         ->and($project->status_id)->toBe($leadStatus->id)
         ->and($contact->first_name)->toBe('Jane')
         ->and($contact->last_name)->toBe('Doe');
+});
+
+it('skips automatic project creation when the site has it turned off', function () {
+    $studio = Studio::factory()->onPaidPlan()->create();
+    $site = publishedSite($studio);
+    $site->update(['auto_create_project' => false]);
+
+    $this->post("/site/{$site->slug}/contact", [
+        'name' => 'No Project',
+        'email' => 'noproj@example.com',
+        'message' => 'Just a question.',
+    ])->assertRedirect();
+
+    // Contact + lead are still recorded; only the project is skipped.
+    $contact = Contact::withoutGlobalScopes()->where('email', 'noproj@example.com')->first();
+    expect($contact)->not->toBeNull()
+        ->and(Project::withoutGlobalScopes()->where('contact_id', $contact->id)->exists())->toBeFalse();
+    $this->assertDatabaseHas('site_leads', ['email' => 'noproj@example.com', 'project_id' => null]);
+});
+
+it('raises an in-app notification for studio users on a new enquiry', function () {
+    $studio = Studio::factory()->onPaidPlan()->create();
+    $user = User::factory()->for($studio)->create();
+    $site = publishedSite($studio);
+
+    $this->post("/site/{$site->slug}/contact", [
+        'name' => 'Jane Doe',
+        'email' => 'jane@example.com',
+        'event_type' => 'Wedding',
+        'message' => 'We would love a quote.',
+    ])->assertRedirect();
+
+    $notification = $user->fresh()->notifications()->first();
+    expect($notification)->not->toBeNull()
+        ->and($notification->data['type'])->toBe('lead')
+        ->and($notification->data['title'])->toContain('Jane Doe')
+        ->and($notification->data['url'])->not->toBeNull();
 });
 
 it('drops a honeypot submission without creating a lead', function () {
@@ -170,7 +208,6 @@ it('reuses an existing contact by email instead of duplicating', function () {
         'studio_id' => $studio->id,
         'first_name' => 'Repeat',
         'email' => 'repeat@example.com',
-        'status' => 'client',
     ]);
 
     $this->post("/site/{$site->slug}/contact", [
@@ -371,4 +408,133 @@ it('requires a name and email to submit an enquiry', function () {
     $this->from("/site/{$site->slug}")
         ->post("/site/{$site->slug}/contact", ['name' => '', 'email' => 'not-an-email'])
         ->assertSessionHasErrors(['name', 'email']);
+});
+
+it('creates hierarchical blog categories over ajax', function () {
+    $studio = Studio::factory()->onPaidPlan()->create();
+    $user = User::factory()->for($studio)->create();
+    $this->actingAs($user)->get('/website')->assertOk();
+
+    // Parent.
+    $res = $this->actingAs($user)->postJson(route('website.categories.store'), ['name' => 'Weddings']);
+    $res->assertOk();
+    $parent = collect($res->json('categories'))->firstWhere('name', 'Weddings');
+    expect($parent['parent_id'])->toBeNull()
+        ->and($parent['slug'])->toBe('weddings');
+
+    // Child under the parent.
+    $res = $this->actingAs($user)->postJson(route('website.categories.store'), ['name' => 'Real Weddings', 'parent_id' => $parent['id']]);
+    $child = collect($res->json('categories'))->firstWhere('name', 'Real Weddings');
+    expect($child['parent_id'])->toBe($parent['id']);
+});
+
+it('attaches multiple categories to a post through a save', function () {
+    $studio = Studio::factory()->onPaidPlan()->create();
+    $user = User::factory()->for($studio)->create();
+    $this->actingAs($user)->get('/website')->assertOk();
+
+    $a = $this->actingAs($user)->postJson(route('website.categories.store'), ['name' => 'Weddings'])->json('categories');
+    $weddings = collect($a)->firstWhere('name', 'Weddings');
+    $b = $this->actingAs($user)->postJson(route('website.categories.store'), ['name' => 'Tips'])->json('categories');
+    $tips = collect($b)->firstWhere('name', 'Tips');
+
+    $this->actingAs($user)->put(route('website.update'), [
+        'name' => 'My Studio',
+        'slug' => 'cat-studio',
+        'theme' => ['primary_color' => '#111111', 'font' => 'sans'],
+        'header_nav' => [],
+        'footer_nav' => [],
+        'pages' => [
+            ['title' => 'Home', 'slug' => 'home', 'is_home' => true, 'is_blog' => false, 'is_post' => false, 'blocks' => []],
+            ['title' => 'Blog', 'slug' => 'blog', 'is_home' => false, 'is_blog' => true, 'is_post' => false, 'blocks' => []],
+            ['title' => 'Post', 'slug' => 'post', 'is_post' => true, 'status' => 'published', 'blocks' => [], 'category_ids' => [$weddings['id'], $tips['id']]],
+        ],
+    ])->assertRedirect();
+
+    $post = SitePage::withoutGlobalScopes()->where('slug', 'post')->first();
+    expect($post->category_ids)->toEqualCanonicalizing([$weddings['id'], $tips['id']]);
+});
+
+it('strips stale category ids that do not belong to the site on save', function () {
+    $studio = Studio::factory()->onPaidPlan()->create();
+    $user = User::factory()->for($studio)->create();
+    $this->actingAs($user)->get('/website')->assertOk();
+
+    $this->actingAs($user)->put(route('website.update'), [
+        'name' => 'My Studio',
+        'slug' => 'stale-studio',
+        'theme' => ['primary_color' => '#111111', 'font' => 'sans'],
+        'header_nav' => [],
+        'footer_nav' => [],
+        'pages' => [
+            ['title' => 'Home', 'slug' => 'home', 'is_home' => true, 'is_blog' => false, 'is_post' => false, 'blocks' => []],
+            ['title' => 'Blog', 'slug' => 'blog', 'is_home' => false, 'is_blog' => true, 'is_post' => false, 'blocks' => []],
+            ['title' => 'Post', 'slug' => 'post', 'is_post' => true, 'status' => 'published', 'blocks' => [], 'category_ids' => [999999]],
+        ],
+    ])->assertRedirect();
+
+    $post = SitePage::withoutGlobalScopes()->where('slug', 'post')->first();
+    expect($post->category_ids)->toBe([]);
+});
+
+it('reparents children and detaches posts when a category is deleted', function () {
+    $studio = Studio::factory()->onPaidPlan()->create();
+    $user = User::factory()->for($studio)->create();
+    $this->actingAs($user)->get('/website')->assertOk();
+
+    $parent = collect($this->actingAs($user)->postJson(route('website.categories.store'), ['name' => 'Weddings'])->json('categories'))->firstWhere('name', 'Weddings');
+    $child = collect($this->actingAs($user)->postJson(route('website.categories.store'), ['name' => 'Real Weddings', 'parent_id' => $parent['id']])->json('categories'))->firstWhere('name', 'Real Weddings');
+
+    // A post tagged to the parent.
+    $this->actingAs($user)->put(route('website.update'), [
+        'name' => 'My Studio', 'slug' => 'del-studio',
+        'theme' => ['primary_color' => '#111111', 'font' => 'sans'], 'header_nav' => [], 'footer_nav' => [],
+        'pages' => [
+            ['title' => 'Home', 'slug' => 'home', 'is_home' => true, 'is_blog' => false, 'is_post' => false, 'blocks' => []],
+            ['title' => 'Blog', 'slug' => 'blog', 'is_home' => false, 'is_blog' => true, 'is_post' => false, 'blocks' => []],
+            ['title' => 'Post', 'slug' => 'post', 'is_post' => true, 'status' => 'published', 'blocks' => [], 'category_ids' => [$parent['id']]],
+        ],
+    ])->assertRedirect();
+
+    $this->actingAs($user)->deleteJson(route('website.categories.destroy', $parent['id']))->assertOk();
+
+    // Child moved up to root; post no longer references the deleted category.
+    $reloadedChild = SiteCategory::withoutGlobalScopes()->find($child['id']);
+    expect($reloadedChild->parent_id)->toBeNull();
+    $post = SitePage::withoutGlobalScopes()->where('slug', 'post')->first();
+    expect($post->category_ids)->toBe([]);
+});
+
+it('hides a category from the blog filter when the blog page unticks it', function () {
+    $studio = Studio::factory()->onPaidPlan()->create();
+    $user = User::factory()->for($studio)->create();
+    $this->actingAs($user)->get('/website')->assertOk();
+
+    $visible = collect($this->actingAs($user)->postJson(route('website.categories.store'), ['name' => 'Visible'])->json('categories'))->firstWhere('name', 'Visible');
+    $hidden = collect($this->actingAs($user)->postJson(route('website.categories.store'), ['name' => 'Hidden'])->json('categories'))->firstWhere('name', 'Hidden');
+
+    $this->actingAs($user)->put(route('website.update'), [
+        'name' => 'My Studio', 'slug' => 'hide-studio',
+        'theme' => ['primary_color' => '#111111', 'font' => 'sans'], 'header_nav' => [], 'footer_nav' => [],
+        'pages' => [
+            ['title' => 'Home', 'slug' => 'home', 'is_home' => true, 'is_blog' => false, 'is_post' => false, 'blocks' => []],
+            ['title' => 'Blog', 'slug' => 'blog', 'is_home' => false, 'is_blog' => true, 'is_post' => false, 'blocks' => [], 'hidden_category_ids' => [$hidden['id']]],
+            ['title' => 'A', 'slug' => 'post-a', 'is_post' => true, 'status' => 'published', 'blocks' => [], 'category_ids' => [$visible['id']]],
+            ['title' => 'B', 'slug' => 'post-b', 'is_post' => true, 'status' => 'published', 'blocks' => [], 'category_ids' => [$hidden['id']]],
+        ],
+    ])->assertRedirect();
+
+    Site::withoutGlobalScopes()->where('studio_id', $studio->id)->update(['is_published' => true, 'published_at' => now()]);
+    $site = Site::withoutGlobalScopes()->where('studio_id', $studio->id)->first();
+
+    // The hidden category is dropped from the filter prop; the visible one remains.
+    $this->get("/site/{$site->slug}/blog")
+        ->assertInertia(fn (AssertableInertia $page) => $page
+            ->component('Sites/Public')
+            ->where('categories', fn ($cats) => collect($cats)->pluck('name')->all() === ['Visible'])
+        );
+
+    // The blog page still persisted the hidden id.
+    $blog = SitePage::withoutGlobalScopes()->where('site_id', $site->id)->where('is_blog', true)->first();
+    expect($blog->hidden_category_ids)->toBe([$hidden['id']]);
 });

@@ -75,7 +75,7 @@ it('books a free package immediately and creates a project + lead', function () 
     expect($booking->status)->toBe('paid')->and($booking->project_id)->not->toBeNull();
 
     $contact = Contact::withoutGlobalScopes()->where('email', 'dana@example.com')->first();
-    expect($contact)->not->toBeNull()->and($contact->status)->toBe('lead');
+    expect($contact)->not->toBeNull();
 
     $project = Project::withoutGlobalScopes()->find($booking->project_id);
     expect($project)->not->toBeNull()
@@ -87,7 +87,7 @@ it('fulfilment is idempotent on replayed webhooks', function () {
     [$studio] = packageStudio();
     $package = makePackage($studio->id);
     $contact = Contact::create([
-        'studio_id' => $studio->id, 'first_name' => 'Dana', 'email' => 'dana@example.com', 'status' => 'lead',
+        'studio_id' => $studio->id, 'first_name' => 'Dana', 'email' => 'dana@example.com',
     ]);
     $booking = PackageBooking::create([
         'studio_id' => $studio->id, 'package_id' => $package->id, 'contact_id' => $contact->id,

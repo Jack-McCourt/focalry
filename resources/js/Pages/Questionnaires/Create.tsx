@@ -6,7 +6,7 @@ import { useState } from 'react';
 
 interface Question {
     label: string;
-    type: 'text' | 'textarea' | 'date' | 'select' | 'checkbox';
+    type: 'text' | 'textarea' | 'date' | 'select' | 'checkbox' | 'image' | 'file';
     options: string[];
     required: boolean;
 }
@@ -23,6 +23,8 @@ const TYPES = [
     { value: 'date', label: 'Date' },
     { value: 'select', label: 'Dropdown' },
     { value: 'checkbox', label: 'Yes / no' },
+    { value: 'image', label: 'Image upload' },
+    { value: 'file', label: 'File upload' },
 ];
 
 export default function Create({

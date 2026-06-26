@@ -21,6 +21,7 @@
         "laravel/tinker": "^3.0",
         "league/flysystem-aws-s3-v3": "^3.0",
         "maennchen/zipstream-php": "^3.2",
+        "pragmarx/google2fa": "^8.0",
         "predis/predis": "*",
         "simplesoftwareio/simple-qrcode": "^4.2",
         "tightenco/ziggy": "^2.0"

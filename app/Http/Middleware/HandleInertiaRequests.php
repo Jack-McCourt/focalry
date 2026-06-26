@@ -52,6 +52,9 @@ class HandleInertiaRequests extends Middleware
             'notifications' => fn () => $user ? $user->notifications()->latest()->limit(15)->get()
                 ->map(fn ($n) => [
                     'id' => $n->id,
+                    'type' => $n->data['type'] ?? 'message',
+                    'title' => $n->data['title'] ?? null,
+                    'url' => $n->data['url'] ?? null,
                     'conversation_id' => $n->data['conversation_id'] ?? null,
                     'from_name' => $n->data['from_name'] ?? null,
                     'subject' => $n->data['subject'] ?? null,

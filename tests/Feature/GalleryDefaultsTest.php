@@ -39,6 +39,27 @@ it('saves a gallery\'s settings as the studio default', function () {
     expect($defaults['download_settings'])->toBe(['enabled' => true]);
 });
 
+it('prefers the saved default price sheet over the studio default', function () {
+    [$studio, $user] = defaultsStudio();
+    PriceSheet::create(['studio_id' => $studio->id, 'name' => 'Studio default', 'is_default' => true, 'fulfilment' => 'lab']);
+    $chosen = PriceSheet::create(['studio_id' => $studio->id, 'name' => 'Chosen', 'is_default' => false, 'fulfilment' => 'lab']);
+    $studio->update(['gallery_defaults' => ['price_sheet_id' => $chosen->id]]);
+
+    $this->actingAs($user)->post(route('collections.store'), ['title' => 'Pick'])->assertRedirect();
+
+    expect(Collection::where('title', 'Pick')->first()->price_sheet_id)->toBe($chosen->id);
+});
+
+it('will not save defaults from another studio\'s gallery', function () {
+    [, $userA] = defaultsStudio();
+    $other = Studio::factory()->create();
+    $foreign = Collection::withoutGlobalScopes()->create([
+        'studio_id' => $other->id, 'title' => 'Theirs', 'slug' => 'theirs-x', 'status' => 'draft',
+    ]);
+
+    $this->actingAs($userA)->post(route('collections.save-defaults', $foreign->id))->assertNotFound();
+});
+
 it('applies saved defaults to newly created galleries', function () {
     [$studio, $user] = defaultsStudio();
     $studio->update(['gallery_defaults' => [

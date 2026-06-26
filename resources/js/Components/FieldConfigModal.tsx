@@ -11,6 +11,8 @@ const TYPE_OPTIONS: { value: ProjectFieldType; label: string }[] = [
     { value: 'select', label: 'Single select' },
     { value: 'checkbox', label: 'Checkbox' },
     { value: 'url', label: 'URL' },
+    { value: 'image', label: 'Images' },
+    { value: 'file', label: 'Files' },
 ];
 
 interface Choice {

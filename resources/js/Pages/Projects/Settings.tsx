@@ -22,7 +22,13 @@ export default function Settings({
     statuses,
     types,
     fields,
-}: PageProps<{ statuses: ProjectStatus[]; types: ProjectType[]; fields: ProjectFieldDefinition[] }>) {
+    calendar,
+}: PageProps<{
+    statuses: ProjectStatus[];
+    types: ProjectType[];
+    fields: ProjectFieldDefinition[];
+    calendar: { connected: boolean; email: string | null };
+}>) {
     const [showAddField, setShowAddField] = useState(false);
 
     const fieldMove = (i: number, dir: -1 | 1) => {
@@ -47,6 +53,33 @@ export default function Settings({
             <StudioManagerNav active="projects" />
 
             <div className="space-y-10 px-4 sm:px-8 py-8">
+                <Section title="Google Calendar" description="Sync your studio calendar. Connecting here also connects it for Meetings — it's one shared calendar.">
+                    <div className="flex max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4">
+                        <div className="flex items-center gap-3">
+                            <svg className="h-6 w-6 text-neutral-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
+                            <div>
+                                <p className="text-sm font-medium text-neutral-900">Google Calendar</p>
+                                {calendar.connected ? (
+                                    <p className="text-xs text-emerald-600">Connected{calendar.email ? ` · ${calendar.email}` : ''}</p>
+                                ) : (
+                                    <p className="text-xs text-neutral-500">Connect to sync your studio calendar across the platform.</p>
+                                )}
+                            </div>
+                        </div>
+                        {calendar.connected ? (
+                            <button
+                                type="button"
+                                onClick={() => confirm('Disconnect Google Calendar? It will disconnect everywhere.') && router.delete(route('google-calendar.disconnect'))}
+                                className="btn-secondary px-3 py-1.5 text-xs"
+                            >
+                                Disconnect
+                            </button>
+                        ) : (
+                            <a href={route('google-calendar.connect', { from: 'projects' })} className="btn-primary px-3 py-1.5 text-xs">Connect</a>
+                        )}
+                    </div>
+                </Section>
+
                 <Section title="Statuses" description="The Kanban columns. Drag order with the arrows; click a swatch to recolour.">
                     <ColorListEditor
                         items={statuses}

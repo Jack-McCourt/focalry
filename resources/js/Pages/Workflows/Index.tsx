@@ -9,6 +9,7 @@ interface Row {
     trigger: string;
     trigger_label: string;
     trigger_status: string | null;
+    conditions_count: number;
     is_active: boolean;
     steps_count: number;
     runs_count: number;
@@ -48,7 +49,7 @@ export default function Index({ workflows }: PageProps<{ workflows: Row[]; trigg
                                 <Link href={route('workflows.edit', w.id)} className="min-w-0 flex-1">
                                     <p className="font-medium text-neutral-900">{w.name}</p>
                                     <p className="mt-0.5 text-sm text-neutral-500">
-                                        When: {w.trigger_label}{w.trigger_status ? ` → ${w.trigger_status}` : ''} · {w.steps_count} step{w.steps_count === 1 ? '' : 's'} · run {w.runs_count}×
+                                        When: {w.trigger_label}{w.trigger_status ? ` → ${w.trigger_status}` : ''}{w.conditions_count > 0 ? ` · if ${w.conditions_count} condition${w.conditions_count === 1 ? '' : 's'}` : ''} · {w.steps_count} step{w.steps_count === 1 ? '' : 's'} · run {w.runs_count}×
                                     </p>
                                 </Link>
                                 <div className="ml-4 flex items-center gap-4">

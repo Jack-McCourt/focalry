@@ -28,6 +28,8 @@ class SitePage extends Model
         'published_at',
         'excerpt',
         'category',
+        'category_ids',
+        'hidden_category_ids',
         'cover_image',
         'seo_title',
         'seo_description',
@@ -44,6 +46,8 @@ class SitePage extends Model
             'is_blog' => 'boolean',
             'is_404' => 'boolean',
             'blocks' => 'array',
+            'category_ids' => 'array',
+            'hidden_category_ids' => 'array',
             'published_at' => 'datetime',
         ];
     }

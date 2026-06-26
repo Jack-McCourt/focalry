@@ -1099,6 +1099,7 @@ const PhotoTile = memo(function PhotoTile({
     onDelete,
     onSetChange,
     onSetCover,
+    onToggleStar,
     onOpen,
     dropEdge,
     spanRows,
@@ -1111,6 +1112,7 @@ const PhotoTile = memo(function PhotoTile({
     onDelete: (id: number) => void;
     onSetChange: (photoId: number, setId: number | null) => void;
     onSetCover: (photoId: number) => void;
+    onToggleStar: (photoId: number) => void;
     onOpen: (index: number) => void;
     dropEdge?: 'before' | 'after' | null;
     spanRows?: number;
@@ -1164,6 +1166,11 @@ const PhotoTile = memo(function PhotoTile({
                 { headers: { 'X-XSRF-TOKEN': getCsrfToken() } },
             )
             .then(() => onSetCover(photo.id));
+    };
+
+    const toggleStar = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onToggleStar(photo.id); // optimistic; the request is fired by the parent
     };
 
     return (
@@ -1230,6 +1237,23 @@ const PhotoTile = memo(function PhotoTile({
 
                 <div className="absolute inset-0 bg-neutral-900/0 transition-all group-hover:bg-neutral-900/30" />
             </div>
+
+            {/* Favourite star — always shown when starred, on hover otherwise */}
+            {photo.status === 'ready' && (
+                <button
+                    onClick={toggleStar}
+                    title={photo.starred ? 'Remove from favourites' : 'Add to favourites'}
+                    className={`absolute bottom-1.5 left-1.5 rounded-full p-1.5 backdrop-blur-sm transition ${
+                        photo.starred
+                            ? 'bg-amber-400 text-white opacity-100'
+                            : 'bg-white/90 text-neutral-500 opacity-0 hover:text-amber-500 group-hover:opacity-100'
+                    }`}
+                >
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill={photo.starred ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.8}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.5a.562.562 0 011.04 0l2.125 5.11a.563.563 0 00.475.346l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.884a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                    </svg>
+                </button>
+            )}
 
             {/* Hover actions — outside the clip so dropdowns can overflow the tile */}
             <div className={`absolute right-1.5 top-1.5 flex gap-1 transition group-hover:opacity-100 ${showMenu ? 'opacity-100' : 'opacity-0'}`}>
@@ -1819,6 +1843,14 @@ export default function Show({
 
     const handleSetCover = useCallback(() => router.reload({ only: ['collection'] }), []);
 
+    // Optimistically flip the star, then persist; revert on failure.
+    const handleToggleStar = useCallback((photoId: number) => {
+        setPhotos((prev) => prev.map((p) => (p.id === photoId ? { ...p, starred: !p.starred } : p)));
+        axios
+            .post(`/api/photos/${photoId}/star`, {}, { headers: { 'X-XSRF-TOKEN': getCsrfToken() } })
+            .catch(() => setPhotos((prev) => prev.map((p) => (p.id === photoId ? { ...p, starred: !p.starred } : p))));
+    }, []);
+
     const [sorting, setSorting] = useState(false);
     const sortByTime = () => {
         setSorting(true);
@@ -2049,6 +2081,7 @@ export default function Show({
                                                 onDelete={handleDelete}
                                                 onSetChange={handleSetChange}
                                                 onSetCover={handleSetCover}
+                                                onToggleStar={handleToggleStar}
                                                 onOpen={setLightboxIndex}
                                                 dropEdge={dropTarget?.id === photo.id ? (dropTarget.after ? 'after' : 'before') : null}
                                                 spanRows={spanFor(photo)}

@@ -25,6 +25,11 @@ class UserFactory extends Factory
             'password' => static::$password ??= Hash::make('password'),
             'role' => 'owner',
             'remember_token' => Str::random(10),
+            // Set explicitly so the in-memory instance (used by actingAs) has these
+            // attributes under strict mode — the User model is TwoFactorAuthenticatable.
+            'two_factor_secret' => null,
+            'two_factor_recovery_codes' => null,
+            'two_factor_confirmed_at' => null,
         ];
     }
 

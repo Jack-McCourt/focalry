@@ -55,7 +55,7 @@ class QuestionnaireTemplateController extends Controller
             'description' => 'nullable|string|max:1000',
             'questions' => 'array|min:1',
             'questions.*.label' => 'required|string|max:255',
-            'questions.*.type' => ['required', Rule::in(['text', 'textarea', 'date', 'select', 'checkbox'])],
+            'questions.*.type' => ['required', Rule::in(['text', 'textarea', 'date', 'select', 'checkbox', 'image', 'file'])],
             'questions.*.options' => 'nullable|array',
             'questions.*.options.*' => 'string|max:255',
             'questions.*.required' => 'boolean',

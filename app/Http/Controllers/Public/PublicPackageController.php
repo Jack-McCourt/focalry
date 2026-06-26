@@ -96,7 +96,6 @@ class PublicPackageController extends Controller
                     'last_name' => trim(explode(' ', $data['client_name'], 2)[1] ?? ''),
                     'email' => $data['client_email'],
                     'phone' => $data['client_phone'] ?? null,
-                    'status' => 'lead',
                 ]);
 
             return PackageBooking::create([

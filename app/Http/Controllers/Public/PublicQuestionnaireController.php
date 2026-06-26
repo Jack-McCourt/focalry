@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Public;
 use App\Http\Controllers\Controller;
 use App\Models\Questionnaire;
 use App\Services\WorkflowEngine;
+use App\Support\PublicAsset;
+use App\Support\StudioPaths;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -44,8 +47,14 @@ class PublicQuestionnaireController extends Controller
             $required = ! empty($q['required']);
             $rules[$field] = match ($q['type']) {
                 'checkbox' => 'nullable|boolean',
+                'image', 'file' => ($required ? 'required' : 'nullable').'|array',
                 default => ($required ? 'required' : 'nullable').'|string|max:5000',
             };
+            if (in_array($q['type'], ['image', 'file'], true)) {
+                $rules["{$field}.*.url"] = 'required|string|max:2048';
+                $rules["{$field}.*.name"] = 'nullable|string|max:255';
+                $rules["{$field}.*.size"] = 'nullable|integer';
+            }
         }
 
         $data = $request->validate($rules);
@@ -64,6 +73,50 @@ class PublicQuestionnaireController extends Controller
         return redirect()
             ->route('questionnaires.public.show', $questionnaire->public_id)
             ->with('success', 'Thank you — your answers have been sent.');
+    }
+
+    /**
+     * Upload an image for an "image" question. Resolved by the unguessable
+     * public_id (no auth); stored on the questionnaire's studio public prefix.
+     */
+    public function uploadImage(Request $request, string $publicId): JsonResponse
+    {
+        $questionnaire = $this->resolve($publicId);
+        abort_if($questionnaire->status === 'completed', 422, 'This questionnaire has already been submitted.');
+
+        $request->validate([
+            'image' => 'required|image|mimes:jpg,jpeg,png,gif,webp|max:15360',
+        ]);
+
+        $path = $request->file('image')->storePublicly(StudioPaths::asset($questionnaire->studio_id, 'questionnaires/images'), 'wasabi');
+
+        return response()->json([
+            'url' => PublicAsset::url($path),
+            'name' => $request->file('image')->getClientOriginalName(),
+        ]);
+    }
+
+    /**
+     * Upload a document for a "file" question. Resolved by the unguessable
+     * public_id (no auth); stored on the questionnaire's studio public prefix.
+     */
+    public function uploadFile(Request $request, string $publicId): JsonResponse
+    {
+        $questionnaire = $this->resolve($publicId);
+        abort_if($questionnaire->status === 'completed', 422, 'This questionnaire has already been submitted.');
+
+        $request->validate([
+            'file' => 'required|file|max:25600',
+        ]);
+
+        $file = $request->file('file');
+        $path = $file->storePublicly(StudioPaths::asset($questionnaire->studio_id, 'questionnaires/files'), 'wasabi');
+
+        return response()->json([
+            'url' => PublicAsset::url($path),
+            'name' => $file->getClientOriginalName(),
+            'size' => $file->getSize(),
+        ]);
     }
 
     private function resolve(string $publicId): Questionnaire

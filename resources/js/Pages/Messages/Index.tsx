@@ -489,7 +489,12 @@ export default function Index({
     inbound_configured: boolean;
 }>) {
     const [search, setSearch] = useState(filters.search);
-    const [composing, setComposing] = useState(!!compose_contact_id);
+    // The "New message" button opens a lightweight contact picker; the actual
+    // compose happens inline in the thread pane (see draftContact below).
+    const [composing, setComposing] = useState(false);
+    // When arriving with ?compose={id} and no conversation is selected, we're
+    // starting a fresh thread with that contact — render a draft pane for them.
+    const draftContact = !selected && compose_contact_id ? contacts.find((c) => c.id === compose_contact_id) ?? null : null;
     const [managingTemplates, setManagingTemplates] = useState(false);
     const [threadSearch, setThreadSearch] = useState('');
     const firstRender = useRef(true);
@@ -551,12 +556,26 @@ export default function Index({
 
     const sendReply = (e?: React.FormEvent) => {
         e?.preventDefault();
-        if (!selected || (!reply.data.body.trim() && reply.data.attachments.length === 0)) return;
-        reply.post(route('messages.reply', selected.id), {
-            preserveScroll: true,
-            forceFormData: true,
-            onSuccess: () => { reply.reset(); composerRef.current?.clear(); setExpanded(false); },
-        });
+        if (!reply.data.body.trim() && reply.data.attachments.length === 0) return;
+
+        if (selected) {
+            reply.transform((d) => d);
+            reply.post(route('messages.reply', selected.id), {
+                preserveScroll: true,
+                forceFormData: true,
+                onSuccess: () => { reply.reset(); composerRef.current?.clear(); setExpanded(false); },
+            });
+            return;
+        }
+
+        // Draft mode: first message to a contact creates the conversation.
+        if (draftContact) {
+            reply.transform((d) => ({ ...d, contact_id: draftContact.id }));
+            reply.post(route('messages.store'), {
+                forceFormData: true,
+                onSuccess: () => { reply.reset(); reply.transform((d) => d); composerRef.current?.clear(); setExpanded(false); },
+            });
+        }
     };
 
     const insertTemplate = (id: string) => {
@@ -581,7 +600,7 @@ export default function Index({
                         {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
                 )}
-                <button type="button" onClick={() => setManagingTemplates(true)} className="rounded px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600">Manage</button>
+                <button type="button" onClick={() => setManagingTemplates(true)} className="rounded px-2 py-1 text-xs text-neutral-400 hover:bg-neutral-100 hover:text-neutral-600">Manage templates</button>
             </ComposerToolbar>
             <div className={`flex gap-2 ${isExpanded ? 'min-h-0 flex-1 items-stretch' : 'items-end'}`}>
                 <AttachButton onAdd={(f) => reply.setData('attachments', [...reply.data.attachments, ...withinAttachLimit(f)])} />
@@ -591,7 +610,7 @@ export default function Index({
                         value={reply.data.body}
                         onChange={(md) => reply.setData('body', md)}
                         onSend={() => sendReply()}
-                        placeholder="Write a reply…  (⌘/Ctrl + Enter to send)"
+                        placeholder={selected ? 'Write a reply…  (⌘/Ctrl + Enter to send)' : 'Write your message…  (⌘/Ctrl + Enter to send)'}
                         autoFocus={isExpanded}
                         className={isExpanded ? 'min-h-[40vh]' : 'min-h-[2.25rem]'}
                     />
@@ -689,13 +708,26 @@ export default function Index({
                         </div>
                     )}
 
-                    {!selected ? (
+                    {!selected && !draftContact ? (
                         <div className="flex flex-1 flex-col items-center justify-center text-center">
                             <svg className="h-10 w-10 text-neutral-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>
                             <p className="mt-3 text-sm font-medium text-neutral-700">Select a conversation</p>
                             <p className="mt-1 text-sm text-neutral-400">or start a new message with a client.</p>
                         </div>
-                    ) : (
+                    ) : !selected && draftContact ? (
+                        <>
+                            <div className="border-b border-neutral-200 bg-white px-5 py-3">
+                                <p className="truncate text-sm font-semibold text-neutral-900">{draftContact.name}</p>
+                                <p className="truncate text-xs text-neutral-400">New message{draftContact.email ? ` · ${draftContact.email}` : ''}</p>
+                            </div>
+                            <div className="flex flex-1 flex-col items-center justify-center text-center text-sm text-neutral-400">
+                                <p>No messages yet — write the first one below.</p>
+                            </div>
+                            <div className="border-t border-neutral-200 bg-white">
+                                {renderComposer(false)}
+                            </div>
+                        </>
+                    ) : selected ? (
                         <>
                             <div className="border-b border-neutral-200 bg-white px-5 py-3">
                                 <div className="flex items-center justify-between">
@@ -773,7 +805,7 @@ export default function Index({
                                 </div>
                             )}
                         </>
-                    )}
+                    ) : null}
                 </div>
             </div>
 
@@ -795,7 +827,7 @@ export default function Index({
             )}
 
             <LinkDocumentModal show={linking} onClose={() => setLinking(false)} conversationId={selected?.id ?? null} onPick={linkDocument} />
-            <NewMessageModal show={composing} onClose={() => setComposing(false)} contacts={contacts} defaultContactId={compose_contact_id} />
+            <PickContactModal show={composing} onClose={() => setComposing(false)} contacts={contacts} />
             <TemplatesModal show={managingTemplates} onClose={() => setManagingTemplates(false)} templates={templates} />
         </AuthenticatedLayout>
     );
@@ -835,68 +867,54 @@ function TagEditor({ tags, allTags, onChange }: { tags: string[]; allTags: strin
     );
 }
 
-function NewMessageModal({ show, onClose, contacts, defaultContactId }: { show: boolean; onClose: () => void; contacts: ContactRef[]; defaultContactId: number | null }) {
-    const form = useForm<{ contact_id: string; subject: string; body: string; attachments: File[] }>({ contact_id: defaultContactId ? String(defaultContactId) : '', subject: '', body: '', attachments: [] });
-    const composerRef = useRef<RichComposerHandle>(null);
+/**
+ * "New message" just asks who to write to. Picking a client opens their thread
+ * (existing history, or a fresh draft pane) via the with-contact route — no
+ * subject/body popup.
+ */
+function PickContactModal({ show, onClose, contacts }: { show: boolean; onClose: () => void; contacts: ContactRef[] }) {
+    const [q, setQ] = useState('');
+    const needle = q.trim().toLowerCase();
+    const filtered = needle
+        ? contacts.filter((c) => c.name.toLowerCase().includes(needle) || (c.email ?? '').toLowerCase().includes(needle))
+        : contacts;
 
-    // Keep the preselected contact in sync when opening from a contact profile.
-    useEffect(() => {
-        if (show && defaultContactId) form.setData('contact_id', String(defaultContactId));
-    }, [show, defaultContactId]);
-
-    const submit = (e: React.FormEvent) => {
-        e.preventDefault();
-        form.post(route('messages.store'), { forceFormData: true, onSuccess: () => { form.reset(); composerRef.current?.clear(); onClose(); } });
-    };
+    // Reset the search each time the picker opens.
+    useEffect(() => { if (show) setQ(''); }, [show]);
 
     return (
-        <Modal show={show} onClose={onClose} maxWidth="lg">
-            <form onSubmit={submit} className="space-y-4 p-6">
+        <Modal show={show} onClose={onClose} maxWidth="sm">
+            <div className="p-5">
                 <div className="flex items-center justify-between">
                     <h2 className="text-sm font-semibold text-neutral-900">New message</h2>
                     <button type="button" onClick={onClose} className="text-neutral-400 hover:text-neutral-700">
                         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                 </div>
+                <p className="mt-1 text-xs text-neutral-500">Who would you like to message?</p>
 
-                <div>
-                    <span className="label mb-1.5 block">To</span>
-                    <select className="input" value={form.data.contact_id} onChange={(e) => form.setData('contact_id', e.target.value)}>
-                        <option value="">Select a client…</option>
-                        {contacts.map((c) => (
-                            <option key={c.id} value={c.id}>{c.name}{c.email ? ` — ${c.email}` : ''}</option>
-                        ))}
-                    </select>
-                    {form.errors.contact_id && <p className="mt-1 text-xs text-red-600">{form.errors.contact_id}</p>}
-                    {contacts.length === 0 && <p className="mt-1 text-xs text-neutral-400">No contacts with an email address yet.</p>}
-                </div>
+                <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search clients…" className="input mt-3" />
 
-                <div>
-                    <span className="label mb-1.5 block">Subject</span>
-                    <input className="input" value={form.data.subject} onChange={(e) => form.setData('subject', e.target.value)} />
-                    {form.errors.subject && <p className="mt-1 text-xs text-red-600">{form.errors.subject}</p>}
+                <div className="mt-2 max-h-72 divide-y divide-neutral-50 overflow-y-auto">
+                    {contacts.length === 0 ? (
+                        <p className="py-6 text-center text-sm text-neutral-400">No contacts with an email address yet.</p>
+                    ) : filtered.length === 0 ? (
+                        <p className="py-6 text-center text-sm text-neutral-400">No clients match “{q}”.</p>
+                    ) : (
+                        filtered.map((c) => (
+                            <Link
+                                key={c.id}
+                                href={route('messages.with-contact', c.id)}
+                                onClick={onClose}
+                                className="flex items-center justify-between gap-3 px-1 py-2.5 text-left transition hover:bg-neutral-50"
+                            >
+                                <span className="truncate text-sm font-medium text-neutral-800">{c.name}</span>
+                                {c.email && <span className="shrink-0 truncate text-xs text-neutral-400">{c.email}</span>}
+                            </Link>
+                        ))
+                    )}
                 </div>
-
-                <div>
-                    <span className="label mb-1.5 block">Message</span>
-                    <ComposerToolbar composer={composerRef} />
-                    <div className="max-h-72 min-h-[8rem] overflow-y-auto rounded-md border border-neutral-200 px-3 py-2">
-                        <RichComposer ref={composerRef} value={form.data.body} onChange={(md) => form.setData('body', md)} placeholder="Write your message…" />
-                    </div>
-                    {form.errors.body && <p className="mt-1 text-xs text-red-600">{form.errors.body}</p>}
-                </div>
-
-                <div>
-                    <AttachChips files={form.data.attachments} onRemove={(i) => form.setData('attachments', form.data.attachments.filter((_, idx) => idx !== i))} />
-                    <AttachButton onAdd={(f) => form.setData('attachments', [...form.data.attachments, ...withinAttachLimit(f)])} className="btn-secondary px-3 py-1.5 text-xs" label="Attach files" />
-                    {form.errors.attachments && <p className="mt-1 text-xs text-red-600">{form.errors.attachments}</p>}
-                </div>
-
-                <div className="flex justify-end gap-2">
-                    <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
-                    <button type="submit" disabled={form.processing} className="btn-primary">{form.processing ? 'Sending…' : 'Send message'}</button>
-                </div>
-            </form>
+            </div>
         </Modal>
     );
 }

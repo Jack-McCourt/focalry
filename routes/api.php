@@ -58,6 +58,8 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
         ->name('photos.update');
     Route::post('photos/{photo}/cover', [PhotoController::class, 'setCover'])
         ->name('photos.cover');
+    Route::post('photos/{photo}/star', [PhotoController::class, 'star'])
+        ->name('photos.star');
     Route::delete('photos/{photo}', [PhotoController::class, 'destroy'])
         ->name('photos.destroy');
 });

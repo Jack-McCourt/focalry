@@ -4,6 +4,9 @@ import { PropsWithChildren, ReactNode, useEffect, useRef, useState } from 'react
 
 interface NotificationItem {
     id: string;
+    type: string;
+    title: string | null;
+    url: string | null;
     conversation_id: number | null;
     from_name: string | null;
     subject: string | null;
@@ -306,6 +309,9 @@ function NotificationBell() {
 
     const openNotification = (n: NotificationItem) => {
         setOpen(false);
+        // Where the notification points: an explicit url (e.g. a new lead's
+        // project/contact) wins, otherwise fall back to its conversation thread.
+        const target = n.url ?? (n.conversation_id ? route('messages.show', n.conversation_id) : null);
         router.post(
             route('notifications.read', n.id),
             {},
@@ -313,7 +319,7 @@ function NotificationBell() {
                 preserveScroll: true,
                 preserveState: true,
                 onFinish: () => {
-                    if (n.conversation_id) router.visit(route('messages.show', n.conversation_id));
+                    if (target) router.visit(target);
                 },
             },
         );
@@ -362,7 +368,7 @@ function NotificationBell() {
                                         {!n.read && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600" />}
                                         <div className="min-w-0">
                                             <p className="truncate text-sm font-medium text-neutral-900">
-                                                New reply from {n.from_name ?? 'a client'}
+                                                {n.title ?? `New reply from ${n.from_name ?? 'a client'}`}
                                             </p>
                                             {n.subject && <p className="truncate text-xs text-neutral-500">{n.subject}</p>}
                                             {n.preview && <p className="mt-0.5 line-clamp-2 text-xs text-neutral-400">{n.preview}</p>}
@@ -544,9 +550,12 @@ export default function AuthenticatedLayout({
             label: 'Client Galleries',
             icon: IconGalleries,
             home: route('collections.index'),
-            patterns: ['collections.*'],
+            patterns: ['collections.*', 'favourites.*'],
             feature: 'galleries',
-            nav: [{ label: 'Collections', href: route('collections.index'), pattern: 'collections.*' }],
+            nav: [
+                { label: 'Collections', href: route('collections.index'), pattern: 'collections.*' },
+                { label: 'Favourites', href: route('favourites.index'), pattern: 'favourites.*' },
+            ],
         },
         {
             key: 'website',

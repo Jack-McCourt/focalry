@@ -180,6 +180,98 @@ it('applies a task template relative to the event date', function () {
         ->toContain('2026-09-03', '2026-09-22');
 });
 
+it('skips a workflow when its conditions are not met', function () {
+    [$studio] = wfStudio();
+    $wedding = App\Models\ProjectType::create(['studio_id' => $studio->id, 'label' => 'Wedding', 'color' => '#000', 'position' => 0]);
+    $portrait = App\Models\ProjectType::create(['studio_id' => $studio->id, 'label' => 'Portrait', 'color' => '#111', 'position' => 1]);
+
+    $project = wfProject($studio);
+    $project->update(['type_id' => $portrait->id]);
+
+    $workflow = Workflow::create([
+        'studio_id' => $studio->id, 'name' => 'Weddings only', 'trigger' => 'invoice_paid', 'is_active' => true,
+        'conditions' => [['field' => 'type', 'operator' => 'equals', 'value' => (string) $wedding->id]],
+        'condition_match' => 'all',
+    ]);
+    $workflow->steps()->create(['position' => 0, 'action' => 'create_task', 'config' => ['title' => 'Kickoff'], 'delay_days' => 0]);
+
+    // Portrait project — condition fails, nothing runs.
+    app(WorkflowEngine::class)->dispatch('invoice_paid', $project);
+    expect(Task::where('project_id', $project->id)->count())->toBe(0);
+
+    // Switch the project to a wedding — now it runs.
+    $project->update(['type_id' => $wedding->id]);
+    app(WorkflowEngine::class)->dispatch('invoice_paid', $project);
+    expect(Task::where('project_id', $project->id)->count())->toBe(1);
+});
+
+it('matches conditions against custom fields', function () {
+    [$studio] = wfStudio();
+    $project = wfProject($studio);
+    $project->update(['custom_fields' => ['package' => 'Gold', 'guests' => 150]]);
+
+    $workflow = Workflow::create([
+        'studio_id' => $studio->id, 'name' => 'Big golds', 'trigger' => 'invoice_paid', 'is_active' => true,
+        'conditions' => [
+            ['field' => 'cf:package', 'operator' => 'equals', 'value' => 'Gold'],
+            ['field' => 'cf:guests', 'operator' => 'greater_than', 'value' => '100'],
+        ],
+        'condition_match' => 'all',
+    ]);
+    $workflow->steps()->create(['position' => 0, 'action' => 'create_task', 'config' => ['title' => 'VIP prep'], 'delay_days' => 0]);
+
+    app(WorkflowEngine::class)->dispatch('invoice_paid', $project);
+    expect(Task::where('project_id', $project->id)->count())->toBe(1);
+
+    // Drop below the guest threshold — the ALL match now fails.
+    $project->update(['custom_fields' => ['package' => 'Gold', 'guests' => 50]]);
+    app(WorkflowEngine::class)->dispatch('invoice_paid', $project);
+    expect(Task::where('project_id', $project->id)->count())->toBe(1);
+});
+
+it('runs when any condition matches under the "any" mode', function () {
+    [$studio] = wfStudio();
+    $project = wfProject($studio);
+    $project->update(['custom_fields' => ['vip' => true]]);
+
+    $workflow = Workflow::create([
+        'studio_id' => $studio->id, 'name' => 'Either', 'trigger' => 'invoice_paid', 'is_active' => true,
+        'conditions' => [
+            ['field' => 'cf:package', 'operator' => 'equals', 'value' => 'Gold'], // false
+            ['field' => 'cf:vip', 'operator' => 'is_set', 'value' => null],        // true
+        ],
+        'condition_match' => 'any',
+    ]);
+    $workflow->steps()->create(['position' => 0, 'action' => 'create_task', 'config' => ['title' => 'Reach out'], 'delay_days' => 0]);
+
+    app(WorkflowEngine::class)->dispatch('invoice_paid', $project);
+    expect(Task::where('project_id', $project->id)->count())->toBe(1);
+});
+
+it('matches a date field against a relative offset from today', function () {
+    [$studio] = wfStudio();
+    $contact = Contact::create(['studio_id' => $studio->id, 'first_name' => 'Mo', 'email' => 'mo@example.com']);
+
+    // Event is 10 days away.
+    $project = Project::create(['studio_id' => $studio->id, 'name' => 'Soon', 'contact_id' => $contact->id, 'event_date' => now()->addDays(10)->toDateString()]);
+
+    // Fires only when the event is within 2 weeks (event date is before "2 weeks from now").
+    $workflow = Workflow::create([
+        'studio_id' => $studio->id, 'name' => 'Final details', 'trigger' => 'invoice_paid', 'is_active' => true,
+        'conditions' => [['field' => 'event_date', 'operator' => 'less_than', 'value' => ['amount' => 2, 'unit' => 'week', 'anchor' => 'future']]],
+        'condition_match' => 'all',
+    ]);
+    $workflow->steps()->create(['position' => 0, 'action' => 'create_task', 'config' => ['title' => 'Confirm timeline'], 'delay_days' => 0]);
+
+    app(WorkflowEngine::class)->dispatch('invoice_paid', $project);
+    expect(Task::where('project_id', $project->id)->count())->toBe(1);
+
+    // Push the event 90 days out — now it's after the 2-week anchor, so nothing runs.
+    $project->update(['event_date' => now()->addDays(90)->toDateString()]);
+    app(WorkflowEngine::class)->dispatch('invoice_paid', $project);
+    expect(Task::where('project_id', $project->id)->count())->toBe(1);
+});
+
 it('seeds default questionnaire questions', function () {
     [$studio] = wfStudio();
     QuestionnaireTemplate::seedDefaults();
