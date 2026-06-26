@@ -30,6 +30,7 @@ export default function Availability({
     block_project_dates,
     project_dates,
     timezone,
+    timezones,
     calendar,
     zoom,
 }: PageProps<{
@@ -38,6 +39,7 @@ export default function Availability({
     block_project_dates: boolean;
     project_dates: string[];
     timezone: string;
+    timezones: string[];
     calendar: CalendarState;
     zoom: ZoomState;
 }>) {
@@ -45,14 +47,39 @@ export default function Availability({
         rules: Rule[];
         blocked_dates: string[];
         block_project_dates: boolean;
-    }>({ rules, blocked_dates, block_project_dates });
+        timezone: string;
+    }>({ rules, blocked_dates, block_project_dates, timezone });
 
-    const [newBlock, setNewBlock] = useState('');
+    const [blockFrom, setBlockFrom] = useState('');
+    const [blockTo, setBlockTo] = useState('');
+
+    // Every date from → to inclusive, as Y-m-d strings.
+    const datesInRange = (from: string, to: string): string[] => {
+        const out: string[] = [];
+        const start = new Date(from + 'T00:00:00');
+        const end = new Date((to || from) + 'T00:00:00');
+        if (end < start) return [];
+        for (let d = start; d <= end; d.setDate(d.getDate() + 1)) {
+            out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+        }
+        return out;
+    };
 
     const addBlock = () => {
-        if (!newBlock || data.blocked_dates.includes(newBlock)) { setNewBlock(''); return; }
-        setData('blocked_dates', [...data.blocked_dates, newBlock].sort());
-        setNewBlock('');
+        if (!blockFrom) return;
+        const range = datesInRange(blockFrom, blockTo || blockFrom);
+        if (range.length === 0) return;
+        const merged = Array.from(new Set([...data.blocked_dates, ...range])).sort();
+        setData('blocked_dates', merged);
+        // Persist immediately so the block takes effect without a separate save.
+        router.post(route('availability.block'), { dates: range }, { preserveScroll: true, preserveState: true });
+        setBlockFrom('');
+        setBlockTo('');
+    };
+
+    const removeBlock = (date: string) => {
+        setData('blocked_dates', data.blocked_dates.filter((x) => x !== date));
+        router.delete(route('availability.unblock'), { data: { date }, preserveScroll: true, preserveState: true });
     };
 
     const fmtDay = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
@@ -135,10 +162,24 @@ export default function Availability({
                 </div>
 
                 <form onSubmit={submit} className="max-w-2xl">
-                    <p className="mb-4 text-sm text-neutral-500">
+                    <p className="mb-3 text-sm text-neutral-500">
                         Set the hours you accept meetings each week. Open time slots are generated from these hours
-                        minus existing meetings. Times are in <span className="font-medium text-neutral-700">{timezone}</span>.
+                        minus existing meetings.
                     </p>
+
+                    <div className="mb-4">
+                        <label className="text-sm font-medium text-neutral-800">Timezone</label>
+                        <p className="mb-1.5 text-xs text-neutral-500">All availability hours and booking times are interpreted in this timezone.</p>
+                        <select
+                            value={data.timezone}
+                            onChange={(e) => setData('timezone', e.target.value)}
+                            className="block w-full max-w-xs rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900"
+                        >
+                            {timezones.map((tz) => (
+                                <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+                            ))}
+                        </select>
+                    </div>
 
                     <div className="divide-y divide-neutral-100 rounded-xl border border-neutral-200 bg-white">
                         {DAYS.map((label, dow) => {
@@ -180,17 +221,24 @@ export default function Availability({
                     {/* Time off / blocked dates */}
                     <div className="mt-6 rounded-xl border border-neutral-200 bg-white p-4">
                         <p className="text-sm font-medium text-neutral-900">Time off</p>
-                        <p className="mt-0.5 text-xs text-neutral-500">Block specific days so no one can book them.</p>
-                        <div className="mt-3 flex items-center gap-2">
-                            <input type="date" value={newBlock} onChange={(e) => setNewBlock(e.target.value)} className="rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900" />
-                            <button type="button" onClick={addBlock} className="btn-secondary px-3 py-1.5 text-xs">Block day</button>
+                        <p className="mt-0.5 text-xs text-neutral-500">Block a single day or a date range so no one can book them. Changes here save automatically.</p>
+                        <div className="mt-3 flex flex-wrap items-end gap-2">
+                            <label className="text-xs text-neutral-500">
+                                <span className="mb-1 block">From</span>
+                                <input type="date" value={blockFrom} onChange={(e) => setBlockFrom(e.target.value)} className="rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900" />
+                            </label>
+                            <label className="text-xs text-neutral-500">
+                                <span className="mb-1 block">To <span className="text-neutral-400">(optional)</span></span>
+                                <input type="date" value={blockTo} min={blockFrom || undefined} onChange={(e) => setBlockTo(e.target.value)} className="rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900" />
+                            </label>
+                            <button type="button" onClick={addBlock} disabled={!blockFrom} className="btn-secondary px-3 py-1.5 text-xs disabled:opacity-40">Block days</button>
                         </div>
                         {data.blocked_dates.length > 0 && (
                             <div className="mt-3 flex flex-wrap gap-1.5">
                                 {data.blocked_dates.map((d) => (
                                     <span key={d} className="inline-flex items-center gap-1 rounded-full bg-neutral-100 px-2 py-1 text-xs text-neutral-700">
                                         {fmtDay(d)}
-                                        <button type="button" onClick={() => setData('blocked_dates', data.blocked_dates.filter((x) => x !== d))} className="text-neutral-400 hover:text-red-600">✕</button>
+                                        <button type="button" onClick={() => removeBlock(d)} className="text-neutral-400 hover:text-red-600">✕</button>
                                     </span>
                                 ))}
                             </div>

@@ -18,18 +18,34 @@ function Section({ title, description, children }: { title: string; description:
     );
 }
 
+type LeadSettings = { enabled: boolean; value: number; unit: 'days' | 'weeks' | 'months' };
+
 export default function Settings({
     statuses,
     types,
     fields,
     calendar,
+    leadSettings,
 }: PageProps<{
     statuses: ProjectStatus[];
     types: ProjectType[];
     fields: ProjectFieldDefinition[];
     calendar: { connected: boolean; email: string | null };
+    leadSettings: LeadSettings;
 }>) {
     const [showAddField, setShowAddField] = useState(false);
+    const [leadEnabled, setLeadEnabled] = useState(leadSettings.enabled);
+    const [leadValue, setLeadValue] = useState(leadSettings.value);
+    const [leadUnit, setLeadUnit] = useState<LeadSettings['unit']>(leadSettings.unit);
+
+    const saveLeadSettings = (next: Partial<LeadSettings>) => {
+        const payload = { enabled: leadEnabled, value: leadValue, unit: leadUnit, ...next };
+        router.patch(route('projects.lead-settings'), {
+            enabled: payload.enabled ? 1 : 0,
+            value: payload.value,
+            unit: payload.unit,
+        }, opts);
+    };
 
     const fieldMove = (i: number, dir: -1 | 1) => {
         const next = [...fields];
@@ -128,6 +144,54 @@ export default function Settings({
                             </div>
                         ))}
                         <button type="button" onClick={() => setShowAddField(true)} className="btn-secondary mt-1">+ Add field</button>
+                    </div>
+                </Section>
+
+                <Section title="Auto-delete stale leads" description="Automatically move leads to the trash once they've sat in the “Lead” status for too long. Moving a project out of “Lead” resets the clock, so only untouched enquiries are removed.">
+                    <div className="space-y-4 rounded-xl border border-neutral-200 bg-white p-4">
+                        <label className="flex items-center gap-3 text-sm text-neutral-700">
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={leadEnabled}
+                                onClick={() => { const v = !leadEnabled; setLeadEnabled(v); saveLeadSettings({ enabled: v }); }}
+                                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${leadEnabled ? 'bg-neutral-900' : 'bg-neutral-200'}`}
+                            >
+                                <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${leadEnabled ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                            </button>
+                            <span className="font-medium">Automatically delete old leads</span>
+                        </label>
+
+                        {leadEnabled && (
+                            <div className="flex flex-wrap items-end gap-3 border-t border-neutral-100 pt-4">
+                                <div>
+                                    <span className="label">Delete after</span>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={999}
+                                        value={leadValue}
+                                        onChange={(e) => setLeadValue(Math.max(1, parseInt(e.target.value || '1', 10)))}
+                                        onBlur={() => saveLeadSettings({})}
+                                        className="input w-24"
+                                    />
+                                </div>
+                                <select
+                                    value={leadUnit}
+                                    onChange={(e) => { const u = e.target.value as LeadSettings['unit']; setLeadUnit(u); saveLeadSettings({ unit: u }); }}
+                                    className="input w-32"
+                                >
+                                    <option value="days">days</option>
+                                    <option value="weeks">weeks</option>
+                                    <option value="months">months</option>
+                                </select>
+                                <span className="pb-2 text-xs text-neutral-400">in the “Lead” status</span>
+                            </div>
+                        )}
+
+                        <p className="border-t border-neutral-100 pt-3 text-xs text-neutral-400">
+                            Deleted projects go to the <Link href={route('projects.trash')} className="font-medium text-neutral-600 underline hover:text-neutral-900">trash</Link> and are kept for 30 days before being permanently removed.
+                        </p>
                     </div>
                 </Section>
             </div>

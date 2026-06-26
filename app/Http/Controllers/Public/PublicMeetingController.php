@@ -43,7 +43,7 @@ class PublicMeetingController extends Controller
         $studio = $this->resolveStudio($slug);
         $meetingType = $this->resolveType($studio, $type);
 
-        $from = Carbon::now(config('app.timezone'));
+        $from = Carbon::now($studio->effectiveTimezone());
         $to = $from->copy()->addDays(self::WINDOW_DAYS);
 
         return Inertia::render('Public/Meeting/Book', [
@@ -66,7 +66,7 @@ class PublicMeetingController extends Controller
             'notes' => 'nullable|string|max:5000',
         ]);
 
-        $starts = Carbon::parse($data['starts_at'])->setTimezone(config('app.timezone'));
+        $starts = Carbon::parse($data['starts_at'])->setTimezone($studio->effectiveTimezone());
 
         // Re-check availability server-side so a stale or tampered slot can't
         // double-book. The submitted start must still be an open slot.

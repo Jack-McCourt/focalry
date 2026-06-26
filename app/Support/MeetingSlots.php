@@ -20,13 +20,15 @@ class MeetingSlots
      * Slots respect: the studio's weekly availability windows, the meeting
      * duration, buffer padding around existing meetings, the minimum lead
      * time, and the per-day cap. Returns a map of "Y-m-d" => list of ISO8601
-     * start times (in the app timezone).
+     * start times (carrying the studio timezone's offset).
      *
      * @return array<string, array<int, string>>
      */
     public static function forMeetingType(MeetingType $type, CarbonInterface $from, CarbonInterface $to): array
     {
-        $tz = config('app.timezone');
+        // Generate slots in the studio's own timezone so "9am" is 9am local —
+        // the ISO strings carry the correct offset for the browser to display.
+        $tz = Studio::find($type->studio_id)?->effectiveTimezone() ?? config('app.timezone');
         $now = Carbon::now($tz);
         $earliest = $now->copy()->addHours($type->min_lead_hours);
 
@@ -55,8 +57,8 @@ class MeetingSlots
         $buffer = max(0, $type->buffer_minutes);
 
         $result = [];
-        $cursor = $from->copy($tz)->startOfDay();
-        $end = $to->copy($tz)->endOfDay();
+        $cursor = $from->copy()->setTimezone($tz)->startOfDay();
+        $end = $to->copy()->setTimezone($tz)->endOfDay();
 
         while ($cursor->lte($end)) {
             $dow = (int) $cursor->dayOfWeek; // 0 = Sunday

@@ -23,7 +23,7 @@ afterEach(function () {
 /** Create a studio + owner and bind it as the current tenant. */
 function meetingStudio(): array
 {
-    $studio = Studio::factory()->onPaidPlan()->create(['slug' => 'lens-studio']);
+    $studio = Studio::factory()->onPaidPlan()->create(['slug' => 'lens-studio', 'timezone' => 'UTC']);
     $user = User::factory()->for($studio)->create();
     app()->instance('current.studio.id', $studio->id);
 
@@ -74,6 +74,31 @@ it('excludes slots that conflict with an existing meeting', function () {
     $slots = MeetingSlots::forMeetingType($type, Carbon::now(), Carbon::now()->endOfDay());
 
     expect($slots['2026-07-06'] ?? [])->toEqual(['2026-07-06T09:00:00+00:00', '2026-07-06T11:00:00+00:00']);
+});
+
+it('generates slot times in the studio timezone', function () {
+    [$studio] = meetingStudio();
+    $studio->update(['timezone' => 'Europe/London']); // BST (+01:00) in July
+    weekdayAvailability($studio->id); // Monday 09:00–12:00 local
+    $type = makeMeetingType($studio->id);
+
+    $slots = MeetingSlots::forMeetingType($type, Carbon::now(), Carbon::now()->endOfDay());
+
+    // 9am local must read as 9am with the BST offset, not 9am UTC.
+    expect($slots['2026-07-06'][0] ?? null)->toBe('2026-07-06T09:00:00+01:00');
+});
+
+it('saves the studio timezone on availability update', function () {
+    [$studio, $user] = meetingStudio();
+
+    $this->actingAs($user)->patch(route('availability.update'), [
+        'rules' => [],
+        'blocked_dates' => [],
+        'block_project_dates' => false,
+        'timezone' => 'Europe/London',
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect($studio->refresh()->timezone)->toBe('Europe/London');
 });
 
 it('honours the minimum lead time', function () {
@@ -212,6 +237,31 @@ it('saves blocked dates and the project-block setting', function () {
 
     expect(AvailabilityBlock::withoutGlobalScopes()->where('studio_id', $studio->id)->count())->toBe(2)
         ->and($studio->refresh()->block_project_dates)->toBeTrue();
+});
+
+it('blocks a date range immediately via the block endpoint', function () {
+    [$studio, $user] = meetingStudio();
+
+    $this->actingAs($user)->post(route('availability.block'), [
+        'dates' => ['2026-07-02', '2026-07-03', '2026-07-04'],
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    expect(AvailabilityBlock::withoutGlobalScopes()->where('studio_id', $studio->id)->count())->toBe(3);
+
+    // Re-blocking overlapping dates must not create duplicates.
+    $this->actingAs($user)->post(route('availability.block'), ['dates' => ['2026-07-04', '2026-07-05']])
+        ->assertRedirect();
+    expect(AvailabilityBlock::withoutGlobalScopes()->where('studio_id', $studio->id)->count())->toBe(4);
+});
+
+it('removes a blocked day via the unblock endpoint', function () {
+    [$studio, $user] = meetingStudio();
+    AvailabilityBlock::create(['studio_id' => $studio->id, 'date' => '2026-07-02']);
+
+    $this->actingAs($user)->delete(route('availability.unblock'), ['date' => '2026-07-02'])
+        ->assertRedirect()->assertSessionHasNoErrors();
+
+    expect(AvailabilityBlock::withoutGlobalScopes()->where('studio_id', $studio->id)->count())->toBe(0);
 });
 
 it('replaces the weekly availability on update', function () {

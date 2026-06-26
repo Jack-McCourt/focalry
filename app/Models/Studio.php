@@ -28,9 +28,11 @@ class Studio extends Model
         'branding',
         'custom_domain',
         'default_currency',
+        'timezone',
         'invoice_settings',
         'store_settings',
         'gallery_defaults',
+        'lead_settings',
         'email_signature',
         'google_calendar',
         'google_calendar_email',
@@ -56,6 +58,7 @@ class Studio extends Model
             'invoice_settings' => 'array',
             'store_settings' => 'array',
             'gallery_defaults' => 'array',
+            'lead_settings' => 'array',
             'google_calendar' => 'array',
             'zoom' => 'array',
             'block_project_dates' => 'boolean',
@@ -67,6 +70,12 @@ class Studio extends Model
     public function isSuspended(): bool
     {
         return $this->suspended_at !== null;
+    }
+
+    /** IANA timezone the studio schedules in (falls back to the app default). */
+    public function effectiveTimezone(): string
+    {
+        return $this->timezone ?: config('app.timezone');
     }
 
     public function googleCalendarConnected(): bool
@@ -108,6 +117,25 @@ class Studio extends Model
         return [
             'hold_for_review' => (bool) ($s['hold_for_review'] ?? false),
             'review_window_hours' => (int) ($s['review_window_hours'] ?? 24),
+        ];
+    }
+
+    /**
+     * Lead auto-deletion config with sensible fallbacks. When enabled, leads
+     * (projects in the "Lead" status) older than value×unit are pruned by the
+     * `leads:prune` scheduled command.
+     *
+     * @return array{enabled: bool, value: int, unit: 'days'|'weeks'|'months'}
+     */
+    public function leadSettings(): array
+    {
+        $s = $this->lead_settings ?? [];
+        $unit = $s['unit'] ?? 'months';
+
+        return [
+            'enabled' => (bool) ($s['enabled'] ?? false),
+            'value' => max(1, (int) ($s['value'] ?? 6)),
+            'unit' => in_array($unit, ['days', 'weeks', 'months'], true) ? $unit : 'months',
         ];
     }
 

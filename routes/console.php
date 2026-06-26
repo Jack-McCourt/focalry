@@ -19,3 +19,5 @@ Schedule::command('meetings:send-reminders')->hourly();
 Schedule::command('store:release-orders')->everyFifteenMinutes();
 // Run delayed workflow steps whose scheduled time has arrived.
 Schedule::command('workflows:run')->everyFifteenMinutes();
+// Auto-delete stale leads (opt-in per studio) + purge trashed projects past retention.
+Schedule::command('leads:prune')->dailyAt('03:00');

@@ -133,6 +133,16 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
     // Settings route before the resource so it isn't matched as projects/{project}.
     Route::get('projects/settings', [ProjectSettingsController::class, 'edit'])->name('projects.settings')
         ->middleware('plan:studio_manager');
+    Route::patch('projects/lead-settings', [ProjectSettingsController::class, 'updateLeadSettings'])->name('projects.lead-settings')
+        ->middleware('plan:studio_manager');
+    // Trash (soft-deleted projects) — declared before the resource so "trash"
+    // isn't captured as a {project} id.
+    Route::get('projects/trash', [ProjectController::class, 'trash'])->name('projects.trash')
+        ->middleware('plan:studio_manager');
+    Route::post('projects/{id}/restore', [ProjectController::class, 'restore'])->name('projects.restore')
+        ->middleware('plan:studio_manager');
+    Route::delete('projects/{id}/force', [ProjectController::class, 'forceDestroy'])->name('projects.force-destroy')
+        ->middleware('plan:studio_manager');
     Route::resource('projects', ProjectController::class)->only(['index', 'show', 'store', 'update', 'destroy'])
         ->middleware('plan:studio_manager');
     Route::post('projects/{project}/move', [ProjectController::class, 'move'])->name('projects.move');
@@ -205,6 +215,9 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
     Route::get('availability', [AvailabilityController::class, 'edit'])->name('availability.edit')
         ->middleware('plan:studio_manager');
     Route::patch('availability', [AvailabilityController::class, 'update'])->name('availability.update');
+    // Time off blocks save immediately (independent of the weekly-hours form).
+    Route::post('availability/block', [AvailabilityController::class, 'block'])->name('availability.block');
+    Route::delete('availability/block', [AvailabilityController::class, 'unblock'])->name('availability.unblock');
 
     // Bookings — sellable packages (paid shoots → create a Project)
     Route::get('packages', [PackageController::class, 'index'])->name('packages.index')

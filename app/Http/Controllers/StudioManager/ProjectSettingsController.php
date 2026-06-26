@@ -29,7 +29,27 @@ class ProjectSettingsController extends Controller
                 'connected' => (bool) $studio?->googleCalendarConnected(),
                 'email' => $studio?->google_calendar_email,
             ],
+            'leadSettings' => $studio?->leadSettings(),
         ]);
+    }
+
+    /** Update the auto-delete-stale-leads configuration. */
+    public function updateLeadSettings(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'enabled' => 'required|boolean',
+            'value' => 'required_if:enabled,true|nullable|integer|min:1|max:999',
+            'unit' => 'required_if:enabled,true|nullable|in:days,weeks,months',
+        ]);
+
+        $studio = Studio::findOrFail(app('current.studio.id'));
+        $studio->update(['lead_settings' => [
+            'enabled' => (bool) $data['enabled'],
+            'value' => (int) ($data['value'] ?? 6),
+            'unit' => $data['unit'] ?? 'months',
+        ]]);
+
+        return back()->with('success', 'Lead settings saved.');
     }
 
     // ── Statuses ──────────────────────────────────────────────────────────────

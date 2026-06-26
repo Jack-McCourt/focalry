@@ -7,16 +7,18 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Project extends Model
 {
-    use BelongsToStudio, HasFactory;
+    use BelongsToStudio, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'studio_id',
         'name',
         'event_date',
         'status_id',
+        'status_changed_at',
         'type_id',
         'contact_id',
         'collection_id',
@@ -29,9 +31,27 @@ class Project extends Model
     {
         return [
             'event_date' => 'date',
+            'status_changed_at' => 'datetime',
             'custom_fields' => 'array',
             'position' => 'integer',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Stamp when a project enters its (first) status, and re-stamp whenever it
+        // moves columns — this is what the lead-pruning window measures against.
+        static::creating(function (Project $project) {
+            if ($project->status_id && ! $project->status_changed_at) {
+                $project->status_changed_at = now();
+            }
+        });
+
+        static::updating(function (Project $project) {
+            if ($project->isDirty('status_id')) {
+                $project->status_changed_at = now();
+            }
+        });
     }
 
     public function status(): BelongsTo

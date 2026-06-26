@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Models\Studio;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -33,7 +34,8 @@ class AvailabilityController extends Controller
             'project_dates' => Project::whereNotNull('event_date')
                 ->where('event_date', '>=', now()->startOfDay())
                 ->orderBy('event_date')->pluck('event_date')->map(fn ($d) => $d->format('Y-m-d'))->unique()->values(),
-            'timezone' => config('app.timezone'),
+            'timezone' => $studio?->effectiveTimezone() ?? config('app.timezone'),
+            'timezones' => \DateTimeZone::listIdentifiers(),
             'calendar' => [
                 'connected' => (bool) $studio?->googleCalendarConnected(),
                 'email' => $studio?->google_calendar_email,
@@ -56,6 +58,7 @@ class AvailabilityController extends Controller
             'blocked_dates' => 'present|array',
             'blocked_dates.*' => 'date_format:Y-m-d',
             'block_project_dates' => 'boolean',
+            'timezone' => ['sometimes', 'required', 'string', Rule::in(\DateTimeZone::listIdentifiers())],
         ]);
 
         $studioId = app('current.studio.id');
@@ -81,8 +84,48 @@ class AvailabilityController extends Controller
             AvailabilityBlock::create(['studio_id' => $studioId, 'date' => $date]);
         }
 
-        Studio::whereKey($studioId)->update(['block_project_dates' => $request->boolean('block_project_dates')]);
+        $studioUpdate = ['block_project_dates' => $request->boolean('block_project_dates')];
+        if (isset($data['timezone'])) {
+            $studioUpdate['timezone'] = $data['timezone'];
+        }
+        Studio::whereKey($studioId)->update($studioUpdate);
 
         return back()->with('success', 'Availability updated.');
+    }
+
+    /**
+     * Block one or more days immediately, independent of the weekly-hours form
+     * so "block this day" takes effect without a separate save.
+     */
+    public function block(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'dates' => 'required|array|min:1',
+            'dates.*' => 'date_format:Y-m-d',
+        ]);
+
+        $studioId = app('current.studio.id');
+
+        $existing = AvailabilityBlock::where('studio_id', $studioId)
+            ->pluck('date')
+            ->map(fn ($d) => $d->format('Y-m-d'))
+            ->all();
+
+        foreach (array_diff(array_unique($data['dates']), $existing) as $date) {
+            AvailabilityBlock::create(['studio_id' => $studioId, 'date' => $date]);
+        }
+
+        return back()->with('success', 'Time off blocked.');
+    }
+
+    public function unblock(Request $request): RedirectResponse
+    {
+        $data = $request->validate(['date' => 'required|date_format:Y-m-d']);
+
+        AvailabilityBlock::where('studio_id', app('current.studio.id'))
+            ->whereDate('date', $data['date'])
+            ->delete();
+
+        return back()->with('success', 'Time off removed.');
     }
 }

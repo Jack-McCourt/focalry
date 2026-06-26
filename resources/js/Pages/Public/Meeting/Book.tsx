@@ -34,7 +34,8 @@ export default function Book({
     slots: Record<string, string[]>;
 }) {
     const dates = useMemo(() => Object.keys(slots).sort(), [slots]);
-    const [selectedDate, setSelectedDate] = useState<string | null>(dates[0] ?? null);
+    // No date is preselected — times only appear once the visitor picks a day.
+    const [selectedDate, setSelectedDate] = useState<string | null>(null);
     const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
 
     const { data, setData, post, processing, errors } = useForm({
@@ -146,6 +147,9 @@ export default function Book({
                         </div>
 
                         {/* Step 2: time */}
+                        {!selectedDate && (
+                            <p className="mt-5 text-center text-xs text-neutral-400">Select a date to see available times.</p>
+                        )}
                         {selectedDate && (
                             <>
                                 <p className="mb-2 mt-5 text-xs font-medium uppercase tracking-wide text-neutral-400">Pick a time</p>

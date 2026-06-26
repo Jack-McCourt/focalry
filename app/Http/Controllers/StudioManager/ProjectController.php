@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\StudioManager;
 
+use App\Console\Commands\PruneStaleLeads;
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
 use App\Models\Invoice;
@@ -173,7 +174,47 @@ class ProjectController extends Controller
     {
         $project->delete();
 
-        return back()->with('success', 'Project deleted.');
+        return back()->with('success', 'Project moved to trash.');
+    }
+
+    /** Soft-deleted projects, kept for a retention window before permanent removal. */
+    public function trash(): Response
+    {
+        $projects = Project::onlyTrashed()
+            ->with(['status:id,label,color', 'contact:id,first_name,last_name,company'])
+            ->latest('deleted_at')
+            ->get()
+            ->map(fn (Project $p) => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'event_date' => $p->event_date?->toDateString(),
+                'status' => $p->status ? ['label' => $p->status->label, 'color' => $p->status->color] : null,
+                'contact' => $p->contact ? ['id' => $p->contact->id, 'name' => $p->contact->name] : null,
+                'deleted_at' => $p->deleted_at?->toIso8601String(),
+                'purges_at' => $p->deleted_at?->copy()->addDays(PruneStaleLeads::TRASH_RETENTION_DAYS)->toIso8601String(),
+            ]);
+
+        return Inertia::render('Projects/Trash', [
+            'projects' => $projects,
+            'retention_days' => PruneStaleLeads::TRASH_RETENTION_DAYS,
+        ]);
+    }
+
+    /** Restore a soft-deleted project back into the pipeline. */
+    public function restore(int $id): RedirectResponse
+    {
+        // onlyTrashed() keeps the studio global scope, so cross-tenant ids 404.
+        Project::onlyTrashed()->findOrFail($id)->restore();
+
+        return back()->with('success', 'Project restored.');
+    }
+
+    /** Permanently delete a trashed project now, before the retention window ends. */
+    public function forceDestroy(int $id): RedirectResponse
+    {
+        Project::onlyTrashed()->findOrFail($id)->forceDelete();
+
+        return back()->with('success', 'Project permanently deleted.');
     }
 
     /**
@@ -257,15 +298,21 @@ class ProjectController extends Controller
             'ordered_ids.*' => 'integer',
         ]);
 
-        $statusChanged = $project->status_id !== (int) $validated['status_id'];
+        $targetStatus = (int) $validated['status_id'];
+        $statusChanged = $project->status_id !== $targetStatus;
 
-        DB::transaction(function () use ($validated) {
+        // Current status per card, so we only reset the "time in status" clock for
+        // cards that actually changed column (not ones merely reordered within it).
+        $currentStatus = Project::whereIn('id', $validated['ordered_ids'])->pluck('status_id', 'id');
+
+        DB::transaction(function () use ($validated, $targetStatus, $currentStatus) {
             foreach ($validated['ordered_ids'] as $i => $id) {
+                $attrs = ['status_id' => $targetStatus, 'position' => $i];
+                if ((int) ($currentStatus[$id] ?? 0) !== $targetStatus) {
+                    $attrs['status_changed_at'] = now();
+                }
                 // whereKey is studio-scoped via the global scope, so cross-tenant ids are ignored.
-                Project::whereKey($id)->update([
-                    'status_id' => $validated['status_id'],
-                    'position' => $i,
-                ]);
+                Project::whereKey($id)->update($attrs);
             }
         });
 
