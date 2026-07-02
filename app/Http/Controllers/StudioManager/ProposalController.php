@@ -3,14 +3,18 @@
 namespace App\Http\Controllers\StudioManager;
 
 use App\Http\Controllers\Controller;
+use App\Mail\ClientMessage;
+use App\Models\ClientEmail;
 use App\Models\Contract;
 use App\Models\Invoice;
 use App\Models\Package;
 use App\Models\Project;
 use App\Models\Proposal;
+use App\Support\ClientEmailContent;
 use App\Support\Money;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -114,9 +118,18 @@ class ProposalController extends Controller
         ]);
     }
 
-    public function send(Proposal $proposal): RedirectResponse
+    public function send(Request $request, Proposal $proposal): RedirectResponse
     {
-        abort_if(in_array($proposal->status, ['accepted', 'declined'], true), 422);
+        if (in_array($proposal->status, ['accepted', 'declined'], true)) {
+            return back()->with('error', 'This proposal has already been '.$proposal->status.'.');
+        }
+
+        $proposal->loadMissing(['contact', 'studio', 'project.contact']);
+
+        $to = ClientEmailContent::recipientEmail($proposal);
+        if (! $to) {
+            return back()->with('error', 'Add an email address to this client before sending the proposal.');
+        }
 
         // Move the bundled contract / invoice into a sendable state too.
         if ($proposal->contract && $proposal->contract->status === 'draft') {
@@ -126,9 +139,40 @@ class ProposalController extends Controller
             $proposal->invoice->update(['status' => 'sent', 'sent_at' => now()]);
         }
 
+        $studioName = $proposal->studio?->name ?: config('app.name');
+        $log = new ClientEmail([
+            'studio_id' => $proposal->studio_id,
+            'contact_id' => ClientEmailContent::contactId($proposal),
+            'emailable_type' => $proposal::class,
+            'emailable_id' => $proposal->getKey(),
+            'sent_by' => $request->user()?->id,
+            'to_email' => $to,
+            'subject' => ClientEmailContent::subject($proposal),
+            'body' => ClientEmailContent::body($proposal),
+            'details' => [],
+        ]);
+
+        try {
+            Mail::to($to)->send(new ClientMessage(
+                studioName: $studioName,
+                subjectLine: ClientEmailContent::subject($proposal),
+                bodyText: ClientEmailContent::body($proposal),
+                ctaLabel: ClientEmailContent::ctaLabel($proposal),
+                ctaUrl: ClientEmailContent::ctaUrl($proposal),
+                details: [],
+                replyToEmail: $request->user()?->email,
+            ));
+        } catch (\Throwable $e) {
+            report($e);
+            $log->fill(['status' => 'failed', 'error' => $e->getMessage()])->save();
+
+            return back()->with('error', 'The proposal could not be emailed: '.$e->getMessage());
+        }
+
+        $log->fill(['status' => 'sent', 'sent_at' => now()])->save();
         $proposal->update(['status' => 'sent', 'sent_at' => $proposal->sent_at ?? now()]);
 
-        return back()->with('success', 'Proposal is ready. Share the link with your client.');
+        return back()->with('success', 'Proposal emailed to '.$to.'.');
     }
 
     public function destroy(Proposal $proposal): RedirectResponse

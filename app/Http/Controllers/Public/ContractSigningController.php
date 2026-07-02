@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Public;
 use App\Http\Controllers\Controller;
 use App\Models\Contract;
 use App\Services\WorkflowEngine;
+use App\Support\StudioNotifications;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -116,6 +117,15 @@ class ContractSigningController extends Controller
         if ($becameSigned && $contract->project) {
             $engine->dispatch('contract_signed', $contract->project);
         }
+
+        $signerName = $contract->signatureFor('client')?->signer_name ?? 'A client';
+        StudioNotifications::send(
+            $contract->studio_id,
+            'contract_signed',
+            'Contract signed',
+            "{$signerName} signed \"{$contract->title}\".",
+            route('contracts.show', $contract->id),
+        );
 
         return redirect()
             ->route('contracts.public.show', $contract->public_id)

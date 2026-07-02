@@ -244,12 +244,18 @@ export interface SiteTheme {
     heading_font?: string;
     /** Font registry key for body text. Falls back to `font`. */
     body_font?: string;
+    /** Font weight override for headings (100–900). Empty = the font's default. */
+    heading_weight?: number;
+    /** Font weight override for body text (100–900). Empty = the font's default. */
+    body_weight?: number;
     /** Font registry key for the logo + menu. Empty = inherit the body font. */
     logo_font?: string;
     /** Hex colour for the logo/site name. Empty = default (near-black). */
     logo_color?: string;
     /** Hex colour for the navigation menu links. Empty = default. */
     nav_color?: string;
+    /** Hex colour for general body text across the site. Empty = default (near-black). */
+    text_color?: string;
     /** Header nav text size: 'sm' (default) | 'base' | 'lg'. */
     nav_size?: string;
     /** Logo/wordmark text size: 'base' (default) | 'lg' | 'xl' | '2xl'. */
@@ -262,6 +268,7 @@ export interface SiteTheme {
 
 export type SiteBlockType =
     | 'hero'
+    | 'slider'
     | 'about'
     | 'services'
     | 'gallery'
@@ -269,6 +276,7 @@ export type SiteBlockType =
     | 'contact'
     | 'text'
     | 'image'
+    | 'card'
     | 'grid'
     | 'packages'
     | 'reviews'
@@ -284,11 +292,22 @@ export type SiteBlockType =
     | 'map'
     | 'footer';
 
+export type BlockPadScale = 'none' | 'sm' | 'md' | 'lg' | 'xl';
+
 export interface BlockSettings {
     background?: string;
     text_color?: string;
     text_size?: 'sm' | 'base' | 'lg' | 'xl';
-    padding?: 'none' | 'sm' | 'md' | 'lg' | 'xl';
+    /** Legacy uniform top & bottom padding. Per-side fields override it. */
+    padding?: BlockPadScale;
+    pad_top?: BlockPadScale;
+    pad_bottom?: BlockPadScale;
+    pad_left?: BlockPadScale;
+    pad_right?: BlockPadScale;
+    /** Container max-width override; 'full' removes the constraint. */
+    width?: 'sm' | 'md' | 'lg' | 'full';
+    /** Extra CSS class(es) added to the block's frame for custom styling. */
+    class_name?: string;
 }
 
 export interface SiteNavItem {
@@ -330,6 +349,8 @@ export interface SiteBlock<T = Record<string, unknown>> {
     type: SiteBlockType;
     data: T;
     settings?: BlockSettings;
+    /** Hidden blocks are kept but not rendered on the live site. */
+    hidden?: boolean;
     /** Nested blocks per column — used by the `grid` container block. */
     children?: SiteBlock[][];
 }
@@ -349,6 +370,8 @@ export interface SitePageData {
     category_ids?: number[];
     hidden_category_ids?: number[];
     cover_image?: string | null;
+    cover_focal?: { x: number; y: number } | null;
+    header?: Record<string, unknown> | null;
     blocks: SiteBlock[];
     seo_title?: string | null;
     seo_description?: string | null;
@@ -371,6 +394,7 @@ export interface SiteData {
     footer_nav: SiteNavItem[];
     head_code: string | null;
     body_code: string | null;
+    custom_css: string | null;
     cookie_consent: boolean;
     cookie_message: string | null;
     cookie_policy_url: string | null;

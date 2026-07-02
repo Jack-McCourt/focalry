@@ -36,10 +36,6 @@ class AvailabilityController extends Controller
                 ->orderBy('event_date')->pluck('event_date')->map(fn ($d) => $d->format('Y-m-d'))->unique()->values(),
             'timezone' => $studio?->effectiveTimezone() ?? config('app.timezone'),
             'timezones' => \DateTimeZone::listIdentifiers(),
-            'calendar' => [
-                'connected' => (bool) $studio?->googleCalendarConnected(),
-                'email' => $studio?->google_calendar_email,
-            ],
             'zoom' => [
                 'connected' => (bool) $studio?->zoomConnected(),
                 'email' => $studio?->zoom_email,

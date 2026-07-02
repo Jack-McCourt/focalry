@@ -4,6 +4,8 @@ namespace App\Console\Commands;
 
 use App\Mail\PaymentReminder;
 use App\Models\Invoice;
+use App\Support\Money;
+use App\Support\StudioNotifications;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -62,6 +64,17 @@ class SendPaymentReminders extends Command
                         $alreadySent[] = $key;
                         $changed = true;
                         $sentCount++;
+
+                        // Flag the studio when the instalment is genuinely overdue.
+                        if ($target['due_date']->lt($today)) {
+                            StudioNotifications::send(
+                                $invoice->studio_id,
+                                'payment_overdue',
+                                'Payment overdue',
+                                ($invoice->contact?->name ?? 'A client').' is overdue on invoice '.$invoice->number.' ('.Money::format((int) $target['amount_cents'], $invoice->currency).').',
+                                route('invoices.show', $invoice->id),
+                            );
+                        }
                     } catch (\Throwable $e) {
                         Log::error("Payment reminder failed for invoice {$invoice->id}: {$e->getMessage()}");
                     }

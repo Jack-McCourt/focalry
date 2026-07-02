@@ -134,12 +134,16 @@ function BlockThumb({ type }: { type: SiteBlockType }) {
     switch (type) {
         case 'hero':
             return <Frame className="items-center justify-center gap-1.5 bg-neutral-700 ring-neutral-700"><span className="h-2 w-20 rounded-full bg-white/90" /><span className="h-1.5 w-14 rounded-full bg-white/50" /><span className="mt-1 h-3 w-12 rounded-full bg-white/80" /></Frame>;
+        case 'slider':
+            return <Frame className="relative items-center justify-center gap-1.5 bg-neutral-700 ring-neutral-700"><span className="h-2 w-16 rounded-full bg-white/90" /><span className="h-1.5 w-12 rounded-full bg-white/50" /><span className="absolute left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white/40" /><span className="absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white/40" /><span className="absolute inset-x-0 bottom-1.5 flex justify-center gap-1"><span className="h-1 w-1 rounded-full bg-white/90" /><span className="h-1 w-1 rounded-full bg-white/50" /><span className="h-1 w-1 rounded-full bg-white/50" /></span></Frame>;
         case 'about':
             return <Frame className="flex-row items-center gap-2 p-2"><span className={`h-full w-1/2 ${box}`} /><span className="flex w-1/2 flex-col gap-1">{bar('w-full')}{bar('w-5/6')}{bar('w-2/3')}</span></Frame>;
         case 'services':
             return <Frame className="flex-row items-stretch gap-1.5 p-2">{[0, 1, 2].map((i) => <span key={i} className={`flex-1 ${box}`} />)}</Frame>;
         case 'gallery':
             return <Frame className="p-2"><span className="grid h-full grid-cols-3 gap-1">{Array.from({ length: 6 }).map((_, i) => <span key={i} className={box} />)}</span></Frame>;
+        case 'card':
+            return <Frame className="p-2"><span className={`h-1/2 w-full ${box}`} /><span className="mt-1.5 flex flex-col gap-1"><span className="h-2 w-10 rounded-full bg-neutral-400" />{bar('w-full', 'h-1')}{bar('w-5/6', 'h-1')}</span></Frame>;
         case 'blog':
             return <Frame className="flex-row gap-1.5 p-2">{[0, 1, 2].map((i) => <span key={i} className="flex flex-1 flex-col gap-1"><span className={`h-8 ${box}`} />{bar('w-full', 'h-1')}</span>)}</Frame>;
         case 'packages':

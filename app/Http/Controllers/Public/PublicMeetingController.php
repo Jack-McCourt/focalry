@@ -9,6 +9,7 @@ use App\Models\MeetingType;
 use App\Models\Studio;
 use App\Services\MeetingScheduler;
 use App\Support\MeetingSlots;
+use App\Support\StudioNotifications;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -118,6 +119,15 @@ class PublicMeetingController extends Controller
         if ($meeting->status === 'confirmed') {
             app(MeetingScheduler::class)->sync($meeting);
         }
+
+        $when = $starts->format('D j M, g:ia');
+        StudioNotifications::send(
+            $studio->id,
+            'meeting_booked',
+            $meeting->status === 'pending' ? 'Meeting request' : 'Meeting booked',
+            "{$data['client_name']} booked {$meetingType->name} for {$when}.",
+            route('meetings.index'),
+        );
 
         return redirect()->route('meetings.public.confirmation', ['meeting' => $meeting->public_id]);
     }

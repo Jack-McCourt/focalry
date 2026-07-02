@@ -2,6 +2,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
 import { Head } from '@inertiajs/react';
 import DeleteUserForm from './Partials/DeleteUserForm';
+import NotificationPreferencesForm, { NotificationTypePref } from './Partials/NotificationPreferencesForm';
 import StripeConnectCard from './Partials/StripeConnectCard';
 import StudioSettingsForm, { StudioSettings } from './Partials/StudioSettingsForm';
 import TwoFactorAuthenticationForm, { TwoFactorState } from './Partials/TwoFactorAuthenticationForm';
@@ -14,7 +15,15 @@ export default function Edit({
     studio,
     stripe_key,
     twoFactor,
-}: PageProps<{ mustVerifyEmail: boolean; status?: string; studio: StudioSettings | null; stripe_key: string; twoFactor: TwoFactorState }>) {
+    notificationTypes,
+}: PageProps<{
+    mustVerifyEmail: boolean;
+    status?: string;
+    studio: StudioSettings | null;
+    stripe_key: string;
+    twoFactor: TwoFactorState;
+    notificationTypes: NotificationTypePref[];
+}>) {
     return (
         <AuthenticatedLayout
             header={
@@ -46,6 +55,10 @@ export default function Edit({
                             <StripeConnectCard status={studio.stripe_connect_status} stripeKey={stripe_key} className="max-w-xl" />
                         </div>
                     )}
+
+                    <div className="bg-white p-4 shadow sm:rounded-lg sm:p-8">
+                        <NotificationPreferencesForm types={notificationTypes} className="max-w-xl" />
+                    </div>
 
                     <div className="bg-white p-4 shadow sm:rounded-lg sm:p-8">
                         <UpdatePasswordForm className="max-w-xl" />

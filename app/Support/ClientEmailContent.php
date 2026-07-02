@@ -6,6 +6,7 @@ use App\Models\Collection;
 use App\Models\Contact;
 use App\Models\Contract;
 use App\Models\Invoice;
+use App\Models\Proposal;
 use App\Models\Questionnaire;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
@@ -23,6 +24,7 @@ class ClientEmailContent
         Contract::class => 'contract',
         Collection::class => 'collection',
         Questionnaire::class => 'questionnaire',
+        Proposal::class => 'proposal',
     ];
 
     public static function type(Model $entity): string
@@ -60,7 +62,7 @@ class ClientEmailContent
      */
     public static function resolveContact(Model $entity): ?Contact
     {
-        if ($entity instanceof Contract || $entity instanceof Questionnaire) {
+        if ($entity instanceof Contract || $entity instanceof Questionnaire || $entity instanceof Proposal) {
             return $entity->project?->contact ?? $entity->contact;
         }
 
@@ -98,6 +100,7 @@ class ClientEmailContent
             $entity instanceof Contract => "Please review & sign: {$entity->title}",
             $entity instanceof Collection => "Your gallery is ready: {$entity->title}",
             $entity instanceof Questionnaire => "Please complete: {$entity->title}",
+            $entity instanceof Proposal => "Your proposal from {$studio}",
             default => $studio,
         };
     }
@@ -112,6 +115,7 @@ class ClientEmailContent
             $entity instanceof Contract => "Hi {$name},\n\nYour contract is ready to review and sign. Please use the button below to read through it and add your signature.\n\nIf you have any questions, just reply to this email.\n\nThank you,\n{$studio}",
             $entity instanceof Collection => "Hi {$name},\n\nYour photo gallery \"{$entity->title}\" is ready! Click the button below to view your photos.\n\nWe hope you love them.\n\n{$studio}",
             $entity instanceof Questionnaire => "Hi {$name},\n\nWhen you have a few minutes, please complete the questionnaire below — it helps us prepare for your big day.\n\nIf you have any questions, just reply to this email.\n\nThank you,\n{$studio}",
+            $entity instanceof Proposal => "Hi {$name},\n\nThank you for considering {$studio}. I've put together a proposal for you — use the button below to review what's included, sign the contract and pay your deposit to confirm your booking.\n\nIf you have any questions, just reply to this email.\n\nThank you,\n{$studio}",
             default => "Hi {$name},\n\n{$studio}",
         };
     }
@@ -123,6 +127,7 @@ class ClientEmailContent
             $entity instanceof Contract => 'Review & sign contract',
             $entity instanceof Collection => 'View your gallery',
             $entity instanceof Questionnaire => 'Open questionnaire',
+            $entity instanceof Proposal => 'View proposal',
             default => 'Open',
         };
     }
@@ -134,6 +139,7 @@ class ClientEmailContent
             $entity instanceof Contract => route('contracts.public.show', $entity->public_id),
             $entity instanceof Collection => route('gallery.show', $entity->slug),
             $entity instanceof Questionnaire => route('questionnaires.public.show', $entity->public_id),
+            $entity instanceof Proposal => route('proposals.public.show', $entity->public_id),
             default => url('/'),
         };
     }

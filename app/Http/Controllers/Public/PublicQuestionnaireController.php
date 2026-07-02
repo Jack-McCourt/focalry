@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Questionnaire;
 use App\Services\WorkflowEngine;
 use App\Support\PublicAsset;
+use App\Support\StudioNotifications;
 use App\Support\StudioPaths;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -69,6 +70,14 @@ class PublicQuestionnaireController extends Controller
         if ($questionnaire->project) {
             $engine->dispatch('questionnaire_completed', $questionnaire->project);
         }
+
+        StudioNotifications::send(
+            $questionnaire->studio_id,
+            'questionnaire_submitted',
+            'Questionnaire completed',
+            "\"{$questionnaire->title}\" was completed.",
+            route('questionnaires.show', $questionnaire->id),
+        );
 
         return redirect()
             ->route('questionnaires.public.show', $questionnaire->public_id)

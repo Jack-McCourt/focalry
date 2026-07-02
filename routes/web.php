@@ -24,6 +24,7 @@ use App\Http\Controllers\Mail\MailOpenController;
 use App\Http\Controllers\MessageTemplateController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\Public\ClientPortalController;
 use App\Http\Controllers\Public\ContractSigningController;
 use App\Http\Controllers\Public\PublicMeetingController;
 use App\Http\Controllers\Public\PublicPackageController;
@@ -41,7 +42,11 @@ use App\Http\Controllers\Stripe\ConnectController;
 use App\Http\Controllers\Stripe\PublicInvoiceController;
 use App\Http\Controllers\StudioManager\AvailabilityController;
 use App\Http\Controllers\StudioManager\ClientEmailController;
+use App\Http\Controllers\StudioManager\ClientPortalController as StudioClientPortalController;
+use App\Http\Controllers\StudioManager\CalendarController;
 use App\Http\Controllers\StudioManager\ContactController;
+use App\Http\Controllers\StudioManager\ExpenseController;
+use App\Http\Controllers\StudioManager\ReportController;
 use App\Http\Controllers\StudioManager\ContractController;
 use App\Http\Controllers\StudioManager\ContractTemplateController;
 use App\Http\Controllers\StudioManager\CouponController;
@@ -91,6 +96,7 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::patch('/profile/notifications', [ProfileController::class, 'updateNotifications'])->name('profile.notifications');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     // Billing — subscription plans (the studio's own SaaS plan)
@@ -128,6 +134,29 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
     // Studio Manager — Contacts (CRM)
     Route::resource('contacts', ContactController::class)->except(['create', 'edit'])
         ->middleware('plan:studio_manager');
+
+    // Unified calendar (meetings + shoots + payments + tasks)
+    Route::get('calendar', [CalendarController::class, 'index'])->name('calendar.index')->middleware('plan:studio_manager');
+
+    // Reporting — revenue / accounts receivable / lead conversion
+    Route::get('reports', [ReportController::class, 'index'])->name('reports.index')->middleware('plan:studio_manager');
+    Route::get('reports/export/revenue', [ReportController::class, 'exportRevenue'])->name('reports.export.revenue')->middleware('plan:studio_manager');
+
+    // Expenses / bookkeeping
+    Route::middleware('plan:studio_manager')->group(function () {
+        Route::get('expenses', [ExpenseController::class, 'index'])->name('expenses.index');
+        Route::post('expenses', [ExpenseController::class, 'store'])->name('expenses.store');
+        Route::get('expenses/export', [ExpenseController::class, 'export'])->name('expenses.export');
+        Route::get('expenses/{expense}/receipt', [ExpenseController::class, 'receipt'])->name('expenses.receipt');
+        Route::post('expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
+        Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
+    });
+
+    // Client portal — create the link / email the invite for a contact
+    Route::post('contacts/{contact}/portal', [StudioClientPortalController::class, 'create'])
+        ->name('contacts.portal.create')->middleware('plan:studio_manager');
+    Route::post('contacts/{contact}/portal/invite', [StudioClientPortalController::class, 'invite'])
+        ->name('contacts.portal.invite')->middleware('plan:studio_manager');
 
     // Studio Manager — Projects
     // Settings route before the resource so it isn't matched as projects/{project}.
@@ -195,7 +224,8 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
     Route::patch('message-templates/{template}', [MessageTemplateController::class, 'update'])->name('message-templates.update');
     Route::delete('message-templates/{template}', [MessageTemplateController::class, 'destroy'])->name('message-templates.destroy');
 
-    // In-app notifications (bell)
+    // In-app notifications (bell + full inbox)
+    Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::post('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
     Route::post('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
 
@@ -453,6 +483,12 @@ Route::get('/project/share/{token}', [PublicProjectController::class, 'show'])->
 Route::post('/project/share/{token}/code', [PublicProjectController::class, 'sendCode'])->name('projects.public.code')->middleware('throttle:5,1');
 Route::post('/project/share/{token}/verify', [PublicProjectController::class, 'verify'])->name('projects.public.verify')->middleware('throttle:10,1');
 
+// Client portal (no auth — one hub per contact, resolved by token then gated by
+// an emailed code; aggregates galleries/invoices/contracts/etc for that client).
+Route::get('/portal/{token}', [ClientPortalController::class, 'show'])->name('portal.show');
+Route::post('/portal/{token}/code', [ClientPortalController::class, 'sendCode'])->name('portal.code')->middleware('throttle:5,1');
+Route::post('/portal/{token}/verify', [ClientPortalController::class, 'verify'])->name('portal.verify')->middleware('throttle:10,1');
+
 // Public proposal (no auth — resolved by unguessable public_id)
 Route::get('/p/{publicId}', [PublicProposalController::class, 'show'])->name('proposals.public.show');
 Route::post('/p/{publicId}/sign', [PublicProposalController::class, 'sign'])->name('proposals.public.sign')->middleware('throttle:public-forms');
@@ -473,6 +509,9 @@ Route::get('/site/{slug}/{page?}', [PublicSiteController::class, 'show'])->name(
 // Public site assets streamed from Wasabi (logos, site/product/package images,
 // attachments — everything under the `public/` prefix). See App\Support\PublicAsset.
 Route::get('/assets/{path}', [PublicAssetController::class, 'show'])->where('path', '.*')->name('public-asset');
+
+// On-the-fly responsive image derivatives for site images. See ImageResizeController.
+Route::get('/img', [\App\Http\Controllers\ImageResizeController::class, 'show'])->name('image-resize');
 
 // Public gallery (no full auth — password/email-gate handled inside)
 Route::get('/g/{slug}', [GalleryController::class, 'show'])->name('gallery.show');

@@ -19,6 +19,7 @@ export default function Settings({ site, templates, public_url, domain_config, s
     const [footerNav, setFooterNav] = useState<SiteNavItem[]>(site.footer_nav ?? []);
     const [headCode, setHeadCode] = useState(site.head_code ?? '');
     const [bodyCode, setBodyCode] = useState(site.body_code ?? '');
+    const [customCss, setCustomCss] = useState(site.custom_css ?? '');
     const [cookieConsent, setCookieConsent] = useState(!!site.cookie_consent);
     const [cookieMessage, setCookieMessage] = useState(site.cookie_message ?? '');
     const [cookiePolicyUrl, setCookiePolicyUrl] = useState(site.cookie_policy_url ?? '');
@@ -52,6 +53,7 @@ export default function Settings({ site, templates, public_url, domain_config, s
             footer_nav: footerNav,
             head_code: headCode,
             body_code: bodyCode,
+            custom_css: customCss,
             cookie_consent: cookieConsent,
             cookie_message: cookieMessage,
             cookie_policy_url: cookiePolicyUrl,
@@ -80,7 +82,7 @@ export default function Settings({ site, templates, public_url, domain_config, s
         >
             <Head title="Website settings" />
 
-            <div className="mx-auto my-6 max-w-3xl px-4 sm:px-6">
+            <div className="my-6 w-full px-4 sm:px-6">
                 <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
                     <SiteSettings
                         {...{ name, setName, slug, setSlug, contactEmail, setContactEmail, autoCreateProject, setAutoCreateProject, seoTitle, setSeoTitle, seoDescription, setSeoDescription, theme, setTheme, errors, templates, applyTemplate }}
@@ -97,6 +99,8 @@ export default function Settings({ site, templates, public_url, domain_config, s
                         setHeadCode={setHeadCode}
                         bodyCode={bodyCode}
                         setBodyCode={setBodyCode}
+                        customCss={customCss}
+                        setCustomCss={setCustomCss}
                         cookieConsent={cookieConsent}
                         setCookieConsent={setCookieConsent}
                         cookieMessage={cookieMessage}

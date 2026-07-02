@@ -21,6 +21,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -29,6 +30,9 @@ use Inertia\Response;
 
 class SiteController extends Controller
 {
+    /** Cache-Control for uploaded assets — filenames are unique, so cache forever. */
+    private const ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+
     /** The website builder. Creates a starter site on first visit. */
     public function edit(): Response
     {
@@ -167,9 +171,12 @@ class SiteController extends Controller
                 'font' => $data['theme']['font'] ?? 'sans',
                 'heading_font' => $data['theme']['heading_font'] ?? ($data['theme']['font'] ?? 'sans'),
                 'body_font' => $data['theme']['body_font'] ?? ($data['theme']['font'] ?? 'sans'),
+                'heading_weight' => $data['theme']['heading_weight'] ?? null,
+                'body_weight' => $data['theme']['body_weight'] ?? null,
                 'logo_font' => $data['theme']['logo_font'] ?? '',
                 'logo_color' => $data['theme']['logo_color'] ?? '',
                 'nav_color' => $data['theme']['nav_color'] ?? '',
+                'text_color' => $data['theme']['text_color'] ?? '',
                 'nav_size' => $data['theme']['nav_size'] ?? ($site->theme['nav_size'] ?? 'sm'),
                 'logo_size' => $data['theme']['logo_size'] ?? ($site->theme['logo_size'] ?? 'sm'),
                 'style' => $data['theme']['style'] ?? ($site->theme['style'] ?? 'classic'),
@@ -179,6 +186,7 @@ class SiteController extends Controller
             'footer_nav' => $this->cleanNav($data['footer_nav'] ?? []),
             'head_code' => $data['head_code'] ?? null,
             'body_code' => $data['body_code'] ?? null,
+            'custom_css' => $data['custom_css'] ?? null,
             'cookie_consent' => $data['cookie_consent'] ?? false,
             'cookie_message' => $data['cookie_message'] ?? null,
             'cookie_policy_url' => $data['cookie_policy_url'] ?? null,
@@ -251,23 +259,34 @@ class SiteController extends Controller
         $file = $request->file('image');
         $disk = Storage::disk('wasabi');
 
+        // High-megapixel originals (big camera/phone files) can blow the default
+        // time/memory limits while GD decodes + resizes them — a fatal error that
+        // the try/catch below can't trap, so the user just sees "upload failed".
+        // Give the resize room to breathe.
+        @ini_set('memory_limit', '512M');
+        @set_time_limit(120);
+
         // Everything lives in Wasabi (stateless — no local disk). Site images are
         // public assets on the live site, so they're stored public-read and served
         // via the bucket/CDN's permanent URL.
+        // Filenames are unique (uuid) so the bytes never change — let browsers/CDN
+        // cache them forever (fixes "Use efficient cache lifetimes").
+        $opts = ['visibility' => 'public', 'CacheControl' => self::ASSET_CACHE_CONTROL];
+
         if ($file->getClientOriginalExtension() === 'gif') {
             // Keep animated GIFs untouched.
             $path = StudioPaths::asset($studioId, 'site/'.Str::uuid().'.gif');
-            $disk->put($path, file_get_contents($file->getRealPath()), 'public');
+            $disk->put($path, file_get_contents($file->getRealPath()), $opts);
         } else {
             $path = StudioPaths::asset($studioId, 'site/'.Str::uuid().'.webp');
             try {
                 // Cap at 1920px wide (Full HD) — large enough for full-bleed hero
                 // banners (a 16:9 source becomes 1920×1080) without shipping huge files.
-                $disk->put($path, Images::webp($file->getRealPath(), 1920), 'public');
+                $disk->put($path, Images::webp($file->getRealPath(), 1920), $opts);
             } catch (\Throwable $e) {
                 report($e);
                 $path = StudioPaths::asset($studioId, 'site/'.Str::uuid().'.'.$file->getClientOriginalExtension());
-                $disk->put($path, file_get_contents($file->getRealPath()), 'public');
+                $disk->put($path, file_get_contents($file->getRealPath()), $opts);
             }
         }
 
@@ -395,10 +414,50 @@ class SiteController extends Controller
         }
 
         try {
-            return response()->json($places->placeDetails($validated['place_id']));
+            $details = $places->placeDetails($validated['place_id']);
+            $details['reviews'] = $this->mirrorReviewAvatars($details['reviews'] ?? []);
+
+            return response()->json($details);
         } catch (\Throwable $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
+    }
+
+    /**
+     * Copy reviewer avatars off Google (lh3.googleusercontent.com) into our own
+     * Wasabi bucket and rewrite each `avatar` URL to the hosted copy. Serving them
+     * first-party avoids the third-party cookies Google's image host sets (a
+     * Lighthouse "best practices" flag). Failures fall back to the original URL.
+     *
+     * @param  list<array<string, mixed>>  $reviews
+     * @return list<array<string, mixed>>
+     */
+    private function mirrorReviewAvatars(array $reviews): array
+    {
+        $studioId = app('current.studio.id');
+        $disk = Storage::disk('wasabi');
+
+        foreach ($reviews as &$review) {
+            $url = $review['avatar'] ?? null;
+            if (! $url || ! str_contains((string) $url, 'googleusercontent.com')) {
+                continue; // nothing to mirror (already hosted or no photo)
+            }
+
+            try {
+                $response = Http::timeout(8)->get($url);
+                if ($response->failed()) {
+                    continue;
+                }
+
+                $path = StudioPaths::asset($studioId, 'site/reviews/'.md5((string) $url).'.jpg');
+                $disk->put($path, $response->body(), ['visibility' => 'public', 'CacheControl' => self::ASSET_CACHE_CONTROL]);
+                $review['avatar'] = PublicAsset::url($path);
+            } catch (\Throwable $e) {
+                report($e); // keep the original Google URL on failure
+            }
+        }
+
+        return $reviews;
     }
 
     /** Built-in traffic analytics for the last 30 days. */
@@ -579,6 +638,8 @@ class SiteController extends Controller
                     array_map('intval', $page['hidden_category_ids'] ?? []),
                     $validCategoryIds,
                 )),
+                // Blog pages carry the shared post-header design here.
+                'header' => is_array($page['header'] ?? null) ? $page['header'] : null,
                 'seo_title' => $page['seo_title'] ?? null,
                 'seo_description' => $page['seo_description'] ?? null,
                 'head_code' => $page['head_code'] ?? null,
@@ -624,6 +685,8 @@ class SiteController extends Controller
                         $validCategoryIds,
                     )),
                     'cover_image' => $page['cover_image'] ?? null,
+                    'cover_focal' => $this->normalizeFocal($page['cover_focal'] ?? null),
+                    'header' => is_array($page['header'] ?? null) ? $page['header'] : null,
                     'seo_title' => $page['seo_title'] ?? null,
                     'seo_description' => $page['seo_description'] ?? null,
                     'head_code' => $page['head_code'] ?? null,
@@ -750,6 +813,23 @@ class SiteController extends Controller
     }
 
     /**
+     * Clamp a client-supplied focal point to {x,y} percentages (0–100), or null.
+     *
+     * @return array{x:int,y:int}|null
+     */
+    private function normalizeFocal(mixed $focal): ?array
+    {
+        if (! is_array($focal) || ! isset($focal['x'], $focal['y'])) {
+            return null;
+        }
+
+        return [
+            'x' => max(0, min(100, (int) $focal['x'])),
+            'y' => max(0, min(100, (int) $focal['y'])),
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     /** Validation rules for the site-wide settings (shared by update + updateSettings). */
@@ -777,9 +857,12 @@ class SiteController extends Controller
             // renderer falls back to a system font for any unknown key.
             'theme.heading_font' => ['nullable', 'string', 'max:40'],
             'theme.body_font' => ['nullable', 'string', 'max:40'],
+            'theme.heading_weight' => ['nullable', 'integer', 'between:100,900'],
+            'theme.body_weight' => ['nullable', 'integer', 'between:100,900'],
             'theme.logo_font' => ['nullable', 'string', 'max:40'],
             'theme.logo_color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'theme.nav_color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'theme.text_color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'header_nav' => 'array',
             'header_nav.*.label' => 'required|string|max:60',
             'header_nav.*.kind' => ['required', Rule::in(['page', 'url'])],
@@ -790,6 +873,7 @@ class SiteController extends Controller
             'footer_nav.*.target' => 'nullable|string|max:300',
             'head_code' => 'nullable|string|max:20000',
             'body_code' => 'nullable|string|max:20000',
+            'custom_css' => 'nullable|string|max:50000',
             'cookie_consent' => 'boolean',
             'cookie_message' => 'nullable|string|max:1000',
             'cookie_policy_url' => 'nullable|string|max:500',
@@ -804,7 +888,9 @@ class SiteController extends Controller
             'saved_sections' => 'array|max:50',
             'pages' => 'array|min:1',
             'pages.*.title' => 'required|string|max:120',
-            'pages.*.slug' => 'required|string|max:120',
+            // Slug may be blank — syncPages() derives a unique one from the title.
+            // (Posts are created with an empty slug on purpose: "auto from title".)
+            'pages.*.slug' => 'nullable|string|max:120',
             'pages.*.is_home' => 'boolean',
             'pages.*.is_blog' => 'boolean',
             'pages.*.is_404' => 'boolean',
@@ -817,6 +903,11 @@ class SiteController extends Controller
             'pages.*.hidden_category_ids' => 'array',
             'pages.*.hidden_category_ids.*' => 'integer',
             'pages.*.cover_image' => 'nullable|string|max:2048',
+            'pages.*.cover_focal' => 'nullable|array',
+            'pages.*.cover_focal.x' => 'nullable|numeric',
+            'pages.*.cover_focal.y' => 'nullable|numeric',
+            // Freeform header style options (validated as an array only).
+            'pages.*.header' => 'nullable|array',
             // Validate the blocks array itself only — not its items. Blocks are
             // freeform/nested (grid blocks contain child blocks, every block can
             // carry style settings), and per-item rules would strip those keys.
@@ -897,6 +988,7 @@ class SiteController extends Controller
             'footer_nav' => $site->footer_nav ?? [],
             'head_code' => $site->head_code,
             'body_code' => $site->body_code,
+            'custom_css' => $site->custom_css,
             'cookie_consent' => $site->cookie_consent,
             'cookie_message' => $site->cookie_message,
             'cookie_policy_url' => $site->cookie_policy_url,
@@ -931,6 +1023,8 @@ class SiteController extends Controller
                 'category_ids' => array_map('intval', $p->category_ids ?? []),
                 'hidden_category_ids' => array_map('intval', $p->hidden_category_ids ?? []),
                 'cover_image' => $p->cover_image,
+                'cover_focal' => $p->cover_focal,
+                'header' => $p->header,
                 'blocks' => $p->blocks ?? [],
                 'seo_title' => $p->seo_title,
                 'seo_description' => $p->seo_description,

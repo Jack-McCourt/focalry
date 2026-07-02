@@ -1,8 +1,10 @@
 import ColorPicker from '@/Components/ColorPicker';
+import Modal from '@/Components/Modal';
 import SiteShell from '@/Components/site/SiteShell';
 import { addChildToGrid, blockLabel, cloneBlock, findBlock, makeBlock, moveBlockInTree, removeBlockFromTree, reorderTopLevel, updateBlockInTree } from '@/Components/site/blocks';
-import { BlockEditor, ImageField, NavEditor } from '@/Components/site/editors';
+import { BlockEditor, HeroDesignFields, ImageField, NavEditor } from '@/Components/site/editors';
 import BlockPicker from '@/Components/site/BlockPicker';
+import PostHeader from '@/Components/site/PostHeader';
 import GoogleReviewsModal from '@/Components/site/GoogleReviewsModal';
 import PreviewFrame from '@/Components/site/PreviewFrame';
 import { SITE_FONTS } from '@/lib/siteFonts';
@@ -86,6 +88,7 @@ export default function Builder({
     };
 
     const [activePage, setActivePage] = useState(0);
+    const [postListPage, setPostListPage] = useState(1);
     const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
     const [isPublished, setIsPublished] = useState(site.is_published);
     const [saving, setSaving] = useState(false);
@@ -93,11 +96,14 @@ export default function Builder({
     const [showAddBlock, setShowAddBlock] = useState(false);
     const [configureBlockId, setConfigureBlockId] = useState<string | null>(null);
     const [device, setDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
-    // Kept only to dim the active-page highlight; settings is now its own page.
-    const [settingsOpen] = useState(false);
+    // The contextual editor (block editor / page settings) opens as an overlay over
+    // the left sidebar rather than a permanent right-hand column.
+    const [showPageSettings, setShowPageSettings] = useState(false);
 
-    const selectBlock = (id: string | null) => { setSelectedBlockId(id); };
-    const goToPage = (i: number) => { setActivePage(i); setSelectedBlockId(null); };
+    const selectBlock = (id: string | null) => { setSelectedBlockId(id); setShowPageSettings(false); };
+    const goToPage = (i: number) => { setActivePage(i); setSelectedBlockId(null); setShowPageSettings(false); };
+    const openPageSettings = (i: number) => { setActivePage(i); setSelectedBlockId(null); setShowPageSettings(true); };
+    const closePanel = () => { setSelectedBlockId(null); setShowPageSettings(false); };
 
     const page = pages[activePage];
     const selectedBlock = page ? findBlock(page.blocks, selectedBlockId ?? '') : null;
@@ -113,6 +119,9 @@ export default function Builder({
 
     const updateSettings = (id: string, settings: BlockSettings) =>
         writeBlocks(updateBlockInTree(page.blocks, id, (b) => ({ ...b, settings })));
+
+    const toggleBlockHidden = (id: string) =>
+        writeBlocks(updateBlockInTree(page.blocks, id, (b) => ({ ...b, hidden: !b.hidden })));
 
     const addBlock = (type: SiteBlockType) => {
         const block = makeBlock(type);
@@ -192,12 +201,16 @@ export default function Builder({
             is_blog: false,
             is_post: true,
             status: 'draft',
-            published_at: '',
+            // Default the post date to today (local), in the Y-m-d the date input expects.
+            published_at: new Date().toLocaleDateString('en-CA'),
             excerpt: '',
             cover_image: '',
-            blocks: [makeBlock('hero'), makeBlock('text')],
+            // The post hero (cover image + title + date/categories) is rendered
+            // automatically by PostHeader, so a new post only needs body content.
+            blocks: [makeBlock('text')],
         };
         setPages([...pages, newPost]);
+        setPostListPage(1);
         selectLast();
     };
 
@@ -261,14 +274,19 @@ export default function Builder({
     };
 
     // ── Persistence ──
-    // A stable snapshot of everything that gets saved — drives autosave + the
-    // "saved/unsaved" indicator.
+    // A stable snapshot of everything that gets saved — drives the
+    // "saved/unsaved" indicator. Saving is manual (no autosave).
     const snapshot = JSON.stringify({ name, slug, contactEmail, seoTitle, seoDescription, faviconUrl, ogImageUrl, redirects, savedSections, theme, headerNav, footerNav, headCode, bodyCode, cookieConsent, cookieMessage, cookiePolicyUrl, pages });
     const savedSnapshotRef = useRef(snapshot);
     const dirty = snapshot !== savedSnapshotRef.current;
 
+    // Set synchronously when our own save visit is in flight, so the unsaved-changes
+    // navigation guard below doesn't prompt on the save request itself.
+    const savingRef = useRef(false);
+
     const save = () => {
         const saving = snapshot;
+        savingRef.current = true;
         setSaving(true);
         setErrors({});
         router.put(
@@ -298,18 +316,28 @@ export default function Builder({
                 preserveState: true,
                 onSuccess: () => { savedSnapshotRef.current = saving; },
                 onError: (e) => setErrors(e as Record<string, string>),
-                onFinish: () => setSaving(false),
+                onFinish: () => { setSaving(false); savingRef.current = false; },
             },
         );
     };
 
-    // ── Autosave (debounced) ──
+    // Saving is manual (the Save button) so edits never go live until the user is
+    // ready. Warn before leaving with unsaved changes so work isn't lost.
     useEffect(() => {
         if (!dirty) return;
-        const t = setTimeout(() => save(), 2000);
-        return () => clearTimeout(t);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [snapshot]);
+        const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+        window.addEventListener('beforeunload', onBeforeUnload);
+        // In-app (Inertia) navigation — e.g. clicking Settings or another pillar —
+        // doesn't fire beforeunload, so confirm before discarding edits.
+        const off = router.on('before', (event) => {
+            // Don't prompt on our own save request (it preserves state, no visit).
+            if (savingRef.current) return;
+            if (!window.confirm('You have unsaved changes. Leave without saving?')) {
+                event.preventDefault();
+            }
+        });
+        return () => { window.removeEventListener('beforeunload', onBeforeUnload); off(); };
+    }, [dirty]);
 
     // ── Undo / redo (history of the page tree) ──
     const undoStack = useRef<SitePageData[][]>([]);
@@ -377,14 +405,171 @@ export default function Builder({
     const pageRefs = pages.filter((p) => !p.is_post).map((p) => ({ title: p.title, slug: p.slug, is_home: p.is_home }));
 
     const blogPage = pages.find((p) => p.is_blog && !p.is_post);
+
+    // Real published posts for the blog grid preview (newest first), so the blog
+    // page shows the studio's actual posts rather than placeholder samples. Falls
+    // back to samples only when there are no published posts yet.
+    const realPosts: BlogPostCard[] = pages
+        .filter((p) => p.is_post && (p.status ?? 'published') === 'published')
+        .sort((a, b) => (b.published_at ? new Date(b.published_at).getTime() : Number.MAX_SAFE_INTEGER) - (a.published_at ? new Date(a.published_at).getTime() : Number.MAX_SAFE_INTEGER))
+        .map((p) => ({
+            title: p.title,
+            slug: p.slug,
+            excerpt: p.excerpt ?? '',
+            categories: (p.category_ids ?? []).map((id) => categories.find((c) => c.id === id)).filter((c): c is SiteCategory => !!c),
+            cover_image: p.cover_image ?? null,
+            published_at: p.published_at ?? null,
+            url: blogPage ? `/site/${slug}/${blogPage.slug}/${p.slug}` : '#',
+        }));
+    const previewPosts = realPosts.length ? realPosts : SAMPLE_POSTS;
+
     const previewPath = page?.is_post && blogPage
         ? `/site/${slug}/${blogPage.slug}/${page.slug}`
         : page?.is_home
             ? `/site/${slug}`
             : `/site/${slug}/${page?.slug ?? ''}`;
 
+    // ── The builder's control panel, rendered inside the app's black sidebar
+    // (passed via the `sidebar` slot). Pages + blocks list is dark-themed to sit
+    // on the sidebar; the contextual editor overlays it on a white surface. ──
+    const builderSidebar = (
+        <>
+          <div className="flex flex-1 flex-col overflow-y-auto">
+            <div className="border-b border-white/10 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Pages</span>
+                    <button onClick={addPage} className="text-xs font-medium text-zinc-400 hover:text-white">+ Add</button>
+                </div>
+                <div className="space-y-1">
+                    {pages.map((p, i) => p.is_post ? null : (
+                        <div key={i}>
+                            <div className={`group flex items-center rounded-md transition ${i === activePage ? 'bg-white/15 text-white' : 'text-zinc-300 hover:bg-white/5'}`}>
+                                <button onClick={() => goToPage(i)} className="flex min-w-0 flex-1 items-center justify-between px-2.5 py-1.5 text-left text-sm">
+                                    <span className="truncate">{p.title}</span>
+                                    <span className="ml-2 flex shrink-0 gap-1">
+                                        {p.is_home && <span className="text-[10px] uppercase tracking-wider text-zinc-500">Home</span>}
+                                        {p.is_blog && <span className="text-[10px] uppercase tracking-wider text-zinc-500">Blog</span>}
+                                    </span>
+                                </button>
+                                <button onClick={() => openPageSettings(i)} title="Page settings" className={`shrink-0 px-2 py-1.5 transition ${i === activePage ? 'text-white/70 hover:text-white' : 'text-zinc-500 opacity-0 hover:text-white group-hover:opacity-100'}`}>
+                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a6.759 6.759 0 010 .255c-.008.378.137.75.43.991l1.004.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.241.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.991l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                </button>
+                            </div>
+
+                            {/* Blog posts nest under the blog page (paginated) */}
+                            {p.is_blog && (() => {
+                                const POSTS_PER_PAGE = 10;
+                                // Newest first: published posts by date desc, with
+                                // drafts / just-created posts (no date) pinned to the top.
+                                const sortKey = (post: SitePageData) => (post.published_at ? new Date(post.published_at).getTime() : Number.POSITIVE_INFINITY);
+                                const postEntries = pages
+                                    .map((post, pi) => ({ post, pi }))
+                                    .filter((e) => e.post.is_post)
+                                    .sort((a, b) => {
+                                        const ka = sortKey(a.post), kb = sortKey(b.post);
+                                        return ka !== kb ? kb - ka : b.pi - a.pi;
+                                    });
+                                const pageCount = Math.max(1, Math.ceil(postEntries.length / POSTS_PER_PAGE));
+                                const cur = Math.min(postListPage, pageCount);
+                                const slice = postEntries.slice((cur - 1) * POSTS_PER_PAGE, cur * POSTS_PER_PAGE);
+                                return (
+                                    <div className="mt-1 space-y-1 border-l border-white/10 pl-2">
+                                        {slice.map(({ post, pi }) => (
+                                            <div key={pi} className={`group flex items-center rounded-md transition ${pi === activePage ? 'bg-white/15 text-white' : 'text-zinc-400 hover:bg-white/5'}`}>
+                                                <button onClick={() => goToPage(pi)} className="flex min-w-0 flex-1 items-center justify-between px-2.5 py-1.5 text-left text-xs">
+                                                    <span className="truncate">{post.title || 'Untitled post'}</span>
+                                                    {post.status === 'draft' && <span className={`ml-2 shrink-0 text-[10px] uppercase tracking-wider ${pi === activePage ? 'text-white/60' : 'text-amber-400'}`}>Draft</span>}
+                                                </button>
+                                                <button onClick={() => openPageSettings(pi)} title="Post settings" className={`shrink-0 px-2 py-1.5 transition ${pi === activePage ? 'text-white/70 hover:text-white' : 'text-zinc-500 opacity-0 hover:text-white group-hover:opacity-100'}`}>
+                                                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a6.759 6.759 0 010 .255c-.008.378.137.75.43.991l1.004.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.241.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.991l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                                </button>
+                                            </div>
+                                        ))}
+                                        {pageCount > 1 && (
+                                            <div className="flex items-center justify-between px-2.5 py-1 text-[10px] text-zinc-500">
+                                                <button type="button" disabled={cur <= 1} onClick={() => setPostListPage(cur - 1)} className="font-medium enabled:hover:text-white disabled:opacity-30">‹ Prev</button>
+                                                <span>{cur} / {pageCount}</span>
+                                                <button type="button" disabled={cur >= pageCount} onClick={() => setPostListPage(cur + 1)} className="font-medium enabled:hover:text-white disabled:opacity-30">Next ›</button>
+                                            </div>
+                                        )}
+                                        <button onClick={addPost} className="w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-blue-400 hover:bg-white/5">+ Add post</button>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className="flex-1 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Blocks</span>
+                    <button onClick={() => setShowAddBlock(true)} className="text-xs font-medium text-zinc-400 hover:text-white">+ Add block</button>
+                </div>
+
+                <div className="space-y-1">
+                    {page?.blocks.map((b, i) => (
+                        <div
+                            key={b.id}
+                            draggable
+                            onDragStart={() => setDragIndex(i)}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={() => dropBlock(i)}
+                            onDragEnd={() => setDragIndex(null)}
+                            className={`group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm transition ${b.id === selectedBlockId ? 'bg-blue-500/20 text-blue-200' : 'text-zinc-300 hover:bg-white/5'} ${dragIndex === i ? 'opacity-40' : ''}`}
+                        >
+                            <span className="cursor-grab text-zinc-600 group-hover:text-zinc-400" title="Drag to reorder">
+                                <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M7 4a1 1 0 110-2 1 1 0 010 2zM7 11a1 1 0 110-2 1 1 0 010 2zM7 18a1 1 0 110-2 1 1 0 010 2zM13 4a1 1 0 110-2 1 1 0 010 2zM13 11a1 1 0 110-2 1 1 0 010 2zM13 18a1 1 0 110-2 1 1 0 010 2z" /></svg>
+                            </span>
+                            <button onClick={() => selectBlock(b.id)} className={`flex-1 truncate text-left ${b.hidden ? 'text-zinc-500 line-through' : ''}`}>{blockLabel(b.type)}</button>
+                            <button onClick={() => toggleBlockHidden(b.id)} className={b.hidden ? 'text-zinc-400 hover:text-white' : 'text-zinc-500 opacity-0 hover:text-white group-hover:opacity-100'} title={b.hidden ? 'Show block' : 'Hide block'}>
+                                {b.hidden ? (
+                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.243 4.243L9.88 9.88" /></svg>
+                                ) : (
+                                    <svg className="h-3.5 w-3.5 text-zinc-500 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                )}
+                            </button>
+                            <button onClick={() => duplicateBlock(b.id)} className="opacity-0 group-hover:opacity-100" title="Duplicate">
+                                <svg className="h-3.5 w-3.5 text-zinc-500 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V9.375c0-.621.504-1.125 1.125-1.125H6.75M15.75 17.25h3.375c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125h-9.75A1.125 1.125 0 008.25 5.625v3.375" /></svg>
+                            </button>
+                            <button onClick={() => moveBlock(b.id, -1)} className="opacity-0 group-hover:opacity-100" title="Move up">
+                                <svg className="h-3.5 w-3.5 text-zinc-500 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /></svg>
+                            </button>
+                            <button onClick={() => moveBlock(b.id, 1)} className="opacity-0 group-hover:opacity-100" title="Move down">
+                                <svg className="h-3.5 w-3.5 text-zinc-500 hover:text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
+                            </button>
+                            <button onClick={() => removeBlock(b.id)} className="opacity-0 group-hover:opacity-100" title="Delete">
+                                <svg className="h-3.5 w-3.5 text-zinc-500 hover:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                    ))}
+                    {page?.blocks.length === 0 && <p className="px-2 py-4 text-xs text-zinc-500">No blocks yet. Add one above.</p>}
+                </div>
+            </div>
+          </div>
+
+          {/* Page/post settings — slides over the sidebar. Block editing opens in a
+              modal instead (see below), so this overlay only handles page settings. */}
+          {showPageSettings && (
+            <div className="absolute inset-0 z-20 flex flex-col bg-white">
+                <div className="flex shrink-0 items-center gap-1.5 border-b border-neutral-200 px-3 py-2.5">
+                    <button onClick={closePanel} className="flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900">
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                        Back
+                    </button>
+                    <span className="ml-0.5 truncate text-sm font-semibold text-neutral-900">{page?.is_post ? 'Post settings' : 'Page settings'}</span>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                    <PagePanel page={page} activePage={activePage} pages={pages} updatePageMeta={updatePageMeta} setHome={setHome} setBlog={setBlog} set404={set404} removePage={removePage} duplicatePage={duplicatePage} categories={categories} categoryBusy={categoryBusy} createCategory={createCategory} renameCategory={renameCategory} deleteCategory={deleteCategory} />
+                </div>
+            </div>
+          )}
+        </>
+    );
+
     return (
         <AuthenticatedLayout
+            sidebar={builderSidebar}
             header={
                 <div className="flex w-full items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
@@ -418,88 +603,6 @@ export default function Builder({
             <Head title="Website builder" />
 
             <div className="flex h-[calc(100vh-3.5rem)] min-h-0">
-                {/* ── Left: pages + blocks ── */}
-                <aside className="flex w-64 shrink-0 flex-col overflow-y-auto border-r border-neutral-200 bg-white">
-                    <div className="border-b border-neutral-100 p-3">
-                        <div className="mb-2 flex items-center justify-between">
-                            <span className="label">Pages</span>
-                            <button onClick={addPage} className="text-xs font-medium text-neutral-500 hover:text-neutral-900">+ Add</button>
-                        </div>
-                        <div className="space-y-1">
-                            {pages.map((p, i) => p.is_post ? null : (
-                                <div key={i}>
-                                    <button
-                                        onClick={() => goToPage(i)}
-                                        className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-sm transition ${i === activePage && !settingsOpen ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
-                                    >
-                                        <span className="truncate">{p.title}</span>
-                                        <span className="ml-2 flex shrink-0 gap-1">
-                                            {p.is_home && <span className={`text-[10px] uppercase tracking-wider ${i === activePage ? 'text-white/60' : 'text-neutral-400'}`}>Home</span>}
-                                            {p.is_blog && <span className={`text-[10px] uppercase tracking-wider ${i === activePage ? 'text-white/60' : 'text-neutral-400'}`}>Blog</span>}
-                                        </span>
-                                    </button>
-
-                                    {/* Blog posts nest under the blog page */}
-                                    {p.is_blog && (
-                                        <div className="mt-1 space-y-1 border-l border-neutral-200 pl-2">
-                                            {pages.map((post, pi) => post.is_post ? (
-                                                <button
-                                                    key={pi}
-                                                    onClick={() => goToPage(pi)}
-                                                    className={`flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs transition ${pi === activePage && !settingsOpen ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:bg-neutral-100'}`}
-                                                >
-                                                    <span className="truncate">{post.title || 'Untitled post'}</span>
-                                                    {post.status === 'draft' && <span className={`ml-2 shrink-0 text-[10px] uppercase tracking-wider ${pi === activePage ? 'text-white/60' : 'text-amber-500'}`}>Draft</span>}
-                                                </button>
-                                            ) : null)}
-                                            <button onClick={addPost} className="w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-blue-700 hover:bg-blue-50">+ Add post</button>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="flex-1 p-3">
-                        <div className="mb-2 flex items-center justify-between">
-                            <span className="label">Blocks</span>
-                            <button onClick={() => setShowAddBlock(true)} className="text-xs font-medium text-neutral-500 hover:text-neutral-900">+ Add block</button>
-                        </div>
-
-                        <div className="space-y-1">
-                            {page?.blocks.map((b, i) => (
-                                <div
-                                    key={b.id}
-                                    draggable
-                                    onDragStart={() => setDragIndex(i)}
-                                    onDragOver={(e) => e.preventDefault()}
-                                    onDrop={() => dropBlock(i)}
-                                    onDragEnd={() => setDragIndex(null)}
-                                    className={`group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm transition ${b.id === selectedBlockId ? 'bg-blue-50 text-blue-800' : 'text-neutral-700 hover:bg-neutral-100'} ${dragIndex === i ? 'opacity-40' : ''}`}
-                                >
-                                    <span className="cursor-grab text-neutral-300 group-hover:text-neutral-400" title="Drag to reorder">
-                                        <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M7 4a1 1 0 110-2 1 1 0 010 2zM7 11a1 1 0 110-2 1 1 0 010 2zM7 18a1 1 0 110-2 1 1 0 010 2zM13 4a1 1 0 110-2 1 1 0 010 2zM13 11a1 1 0 110-2 1 1 0 010 2zM13 18a1 1 0 110-2 1 1 0 010 2z" /></svg>
-                                    </span>
-                                    <button onClick={() => selectBlock(b.id)} className="flex-1 truncate text-left">{blockLabel(b.type)}</button>
-                                    <button onClick={() => duplicateBlock(b.id)} className="opacity-0 group-hover:opacity-100" title="Duplicate">
-                                        <svg className="h-3.5 w-3.5 text-neutral-400 hover:text-neutral-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V9.375c0-.621.504-1.125 1.125-1.125H6.75M15.75 17.25h3.375c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125h-9.75A1.125 1.125 0 008.25 5.625v3.375" /></svg>
-                                    </button>
-                                    <button onClick={() => moveBlock(b.id, -1)} className="opacity-0 group-hover:opacity-100" title="Move up">
-                                        <svg className="h-3.5 w-3.5 text-neutral-400 hover:text-neutral-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" /></svg>
-                                    </button>
-                                    <button onClick={() => moveBlock(b.id, 1)} className="opacity-0 group-hover:opacity-100" title="Move down">
-                                        <svg className="h-3.5 w-3.5 text-neutral-400 hover:text-neutral-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" /></svg>
-                                    </button>
-                                    <button onClick={() => removeBlock(b.id)} className="opacity-0 group-hover:opacity-100" title="Delete">
-                                        <svg className="h-3.5 w-3.5 text-neutral-400 hover:text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                                    </button>
-                                </div>
-                            ))}
-                            {page?.blocks.length === 0 && <p className="px-2 py-4 text-xs text-neutral-400">No blocks yet. Add one above.</p>}
-                        </div>
-                    </div>
-                </aside>
-
                 {/* ── Center: live preview ── */}
                 <div className="flex min-w-0 flex-1 flex-col bg-neutral-100">
                     <div className="flex shrink-0 items-center gap-2 border-b border-neutral-200 bg-white px-4 py-2">
@@ -526,32 +629,56 @@ export default function Builder({
                                     blocks={page?.blocks ?? []}
                                     activeSlug={page?.slug ?? ''}
                                     interactive={false}
-                                    posts={SAMPLE_POSTS}
+                                    posts={previewPosts}
+                                    categories={realPosts.length ? categories : undefined}
                                     packages={SAMPLE_PACKAGES}
-                                    editing={{ selectedId: selectedBlockId, onSelect: selectBlock, onDelete: removeBlock, onAddChild: addChild, onConfigure: setConfigureBlockId }}
+                                    postHeader={page?.is_post ? (
+                                        <PostHeader
+                                            theme={theme}
+                                            onEdit={() => { const bi = pages.findIndex((p) => p.is_blog && !p.is_post); if (bi >= 0) goToPage(bi); }}
+                                            post={{
+                                                title: page.title,
+                                                cover_image: page.cover_image || null,
+                                                cover_focal: page.cover_focal ?? null,
+                                                published_at: page.published_at || null,
+                                                // Formatting comes from the parent blog page (shared by all posts).
+                                                header: blogPage?.header ?? null,
+                                                categories: (page.category_ids ?? [])
+                                                    .map((id) => categories.find((c) => c.id === id))
+                                                    .filter((c): c is SiteCategory => !!c),
+                                            }}
+                                        />
+                                    ) : undefined}
+                                    editing={{ selectedId: selectedBlockId, onSelect: selectBlock, onDelete: removeBlock, onAddChild: addChild, onConfigure: setConfigureBlockId, onEditData: updateBlock }}
                                 />
                             </PreviewFrame>
                         </div>
                     </div>
                 </div>
 
-                {/* ── Right: contextual panel (block / page) ── */}
-                <aside className="w-80 shrink-0 overflow-y-auto border-l border-neutral-200 bg-white">
-                    {selectedBlock ? (
-                        <div className="p-4">
-                            <div className="mb-4 flex items-center justify-between">
-                                <h2 className="text-sm font-semibold text-neutral-900">{blockLabel(selectedBlock.type)} block</h2>
-                                <button onClick={() => setSelectedBlockId(null)} className="text-xs text-neutral-400 hover:text-neutral-700">Done</button>
-                            </div>
+            </div>
+
+            {/* Block editor — opens as a modal when a block is clicked. */}
+            <Modal show={!!selectedBlock} onClose={closePanel} maxWidth="2xl">
+                {selectedBlock && (
+                    <div className="flex max-h-[85vh] flex-col">
+                        <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-5 py-3.5">
+                            <span className="truncate text-sm font-semibold text-neutral-900">{blockLabel(selectedBlock.type)} block</span>
+                            <button onClick={closePanel} aria-label="Close" className="rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700">
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-5">
                             <BlockEditor block={selectedBlock} onChange={(data) => updateBlock(selectedBlock.id, data)} onSettings={(s) => updateSettings(selectedBlock.id, s)} onConfigure={() => setConfigureBlockId(selectedBlock.id)} pages={pageRefs} />
                             <button onClick={() => saveAsSection(selectedBlock.id)} className="mt-6 w-full rounded-md border border-neutral-200 px-3 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50">Save as reusable section</button>
-                            <button onClick={() => removeBlock(selectedBlock.id)} className="mt-2 w-full rounded-md border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50">Delete block</button>
+                            <button onClick={() => toggleBlockHidden(selectedBlock.id)} className="mt-2 w-full rounded-md border border-neutral-200 px-3 py-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50">
+                                {selectedBlock.hidden ? 'Show block on live site' : 'Hide block (keep it)'}
+                            </button>
+                            <button onClick={() => { const id = selectedBlock.id; closePanel(); removeBlock(id); }} className="mt-2 w-full rounded-md border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50">Delete block</button>
                         </div>
-                    ) : (
-                        <PagePanel page={page} activePage={activePage} pages={pages} updatePageMeta={updatePageMeta} setHome={setHome} setBlog={setBlog} set404={set404} removePage={removePage} duplicatePage={duplicatePage} categories={categories} categoryBusy={categoryBusy} createCategory={createCategory} renameCategory={renameCategory} deleteCategory={deleteCategory} />
-                    )}
-                </aside>
-            </div>
+                    </div>
+                )}
+            </Modal>
 
             <BlockPicker
                 open={showAddBlock}
@@ -739,7 +866,6 @@ function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, 
 
     return (
         <div className="p-4">
-            <h2 className="mb-3 text-sm font-semibold text-neutral-900">{isPost ? 'Post settings' : 'Page settings'}</h2>
             <div className="space-y-3">
                 <label className="block">
                     <span className="label mb-1.5 block">Title</span>
@@ -781,7 +907,14 @@ function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, 
                                 deleteCategory={deleteCategory}
                             />
                         </div>
-                        <ImageField label="Cover image" value={page.cover_image ?? ''} onChange={(v) => set({ cover_image: v })} />
+                        <ImageField
+                            label="Cover image"
+                            value={page.cover_image ?? ''}
+                            onChange={(v) => set({ cover_image: v })}
+                            focal={{ x: page.cover_focal?.x ?? 50, y: page.cover_focal?.y ?? 50 }}
+                            onFocalChange={(x, y) => set({ cover_focal: { x, y } })}
+                        />
+                        <p className="text-xs text-neutral-500">The header layout/formatting is shared across all posts — edit it on the <strong>Blog page</strong> settings.</p>
                         <div className="flex gap-3 pt-1">
                             <button onClick={() => duplicatePage(activePage)} className="text-xs text-neutral-600 hover:underline">Duplicate post</button>
                             <button onClick={() => removePage(activePage)} className="text-xs text-red-600 hover:underline">Delete post</button>
@@ -801,6 +934,13 @@ function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, 
                                 hidden={page.hidden_category_ids ?? []}
                                 onChange={(ids: number[]) => set({ hidden_category_ids: ids })}
                             />
+                        )}
+                        {page.is_blog && (
+                            <details className="rounded-lg border border-neutral-200 p-3">
+                                <summary className="cursor-pointer text-sm font-semibold text-neutral-900">Post header design</summary>
+                                <p className="mb-3 mt-1 text-xs text-neutral-500">Formats the header on every post (each post supplies its own cover image &amp; title). Same options as a hero block.</p>
+                                <HeroDesignFields data={page.header ?? {}} onChange={(partial) => set({ header: { ...(page.header ?? {}), ...partial } })} />
+                            </details>
                         )}
                         <label className="flex items-center gap-2 text-sm text-neutral-700">
                             <input type="checkbox" checked={!!page.is_404} onChange={(e) => set404(activePage, e.target.checked)} /> 404 page <span className="text-xs text-neutral-400">(shown for missing URLs)</span>

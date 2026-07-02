@@ -1,7 +1,9 @@
 import { BlogPostCard, PackageCard, SiteBlock, SiteBlockType, SiteCategory, SiteTheme } from '@/types';
 import { formatMoney } from '@/lib/money';
+import { buildSrcSet } from '@/lib/responsiveImage';
+import LazyRichTextEditor from '@/Components/LazyRichTextEditor';
 import { useForm } from '@inertiajs/react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 // Event types offered in the contact form. These match the studio's default
@@ -22,13 +24,47 @@ export const BLOCK_LIBRARY: BlockMeta[] = [
         type: 'hero',
         label: 'Hero',
         hint: 'Large banner with a headline and call-to-action',
-        make: () => ({ heading: 'Your headline', subheading: 'A short supporting line', image_url: '', cta_label: 'Get in touch', cta_link: '#contact', overlay: 35, content_x: 'center', content_y: 'center', text_align: 'center', text_shadow: 'none', title_size: 'md', height: 'default', height_value: '600px', focal_x: 50, focal_y: 50 }),
+        make: () => ({ heading: 'Your headline', subheading: 'A short supporting line', image_url: '', cta_label: 'Get in touch', cta_link: '#contact', overlay: 35, content_x: 'center', content_y: 'center', text_align: 'center', text_shadow: 'none', title_size: 'md', height: 'default', height_value: '600px', focal_x: 50, focal_y: 50, text_bg: 'none', text_bg_color: '#000000', text_bg_opacity: 60, text_bg_extent: 65 }),
+    },
+    {
+        type: 'slider',
+        label: 'Slider / carousel',
+        hint: 'A rotating banner of image slides, each with its own text',
+        make: () => ({
+            slides: [
+                { image_url: '', heading: 'Your first slide', subheading: 'A short supporting line', cta_label: '', cta_link: '', focal_x: 50, focal_y: 50, alt: '', title: '' },
+                { image_url: '', heading: 'Your second slide', subheading: 'Tell another part of the story', cta_label: '', cta_link: '', focal_x: 50, focal_y: 50, alt: '', title: '' },
+            ],
+            autoplay: true,
+            speed: 5,
+            transition: 'slide',
+            show_arrows: true,
+            show_dots: true,
+            overlay: 35,
+            content_x: 'center',
+            content_y: 'center',
+            text_align: 'center',
+            text_shadow: 'soft',
+            title_size: 'lg',
+            height: 'default',
+            height_value: '600px',
+            text_bg: 'none',
+            text_bg_color: '#000000',
+            text_bg_opacity: 60,
+            text_bg_extent: 65,
+        }),
     },
     {
         type: 'about',
-        label: 'About',
+        label: 'Image/text',
         hint: 'Image alongside a block of text',
         make: () => ({ heading: 'About', body: 'Tell visitors who you are and what you do.', image_url: '', image_side: 'left' }),
+    },
+    {
+        type: 'card',
+        label: 'Card',
+        hint: 'Image card with a title and text',
+        make: () => ({ image_url: '', heading: 'Card title', body: 'Add a short bit of text about this card.', image_ratio: 'none' }),
     },
     {
         type: 'services',
@@ -223,6 +259,16 @@ export const HERO_TEXT_SHADOWS: Record<string, string> = {
     strong: '0 3px 14px rgba(0,0,0,0.75)',
 };
 
+/** Hex (#rgb / #rrggbb) → rgba() string at the given 0–1 alpha. */
+export function hexToRgba(hex: string | undefined, alpha: number): string {
+    const h = (hex || '#000000').replace('#', '');
+    const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+    const r = parseInt(full.slice(0, 2), 16) || 0;
+    const g = parseInt(full.slice(2, 4), 16) || 0;
+    const b = parseInt(full.slice(4, 6), 16) || 0;
+    return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha))})`;
+}
+
 /** Normalise a hero "custom height" value: `%` is read as viewport height. */
 export function heroHeight(value: unknown): string {
     const raw = String(value ?? '').trim();
@@ -306,6 +352,8 @@ export interface BlockEditing {
     onAddChild: (gridId: string, col: number, type: SiteBlockType) => void;
     /** Open the larger configuration popup for a block (e.g. Google Reviews). */
     onConfigure?: (id: string) => void;
+    /** Commit an in-place text edit: replaces the block's data object. */
+    onEditData?: (id: string, data: Record<string, unknown>) => void;
 }
 
 // ─── Renderer ───────────────────────────────────────────────────────────────
@@ -328,74 +376,319 @@ interface BlockViewProps {
     editing?: BlockEditing;
 }
 
+/**
+ * Maps a block's "Container width" style setting to a Tailwind max-w-* class,
+ * falling back to the block's own default when the setting is unset.
+ */
+export function containerW(width: string | undefined, fallback: string): string {
+    switch (width) {
+        case 'sm': return 'max-w-3xl';
+        case 'md': return 'max-w-5xl';
+        case 'lg': return 'max-w-7xl';
+        case 'full': return 'max-w-none';
+        default: return fallback;
+    }
+}
+
+/**
+ * The hero banner: a full-bleed image with an overlaid heading/sub/CTA. Shared
+ * by the `hero` block and the auto-generated blog post header (PostHeader) so
+ * both offer the exact same formatting options.
+ *
+ * `d` carries the same loose keys the hero block uses: image_url, focal_x/y,
+ * overlay, text_bg(+color/opacity/extent), content_x/y, text_align, title_size,
+ * text_shadow, height(+height_value), heading, subheading, cta_label/cta_link.
+ */
+export function HeroSection({ d, theme, width, sectionId, children, onEditHeading, onEditSubheading }: { d: Record<string, any>; theme: SiteTheme; width?: string; sectionId?: string; children?: React.ReactNode; onEditHeading?: (v: string) => void; onEditSubheading?: (v: string) => void }) {
+    const primary = theme.primary_color;
+    const cw = (fallback: string) => containerW(width, fallback);
+
+    // Back-compat: the old single `align` field meant left/centered. It now
+    // maps onto the new horizontal-position + text-alignment controls.
+    const cx = d.content_x ?? (d.align === 'left' ? 'left' : 'center');
+    const cy = d.content_y ?? 'center';
+    const ta = d.text_align ?? d.align ?? 'center';
+    const vCls = cy === 'top' ? 'justify-start' : cy === 'bottom' ? 'justify-end' : 'justify-center';
+    const hCls = cx === 'left' ? 'items-start' : cx === 'right' ? 'items-end' : 'items-center';
+    const tCls = ta === 'left' ? 'text-left' : ta === 'right' ? 'text-right' : 'text-center';
+    // Height: default banner, full viewport, or a custom px/% value. "Full" fills
+    // the viewport minus the sticky header so it doesn't overflow past one screen.
+    const heightMode = d.height ?? 'default';
+    const heightCls = heightMode === 'full' || heightMode === 'custom' ? '' : 'min-h-[68vh]';
+    const heightStyle =
+        heightMode === 'full'
+            ? { minHeight: 'calc(100svh - var(--site-header-h, 4rem))' }
+            : heightMode === 'custom'
+                ? { minHeight: heroHeight(d.height_value) }
+                : undefined;
+    const focalX = d.focal_x ?? 50;
+    const focalY = d.focal_y ?? 50;
+    const textShadow = HERO_TEXT_SHADOWS[d.text_shadow as string] ?? undefined;
+    return (
+        <section id={sectionId} className={`relative flex ${heightCls} flex-col ${vCls} overflow-hidden px-6 py-24 sm:px-10`} style={heightStyle}>
+            {d.image_url ? (
+                // The hero is the usual LCP element — hint the browser to fetch it first.
+                <RetryImg src={d.image_url} alt={d.alt || ''} title={d.title || undefined} fetchPriority="high" sizes="100vw" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: `${focalX}% ${focalY}%` }} />
+            ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-neutral-800 to-neutral-950" />
+            )}
+            <div className="absolute inset-0 bg-black" style={{ opacity: (Number(d.overlay) || 0) / 100 }} />
+            {d.text_bg === 'gradient' && (
+                <div
+                    className="pointer-events-none absolute inset-x-0 bottom-0 top-0"
+                    style={{
+                        background: `linear-gradient(to top, ${hexToRgba(d.text_bg_color, (Number(d.text_bg_opacity) ?? 60) / 100)} 0%, transparent ${Number(d.text_bg_extent) || 65}%)`,
+                    }}
+                />
+            )}
+            <div className={`relative mx-auto flex w-full ${cw('max-w-6xl')} flex-col ${hCls} ${tCls}`} style={textShadow ? { textShadow } : undefined}>
+                <div
+                    className={d.text_bg === 'panel' ? 'rounded-2xl px-8 py-7 sm:px-10 sm:py-8' : ''}
+                    style={d.text_bg === 'panel' ? { backgroundColor: hexToRgba(d.text_bg_color, (Number(d.text_bg_opacity) ?? 55) / 100) } : undefined}
+                >
+                    {onEditHeading ? (
+                        <InlineText as="h1" value={d.heading ?? ''} placeholder="Add a headline" onChange={onEditHeading} className={`block font-semibold tracking-tight text-white ${HERO_TITLE_SIZES[d.title_size as string] ?? HERO_TITLE_SIZES.md}`} />
+                    ) : (
+                        <h1 className={`font-semibold tracking-tight text-white ${HERO_TITLE_SIZES[d.title_size as string] ?? HERO_TITLE_SIZES.md}`}>{d.heading}</h1>
+                    )}
+                    {onEditSubheading ? (
+                        <InlineText as="p" value={d.subheading ?? ''} placeholder="Add a supporting line" onChange={onEditSubheading} className="mt-5 block max-w-2xl text-lg text-white/80" />
+                    ) : (
+                        d.subheading && <p className="mt-5 max-w-2xl text-lg text-white/80">{d.subheading}</p>
+                    )}
+                    {d.cta_label && (
+                        <a href={d.cta_link || '#contact'} className="mt-8 inline-flex rounded-full px-7 py-3 text-sm font-medium text-white shadow-lg transition hover:opacity-90" style={{ backgroundColor: primary }}>
+                            {d.cta_label}
+                        </a>
+                    )}
+                    {children}
+                </div>
+            </div>
+        </section>
+    );
+}
+
+/**
+ * Slider / carousel: a rotating banner of slides. Each slide reuses HeroSection
+ * (so it offers the same image + text layout options), while autoplay, arrows,
+ * dots and the transition are configured once at the block level. Block-level
+ * design keys (overlay, content position, title size, height, …) are merged into
+ * every slide; per-slide keys carry the image, focal point and copy.
+ */
+function SliderBlock({ block, d, theme, editing }: { block: SiteBlock; d: Record<string, any>; theme: SiteTheme; editing?: BlockEditing }) {
+    const slides: any[] = Array.isArray(d.slides) ? d.slides.filter(Boolean) : [];
+    const count = slides.length;
+    const [index, setIndex] = useState(0);
+    const [paused, setPaused] = useState(false);
+
+    // Don't autoplay inside the builder so text stays put while it's edited.
+    const autoplay = d.autoplay !== false && !editing;
+    const speed = Number(d.speed) > 0 ? Number(d.speed) : 5;
+    const fade = d.transition === 'fade';
+    const showArrows = d.show_arrows !== false;
+    const showDots = d.show_dots !== false;
+
+    const cur = count ? Math.min(index, count - 1) : 0;
+    const go = (i: number) => count && setIndex(((i % count) + count) % count);
+
+    useEffect(() => {
+        if (!autoplay || paused || count <= 1) return;
+        const id = window.setInterval(() => setIndex((i) => (i + 1) % count), speed * 1000);
+        return () => window.clearInterval(id);
+    }, [autoplay, paused, speed, count]);
+
+    if (count === 0) {
+        if (!editing) return null;
+        return (
+            <section className="mx-auto max-w-3xl px-6 py-16 sm:px-10">
+                <div className="flex flex-col items-center rounded-2xl border-2 border-dashed border-neutral-200 bg-neutral-50 px-6 py-12 text-center">
+                    <h3 className="text-lg font-semibold text-neutral-900">Slider</h3>
+                    <p className="mt-1 max-w-sm text-sm text-neutral-500">Add slides in the block settings — each slide can have its own image, heading and button.</p>
+                </div>
+            </section>
+        );
+    }
+
+    // Merge block-level design with a slide's own content into one hero `d`.
+    const slideD = (s: any) => ({
+        overlay: d.overlay, content_x: d.content_x, content_y: d.content_y, text_align: d.text_align,
+        text_shadow: d.text_shadow, title_size: d.title_size, height: d.height, height_value: d.height_value,
+        text_bg: d.text_bg, text_bg_color: d.text_bg_color, text_bg_opacity: d.text_bg_opacity, text_bg_extent: d.text_bg_extent,
+        image_url: s.image_url, heading: s.heading, subheading: s.subheading, cta_label: s.cta_label, cta_link: s.cta_link,
+        focal_x: s.focal_x ?? 50, focal_y: s.focal_y ?? 50, alt: s.alt, title: s.title,
+    });
+
+    const editData = editing?.onEditData;
+    const editSlide = (i: number, partial: Record<string, unknown>) =>
+        editData?.(block.id, { ...d, slides: slides.map((s, idx) => (idx === i ? { ...s, ...partial } : s)) });
+
+    const slideEl = (s: any, i: number) => (
+        <HeroSection
+            d={slideD(s)}
+            theme={theme}
+            onEditHeading={editData ? (v) => editSlide(i, { heading: v }) : undefined}
+            onEditSubheading={editData ? (v) => editSlide(i, { subheading: v }) : undefined}
+        />
+    );
+
+    // Builder-only: arrows/dots must not bubble up and select/open the block.
+    const stop = (e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault(); };
+
+    // The "Container width" style setting constrains the whole carousel (default
+    // is full-bleed, like a hero banner); narrower values centre it on the page.
+    return (
+        <section
+            className={`relative mx-auto overflow-hidden ${containerW(block.settings?.width, 'max-w-none')}`}
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+        >
+            {fade ? (
+                <div className="relative">
+                    {slides.map((s, i) => (
+                        <div key={i} className={`transition-opacity duration-700 ${i === cur ? 'relative opacity-100' : 'pointer-events-none absolute inset-0 opacity-0'}`}>
+                            {slideEl(s, i)}
+                        </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="flex transition-transform duration-700 ease-out" style={{ transform: `translateX(-${cur * 100}%)` }}>
+                    {slides.map((s, i) => (
+                        <div key={i} className="w-full shrink-0">{slideEl(s, i)}</div>
+                    ))}
+                </div>
+            )}
+
+            {showArrows && count > 1 && (
+                <>
+                    <button type="button" onClick={(e) => { stop(e); go(cur - 1); }} aria-label="Previous slide" className="absolute left-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur transition hover:bg-black/50 sm:left-5">
+                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                    </button>
+                    <button type="button" onClick={(e) => { stop(e); go(cur + 1); }} aria-label="Next slide" className="absolute right-3 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white backdrop-blur transition hover:bg-black/50 sm:right-5">
+                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                    </button>
+                </>
+            )}
+
+            {showDots && count > 1 && (
+                <div className="absolute inset-x-0 bottom-5 z-10 flex justify-center gap-2">
+                    {slides.map((_, i) => (
+                        <button key={i} type="button" onClick={(e) => { stop(e); go(i); }} aria-label={`Go to slide ${i + 1}`} className="h-2 rounded-full bg-white transition-all" style={{ width: i === cur ? 24 : 8, opacity: i === cur ? 1 : 0.5 }} />
+                    ))}
+                </div>
+            )}
+        </section>
+    );
+}
+
+/**
+ * Single-line click-to-edit text (builder only). Edits commit on blur so React
+ * never re-renders mid-keystroke (which would jump the caret). Shows a dashed
+ * outline on hover and a placeholder when empty.
+ */
+function InlineText({ as: Tag = 'div', value, onChange, className, placeholder, style }: { as?: React.ElementType; value: string; onChange: (v: string) => void; className?: string; placeholder?: string; style?: React.CSSProperties }) {
+    return (
+        <Tag
+            contentEditable
+            suppressContentEditableWarning
+            data-ph={placeholder}
+            title="Click to edit"
+            style={style}
+            className={`inline-editable cursor-text rounded outline-dashed outline-1 outline-transparent transition focus:outline-blue-400 hover:outline-blue-300 ${className ?? ''}`}
+            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            onBlur={(e: React.FocusEvent<HTMLElement>) => { const t = e.currentTarget.innerText.replace(/\n$/, ''); if (t !== value) onChange(t); }}
+        >
+            {value}
+        </Tag>
+    );
+}
+
+/**
+ * Click-to-edit rich text (builder only): renders the HTML, and on click swaps
+ * in the WYSIWYG editor in place. The heavy editor only loads on first edit.
+ */
+function InlineRichText({ html, onChange, className }: { html: string; onChange: (html: string) => void; className?: string }) {
+    const [editing, setEditing] = useState(false);
+
+    if (editing) {
+        return (
+            <div className={className} onClick={(e) => e.stopPropagation()}>
+                <LazyRichTextEditor value={html} onChange={onChange} minHeightClass="min-h-[4rem]" />
+                <div className="mt-1 text-right">
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setEditing(false); }} className="rounded bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white">Done</button>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div
+            title="Click to edit"
+            className={`inline-editable cursor-text rounded outline-dashed outline-1 outline-transparent transition hover:outline-blue-300 ${className ?? ''}`}
+            onClick={(e) => { e.stopPropagation(); e.preventDefault(); setEditing(true); }}
+            dangerouslySetInnerHTML={{ __html: html?.trim() ? html : '<p class="text-neutral-400">Click to add text…</p>' }}
+        />
+    );
+}
+
 function BlockInner({ block, theme, slug, basePath, interactive, posts, categories, packages, editing }: BlockViewProps) {
     const base = basePath ?? `/site/${slug}`;
     // Block data is intentionally loose (modular/extensible), read with fallbacks.
     const d = block.data as Record<string, any>;
     const primary = theme.primary_color;
+    // Container width from the block's style settings (falls back per block).
+    const cw = (fallback: string) => containerW(block.settings?.width, fallback);
+
+    // Builder-only: commit an in-place text edit (merges into the block's data).
+    const edit = editing?.onEditData;
+    const commit = (partial: Record<string, unknown>) => edit?.(block.id, { ...d, ...partial });
 
     switch (block.type) {
-        case 'hero': {
-            // Back-compat: the old single `align` field meant left/centered. It now
-            // maps onto the new horizontal-position + text-alignment controls.
-            const cx = d.content_x ?? (d.align === 'left' ? 'left' : 'center');
-            const cy = d.content_y ?? 'center';
-            const ta = d.text_align ?? d.align ?? 'center';
-            const vCls = cy === 'top' ? 'justify-start' : cy === 'bottom' ? 'justify-end' : 'justify-center';
-            // Content sits in the standard content container; horizontal position
-            // aligns it within that container.
-            const hCls = cx === 'left' ? 'items-start' : cx === 'right' ? 'items-end' : 'items-center';
-            const tCls = ta === 'left' ? 'text-left' : ta === 'right' ? 'text-right' : 'text-center';
-            // Height: default banner, full viewport, or a custom px/% value.
-            // "Full" fills the viewport minus the sticky header so it doesn't
-            // overflow past one screen.
-            const heightMode = d.height ?? 'default';
-            const heightCls = heightMode === 'full' || heightMode === 'custom' ? '' : 'min-h-[68vh]';
-            const heightStyle =
-                heightMode === 'full'
-                    ? { minHeight: 'calc(100svh - var(--site-header-h, 4rem))' }
-                    : heightMode === 'custom'
-                        ? { minHeight: heroHeight(d.height_value) }
-                        : undefined;
-            const focalX = d.focal_x ?? 50;
-            const focalY = d.focal_y ?? 50;
-            const textShadow = HERO_TEXT_SHADOWS[d.text_shadow as string] ?? undefined;
+        case 'hero':
             return (
-                <section id="top" className={`relative flex ${heightCls} flex-col ${vCls} overflow-hidden px-6 py-24 sm:px-10`} style={heightStyle}>
-                    {d.image_url ? (
-                        <img src={d.image_url} alt={d.alt || ''} title={d.title || undefined} className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: `${focalX}% ${focalY}%` }} />
-                    ) : (
-                        <div className="absolute inset-0 bg-gradient-to-br from-neutral-800 to-neutral-950" />
-                    )}
-                    <div className="absolute inset-0 bg-black" style={{ opacity: (Number(d.overlay) || 0) / 100 }} />
-                    <div className={`relative mx-auto flex w-full max-w-6xl flex-col ${hCls} ${tCls}`} style={textShadow ? { textShadow } : undefined}>
-                        <h1 className={`font-semibold tracking-tight text-white ${HERO_TITLE_SIZES[d.title_size as string] ?? HERO_TITLE_SIZES.md}`}>{d.heading}</h1>
-                        {d.subheading && <p className="mt-5 max-w-2xl text-lg text-white/80">{d.subheading}</p>}
-                        {d.cta_label && (
-                            <a href={d.cta_link || '#contact'} className="mt-8 inline-flex rounded-full px-7 py-3 text-sm font-medium text-white shadow-lg transition hover:opacity-90" style={{ backgroundColor: primary }}>
-                                {d.cta_label}
-                            </a>
-                        )}
-                    </div>
-                </section>
+                <HeroSection
+                    d={d}
+                    theme={theme}
+                    width={block.settings?.width}
+                    sectionId="top"
+                    onEditHeading={editing?.onEditData ? (v) => editing.onEditData!(block.id, { ...d, heading: v }) : undefined}
+                    onEditSubheading={editing?.onEditData ? (v) => editing.onEditData!(block.id, { ...d, subheading: v }) : undefined}
+                />
             );
-        }
+
+        case 'slider':
+            return <SliderBlock block={block} d={d} theme={theme} editing={editing} />;
 
         case 'about': {
             const reverse = d.image_side === 'right';
+            // Image aspect ratio; "none" keeps the image's natural ratio (no crop).
+            const ratio = d.image_ratio ?? '4/5';
+            const ratioClass = ratio === '1/1' ? 'aspect-square'
+                : ratio === '3/2' ? 'aspect-[3/2]'
+                : ratio === '16/9' ? 'aspect-video'
+                : ratio === 'none' ? ''
+                : 'aspect-[4/5]';
             return (
-                <section className="mx-auto max-w-6xl px-6 py-20 sm:px-10">
+                <section className={`mx-auto ${cw('max-w-6xl')} px-6 py-20 sm:px-10`}>
                     <div className={`flex flex-col gap-10 md:items-center ${reverse ? 'md:flex-row-reverse' : 'md:flex-row'}`}>
                         <div className="md:w-1/2">
                             {d.image_url ? (
-                                <img src={d.image_url} alt={d.alt || ''} title={d.title || undefined} loading="lazy" className="aspect-[4/5] w-full rounded-2xl object-cover" />
+                                <RetryImg src={d.image_url} alt={d.alt || ''} title={d.title || undefined} loading="lazy" sizes="(min-width:768px) 50vw, 100vw" className={`w-full rounded-2xl ${ratioClass ? `${ratioClass} object-cover` : 'h-auto'}`} />
                             ) : (
-                                <div className="flex aspect-[4/5] w-full items-center justify-center rounded-2xl bg-neutral-100 text-sm text-neutral-400">Image</div>
+                                <div className={`flex w-full items-center justify-center rounded-2xl bg-neutral-100 text-sm text-neutral-400 ${ratioClass || 'aspect-[4/5]'}`}>Image</div>
                             )}
                         </div>
                         <div className="md:w-1/2">
-                            {d.heading && <h2 className="text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
-                            <p className="mt-4 whitespace-pre-line leading-relaxed text-neutral-600">{d.body}</p>
+                            {edit ? (
+                                <>
+                                    <InlineText as="h2" value={d.heading ?? ''} placeholder="Heading" onChange={(v) => commit({ heading: v })} className="block text-3xl font-semibold tracking-tight text-neutral-900" />
+                                    <InlineText as="p" value={d.body ?? ''} placeholder="Add some text…" onChange={(v) => commit({ body: v })} className="mt-4 block whitespace-pre-line leading-relaxed text-neutral-600" />
+                                </>
+                            ) : (
+                                <>
+                                    {d.heading && <h2 className="text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
+                                    <p className="mt-4 whitespace-pre-line leading-relaxed text-neutral-600">{d.body}</p>
+                                </>
+                            )}
                         </div>
                     </div>
                 </section>
@@ -406,16 +699,64 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
             const items: any[] = Array.isArray(d.items) ? d.items : [];
             return (
                 <section className="bg-neutral-50 px-6 py-20 sm:px-10">
-                    <div className="mx-auto max-w-6xl">
-                        {d.heading && <h2 className="mb-12 text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
+                    <div className={`mx-auto ${cw('max-w-6xl')}`}>
+                        {edit
+                            ? <InlineText as="h2" value={d.heading ?? ''} placeholder="Section heading" onChange={(v) => commit({ heading: v })} className="mb-12 block text-center text-3xl font-semibold tracking-tight text-neutral-900" />
+                            : d.heading && <h2 className="mb-12 text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
                         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                            {items.map((it, i) => (
-                                <div key={i} className="rounded-2xl border border-neutral-100 bg-white p-7 shadow-sm">
-                                    <h3 className="text-lg font-semibold text-neutral-900">{it.title}</h3>
-                                    <p className="mt-2 text-sm leading-relaxed text-neutral-600">{it.description}</p>
-                                    {it.price && <p className="mt-4 text-sm font-medium" style={{ color: primary }}>{it.price}</p>}
-                                </div>
-                            ))}
+                            {items.map((it, i) => {
+                                const setItem = (partial: Record<string, unknown>) => commit({ items: items.map((x, idx) => (idx === i ? { ...x, ...partial } : x)) });
+                                return (
+                                    <div key={i} className="rounded-2xl border border-neutral-100 bg-white p-7 shadow-sm">
+                                        {edit ? (
+                                            <>
+                                                <InlineText as="h3" value={it.title ?? ''} placeholder="Title" onChange={(v) => setItem({ title: v })} className="block text-lg font-semibold text-neutral-900" />
+                                                <InlineText as="p" value={it.description ?? ''} placeholder="Description" onChange={(v) => setItem({ description: v })} className="mt-2 block text-sm leading-relaxed text-neutral-600" />
+                                                <InlineText as="p" value={it.price ?? ''} placeholder="Price (optional)" onChange={(v) => setItem({ price: v })} className="mt-4 block text-sm font-medium" />
+                                            </>
+                                        ) : (
+                                            <>
+                                                <h3 className="text-lg font-semibold text-neutral-900">{it.title}</h3>
+                                                <p className="mt-2 text-sm leading-relaxed text-neutral-600">{it.description}</p>
+                                                {it.price && <p className="mt-4 text-sm font-medium" style={{ color: primary }}>{it.price}</p>}
+                                            </>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </section>
+            );
+        }
+
+        case 'card': {
+            const ratio = d.image_ratio ?? 'none';
+            const ratioClass = ratio === '1/1' ? 'aspect-square'
+                : ratio === '3/2' ? 'aspect-[3/2]'
+                : ratio === '4/5' ? 'aspect-[4/5]'
+                : ratio === '16/9' ? 'aspect-video'
+                : '';
+            return (
+                <section className={`mx-auto ${cw('max-w-md')} px-6 py-12 sm:px-10`}>
+                    <div className="overflow-hidden rounded-lg bg-white shadow">
+                        {d.image_url ? (
+                            <RetryImg src={d.image_url} alt={d.alt || ''} title={d.title || undefined} loading="lazy" sizes="(min-width:768px) 50vw, 100vw" className={`w-full ${ratioClass ? `${ratioClass} object-cover` : 'h-auto'}`} />
+                        ) : (
+                            <div className={`flex w-full items-center justify-center bg-neutral-100 text-sm text-neutral-400 ${ratioClass || 'aspect-[3/2]'}`}>Image</div>
+                        )}
+                        <div className="p-6">
+                            {edit ? (
+                                <>
+                                    <InlineText as="h2" value={d.heading ?? ''} placeholder="Heading" onChange={(v) => commit({ heading: v })} className="mb-2 block text-xl font-semibold text-neutral-900" />
+                                    <InlineText as="p" value={d.body ?? ''} placeholder="Add some text…" onChange={(v) => commit({ body: v })} className="block whitespace-pre-line leading-relaxed text-neutral-600" />
+                                </>
+                            ) : (
+                                <>
+                                    {d.heading && <h2 className="mb-2 text-xl font-semibold text-neutral-900">{d.heading}</h2>}
+                                    {d.body && <p className="whitespace-pre-line leading-relaxed text-neutral-600">{d.body}</p>}
+                                </>
+                            )}
                         </div>
                     </div>
                 </section>
@@ -423,22 +764,31 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
         }
 
         case 'gallery':
-            return <GalleryBlock d={d} interactive={interactive} />;
+            return <GalleryBlock d={d} interactive={interactive} width={block.settings?.width} onEditHeading={edit ? (v) => commit({ heading: v }) : undefined} />;
 
         case 'reviews':
             return <ReviewsBlock block={block} d={d} primary={primary} editing={editing} />;
 
         case 'blog':
-            return <BlogBlock d={d} posts={posts} categories={categories} slug={slug} interactive={interactive} primary={primary} />;
+            return <BlogBlock d={d} posts={posts} categories={categories} slug={slug} interactive={interactive} primary={primary} width={block.settings?.width} />;
 
         case 'packages': {
             const list = packages ?? [];
             const cols = Number(d.columns) === 2 ? 'sm:grid-cols-2' : Number(d.columns) === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-2 lg:grid-cols-3';
 
             return (
-                <section className="mx-auto max-w-6xl px-6 py-20 sm:px-10">
-                    {d.heading && <h2 className="text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
-                    {d.subheading && <p className="mx-auto mt-3 max-w-2xl text-center text-neutral-500">{d.subheading}</p>}
+                <section className={`mx-auto ${cw('max-w-6xl')} px-6 py-20 sm:px-10`}>
+                    {edit ? (
+                        <>
+                            <InlineText as="h2" value={d.heading ?? ''} placeholder="Section heading" onChange={(v) => commit({ heading: v })} className="block text-center text-3xl font-semibold tracking-tight text-neutral-900" />
+                            <InlineText as="p" value={d.subheading ?? ''} placeholder="Supporting line (optional)" onChange={(v) => commit({ subheading: v })} className="mx-auto mt-3 block max-w-2xl text-center text-neutral-500" />
+                        </>
+                    ) : (
+                        <>
+                            {d.heading && <h2 className="text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
+                            {d.subheading && <p className="mx-auto mt-3 max-w-2xl text-center text-neutral-500">{d.subheading}</p>}
+                        </>
+                    )}
                     {list.length === 0 ? (
                         <p className="mt-12 text-center text-sm text-neutral-400">No packages available yet.</p>
                     ) : (
@@ -446,7 +796,7 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
                             {list.map((p) => (
                                 <div key={p.slug} className="flex flex-col overflow-hidden rounded-2xl border border-neutral-200">
                                     {p.image_url ? (
-                                        <img src={p.image_url} alt="" loading="lazy" className="aspect-[3/2] w-full object-cover" />
+                                        <RetryImg src={p.image_url} alt="" loading="lazy" sizes="(min-width:1024px) 33vw, (min-width:640px) 50vw, 100vw" className="aspect-[3/2] w-full object-cover" />
                                     ) : (
                                         <div className="flex aspect-[3/2] w-full items-center justify-center bg-neutral-100 text-xs text-neutral-300">{p.name}</div>
                                     )}
@@ -479,23 +829,42 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
             const level = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(d.heading_level) ? d.heading_level : 'h2';
             const Heading = level as React.ElementType;
             const headingSize: Record<string, string> = { h1: 'text-4xl sm:text-5xl', h2: 'text-3xl', h3: 'text-2xl', h4: 'text-xl', h5: 'text-lg', h6: 'text-base uppercase tracking-wide' };
+            const headingCls = `font-semibold tracking-tight text-neutral-900 ${headingSize[level]}`;
+            const bodyHtmlCls = `leading-relaxed text-neutral-600 [&_a]:underline [&_h1]:my-3 [&_h1]:text-3xl [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-2xl [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:text-xl [&_h3]:font-semibold [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5`;
+
+            // Builder: click-to-edit the heading + body in place.
+            if (editing?.onEditData) {
+                const commit = (partial: Record<string, unknown>) => editing.onEditData!(block.id, { ...d, ...partial });
+                return (
+                    <section className={`mx-auto ${cw('max-w-3xl')} px-6 py-16 sm:px-10 ${align}`}>
+                        <InlineText as={Heading} value={heading} placeholder="Heading (optional)" onChange={(v) => commit({ heading: v })} className={`block ${headingCls}`} />
+                        <InlineRichText html={/<\/?[a-z][\s\S]*>/i.test(d.body ?? '') ? d.body : (d.body ? `<p>${d.body}</p>` : '')} onChange={(html) => commit({ body: html })} className={`${bodyHtmlCls} mt-4`} />
+                    </section>
+                );
+            }
+
             return (
-                <section className={`mx-auto max-w-3xl px-6 py-16 sm:px-10 ${align}`}>
-                    {heading && <Heading className={`font-semibold tracking-tight text-neutral-900 ${headingSize[level]}`}>{heading}</Heading>}
-                    {d.body && <p className={`whitespace-pre-line leading-relaxed text-neutral-600 ${heading ? 'mt-4' : ''}`}>{d.body}</p>}
+                <section className={`mx-auto ${cw('max-w-3xl')} px-6 py-16 sm:px-10 ${align}`}>
+                    {heading && <Heading className={headingCls}>{heading}</Heading>}
+                    {d.body && (/<\/?[a-z][\s\S]*>/i.test(d.body)
+                        ? <div className={`${bodyHtmlCls} ${heading ? 'mt-4' : ''}`} dangerouslySetInnerHTML={{ __html: d.body }} />
+                        : <p className={`whitespace-pre-line leading-relaxed text-neutral-600 ${heading ? 'mt-4' : ''}`}>{d.body}</p>
+                    )}
                 </section>
             );
         }
 
         case 'image': {
             return (
-                <section className="mx-auto max-w-5xl px-6 py-12 sm:px-10">
+                <section className={`mx-auto ${cw('max-w-5xl')} px-6 py-12 sm:px-10`}>
                     {d.image_url ? (
-                        <img src={d.image_url} alt={d.alt || d.caption || ''} title={d.title || undefined} loading="lazy" className="w-full rounded-2xl object-cover" />
+                        <RetryImg src={d.image_url} alt={d.alt || d.caption || ''} title={d.title || undefined} loading="lazy" sizes="(min-width:1024px) 1024px, 100vw" className="w-full rounded-2xl object-cover" />
                     ) : (
                         <div className="flex h-64 w-full items-center justify-center rounded-2xl bg-neutral-100 text-sm text-neutral-400">Image</div>
                     )}
-                    {d.caption && <p className="mt-3 text-center text-sm text-neutral-400">{d.caption}</p>}
+                    {edit
+                        ? <InlineText as="p" value={d.caption ?? ''} placeholder="Caption (optional)" onChange={(v) => commit({ caption: v })} className="mt-3 block text-center text-sm text-neutral-400" />
+                        : d.caption && <p className="mt-3 text-center text-sm text-neutral-400">{d.caption}</p>}
                 </section>
             );
         }
@@ -503,7 +872,7 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
         case 'video': {
             const src = videoEmbedUrl(d.url);
             return (
-                <section className="mx-auto max-w-4xl px-6 py-12 sm:px-10">
+                <section className={`mx-auto ${cw('max-w-4xl')} px-6 py-12 sm:px-10`}>
                     {src ? (
                         <div className="relative w-full overflow-hidden rounded-2xl bg-black" style={{ paddingTop: '56.25%' }}>
                             <iframe src={src} title={d.caption || 'Video'} className="absolute inset-0 h-full w-full" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
@@ -511,7 +880,9 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
                     ) : (
                         <div className="flex h-64 w-full items-center justify-center rounded-2xl bg-neutral-100 text-sm text-neutral-400">Paste a YouTube or Vimeo link</div>
                     )}
-                    {d.caption && <p className="mt-3 text-center text-sm text-neutral-400">{d.caption}</p>}
+                    {edit
+                        ? <InlineText as="p" value={d.caption ?? ''} placeholder="Caption (optional)" onChange={(v) => commit({ caption: v })} className="mt-3 block text-center text-sm text-neutral-400" />
+                        : d.caption && <p className="mt-3 text-center text-sm text-neutral-400">{d.caption}</p>}
                 </section>
             );
         }
@@ -525,8 +896,10 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
             const style = outline ? { borderColor: primary, color: primary } : { backgroundColor: primary };
             const inner = <span className={cls} style={style}>{d.label || 'Button'}</span>;
             return (
-                <section className={`mx-auto flex max-w-6xl px-6 py-6 sm:px-10 ${align}`}>
-                    {interactive && d.link ? <a href={d.link}>{inner}</a> : inner}
+                <section className={`mx-auto flex ${cw('max-w-6xl')} px-6 py-6 sm:px-10 ${align}`}>
+                    {edit
+                        ? <InlineText as="span" value={d.label ?? ''} placeholder="Button" onChange={(v) => commit({ label: v })} className={cls} style={style} />
+                        : interactive && d.link ? <a href={d.link}>{inner}</a> : inner}
                 </section>
             );
         }
@@ -534,7 +907,14 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
         case 'cta':
             return (
                 <section className="px-6 py-6 sm:px-10">
-                    <div className="mx-auto max-w-5xl rounded-3xl px-8 py-14 text-center" style={{ backgroundColor: primary }}>
+                    <div className={`mx-auto ${cw('max-w-5xl')} rounded-3xl px-8 py-14 text-center`} style={{ backgroundColor: primary }}>
+                        {edit ? (
+                            <>
+                                <InlineText as="h2" value={d.heading ?? ''} placeholder="Heading" onChange={(v) => commit({ heading: v })} className="block text-3xl font-semibold tracking-tight text-white" />
+                                <InlineText as="p" value={d.subheading ?? ''} placeholder="Supporting line (optional)" onChange={(v) => commit({ subheading: v })} className="mx-auto mt-3 block max-w-xl text-white/80" />
+                                <InlineText as="span" value={d.button_label ?? ''} placeholder="Button label" onChange={(v) => commit({ button_label: v })} className="mt-7 inline-block rounded-full bg-white px-7 py-3 text-sm font-semibold" style={{ color: primary }} />
+                            </>
+                        ) : (<>
                         {d.heading && <h2 className="text-3xl font-semibold tracking-tight text-white">{d.heading}</h2>}
                         {d.subheading && <p className="mx-auto mt-3 max-w-xl text-white/80">{d.subheading}</p>}
                         {d.button_label && (
@@ -546,6 +926,7 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
                                 )}
                             </span>
                         )}
+                        </>)}
                     </div>
                 </section>
             );
@@ -553,18 +934,31 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
         case 'faq': {
             const items: any[] = Array.isArray(d.items) ? d.items : [];
             return (
-                <section className="mx-auto max-w-3xl px-6 py-20 sm:px-10">
-                    {d.heading && <h2 className="mb-10 text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
+                <section className={`mx-auto ${cw('max-w-3xl')} px-6 py-20 sm:px-10`}>
+                    {edit
+                        ? <InlineText as="h2" value={d.heading ?? ''} placeholder="Section heading" onChange={(v) => commit({ heading: v })} className="mb-10 block text-center text-3xl font-semibold tracking-tight text-neutral-900" />
+                        : d.heading && <h2 className="mb-10 text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
                     <div className="divide-y divide-neutral-200 border-y border-neutral-200">
-                        {items.map((it, i) => (
-                            <details key={i} className="group py-4">
-                                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-medium text-neutral-900">
-                                    {it.q}
-                                    <svg className="h-5 w-5 shrink-0 text-neutral-400 transition group-open:rotate-45" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                                </summary>
-                                <p className="mt-3 whitespace-pre-line leading-relaxed text-neutral-600">{it.a}</p>
-                            </details>
-                        ))}
+                        {items.map((it, i) => {
+                            const setItem = (partial: Record<string, unknown>) => commit({ items: items.map((x, idx) => (idx === i ? { ...x, ...partial } : x)) });
+                            if (edit) {
+                                return (
+                                    <div key={i} className="py-4">
+                                        <InlineText as="p" value={it.q ?? ''} placeholder="Question" onChange={(v) => setItem({ q: v })} className="block text-base font-medium text-neutral-900" />
+                                        <InlineText as="p" value={it.a ?? ''} placeholder="Answer" onChange={(v) => setItem({ a: v })} className="mt-3 block whitespace-pre-line leading-relaxed text-neutral-600" />
+                                    </div>
+                                );
+                            }
+                            return (
+                                <details key={i} className="group py-4">
+                                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-medium text-neutral-900">
+                                        {it.q}
+                                        <svg className="h-5 w-5 shrink-0 text-neutral-400 transition group-open:rotate-45" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                                    </summary>
+                                    <p className="mt-3 whitespace-pre-line leading-relaxed text-neutral-600">{it.a}</p>
+                                </details>
+                            );
+                        })}
                     </div>
                 </section>
             );
@@ -574,18 +968,33 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
             const items: any[] = Array.isArray(d.items) ? d.items : [];
             return (
                 <section className="bg-neutral-50 px-6 py-20 sm:px-10">
-                    <div className="mx-auto max-w-6xl">
-                        {d.heading && <h2 className="mb-12 text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
+                    <div className={`mx-auto ${cw('max-w-6xl')}`}>
+                        {edit
+                            ? <InlineText as="h2" value={d.heading ?? ''} placeholder="Section heading" onChange={(v) => commit({ heading: v })} className="mb-12 block text-center text-3xl font-semibold tracking-tight text-neutral-900" />
+                            : d.heading && <h2 className="mb-12 text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
                         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                            {items.map((it, i) => (
-                                <figure key={i} className="rounded-2xl border border-neutral-100 bg-white p-7 shadow-sm">
-                                    <Stars value={5} className="h-4 w-4" />
-                                    <blockquote className="mt-3 leading-relaxed text-neutral-700">“{it.quote}”</blockquote>
-                                    <figcaption className="mt-4 text-sm font-semibold text-neutral-900">
-                                        {it.author}{it.role ? <span className="font-normal text-neutral-400"> · {it.role}</span> : null}
-                                    </figcaption>
-                                </figure>
-                            ))}
+                            {items.map((it, i) => {
+                                const setItem = (partial: Record<string, unknown>) => commit({ items: items.map((x, idx) => (idx === i ? { ...x, ...partial } : x)) });
+                                return (
+                                    <figure key={i} className="rounded-2xl border border-neutral-100 bg-white p-7 shadow-sm">
+                                        <Stars value={5} className="h-4 w-4" />
+                                        {edit ? (
+                                            <>
+                                                <InlineText as="blockquote" value={it.quote ?? ''} placeholder="Quote" onChange={(v) => setItem({ quote: v })} className="mt-3 block leading-relaxed text-neutral-700" />
+                                                <InlineText as="p" value={it.author ?? ''} placeholder="Author" onChange={(v) => setItem({ author: v })} className="mt-4 block text-sm font-semibold text-neutral-900" />
+                                                <InlineText as="p" value={it.role ?? ''} placeholder="Role (optional)" onChange={(v) => setItem({ role: v })} className="block text-sm text-neutral-400" />
+                                            </>
+                                        ) : (
+                                            <>
+                                                <blockquote className="mt-3 leading-relaxed text-neutral-700">“{it.quote}”</blockquote>
+                                                <figcaption className="mt-4 text-sm font-semibold text-neutral-900">
+                                                    {it.author}{it.role ? <span className="font-normal text-neutral-400"> · {it.role}</span> : null}
+                                                </figcaption>
+                                            </>
+                                        )}
+                                    </figure>
+                                );
+                            })}
                         </div>
                     </div>
                 </section>
@@ -596,11 +1005,28 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
             const plans: any[] = Array.isArray(d.plans) ? d.plans : [];
             const cols = plans.length === 2 ? 'sm:grid-cols-2' : plans.length >= 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-2 lg:grid-cols-3';
             return (
-                <section className="mx-auto max-w-6xl px-6 py-20 sm:px-10">
-                    {d.heading && <h2 className="mb-12 text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
+                <section className={`mx-auto ${cw('max-w-6xl')} px-6 py-20 sm:px-10`}>
+                    {edit
+                        ? <InlineText as="h2" value={d.heading ?? ''} placeholder="Section heading" onChange={(v) => commit({ heading: v })} className="mb-12 block text-center text-3xl font-semibold tracking-tight text-neutral-900" />
+                        : d.heading && <h2 className="mb-12 text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
                     <div className={`grid grid-cols-1 gap-6 ${cols}`}>
                         {plans.map((p, i) => {
                             const features = String(p.features || '').split('\n').map((f: string) => f.trim()).filter(Boolean);
+                            const setPlan = (partial: Record<string, unknown>) => commit({ plans: plans.map((x, idx) => (idx === i ? { ...x, ...partial } : x)) });
+                            if (edit) {
+                                return (
+                                    <div key={i} className={`flex flex-col rounded-2xl border p-7 ${p.featured ? 'shadow-lg' : 'border-neutral-200'}`} style={p.featured ? { borderColor: primary } : undefined}>
+                                        <InlineText as="h3" value={p.name ?? ''} placeholder="Plan name" onChange={(v) => setPlan({ name: v })} className="block text-lg font-semibold text-neutral-900" />
+                                        <p className="mt-3">
+                                            <InlineText as="span" value={p.price ?? ''} placeholder="Price" onChange={(v) => setPlan({ price: v })} className="text-3xl font-bold text-neutral-900" />
+                                            {' '}
+                                            <InlineText as="span" value={p.period ?? ''} placeholder="period" onChange={(v) => setPlan({ period: v })} className="text-sm text-neutral-400" />
+                                        </p>
+                                        <InlineText as="p" value={p.features ?? ''} placeholder="One feature per line" onChange={(v) => setPlan({ features: v })} className="mt-6 block whitespace-pre-line text-sm leading-relaxed text-neutral-600" />
+                                        <InlineText as="span" value={p.button_label ?? ''} placeholder="Button label (optional)" onChange={(v) => setPlan({ button_label: v })} className="mt-7 block rounded-full px-5 py-2.5 text-center text-sm font-medium text-white" style={{ backgroundColor: primary }} />
+                                    </div>
+                                );
+                            }
                             return (
                                 <div key={i} className={`flex flex-col rounded-2xl border p-7 ${p.featured ? 'shadow-lg' : 'border-neutral-200'}`} style={p.featured ? { borderColor: primary } : undefined}>
                                     <h3 className="text-lg font-semibold text-neutral-900">{p.name}</h3>
@@ -630,8 +1056,10 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
         case 'logos': {
             const images: GalleryImage[] = Array.isArray(d.images) ? d.images.filter(Boolean) : [];
             return (
-                <section className="mx-auto max-w-6xl px-6 py-16 sm:px-10">
-                    {d.heading && <p className="mb-8 text-center text-xs font-medium uppercase tracking-widest text-neutral-400">{d.heading}</p>}
+                <section className={`mx-auto ${cw('max-w-6xl')} px-6 py-16 sm:px-10`}>
+                    {edit
+                        ? <InlineText as="p" value={d.heading ?? ''} placeholder="Heading (optional)" onChange={(v) => commit({ heading: v })} className="mb-8 block text-center text-xs font-medium uppercase tracking-widest text-neutral-400" />
+                        : d.heading && <p className="mb-8 text-center text-xs font-medium uppercase tracking-widest text-neutral-400">{d.heading}</p>}
                     {images.length === 0 ? (
                         <p className="text-center text-sm text-neutral-400">Add some logos.</p>
                     ) : (
@@ -649,7 +1077,7 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
             const q = String(d.query || '').trim();
             const height = Math.min(Math.max(Number(d.height) || 360, 160), 720);
             return (
-                <section className="mx-auto max-w-6xl px-6 py-12 sm:px-10">
+                <section className={`mx-auto ${cw('max-w-6xl')} px-6 py-12 sm:px-10`}>
                     {q ? (
                         <iframe title="Map" className="w-full rounded-2xl border border-neutral-200" style={{ height }} loading="lazy" src={`https://maps.google.com/maps?q=${encodeURIComponent(q)}&output=embed`} />
                     ) : (
@@ -661,7 +1089,7 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
 
         case 'embed':
             return (
-                <section className="mx-auto max-w-4xl px-6 py-12 sm:px-10">
+                <section className={`mx-auto ${cw('max-w-4xl')} px-6 py-12 sm:px-10`}>
                     {d.html ? (
                         <div className="site-embed" dangerouslySetInnerHTML={{ __html: d.html }} />
                     ) : (
@@ -674,7 +1102,7 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
             const sizes: Record<string, string> = { sm: 'py-4', md: 'py-8', lg: 'py-16' };
             const pad = sizes[d.size as string] ?? sizes.md;
             return (
-                <section className={`mx-auto max-w-4xl px-6 sm:px-10 ${pad}`}>
+                <section className={`mx-auto ${cw('max-w-4xl')} px-6 sm:px-10 ${pad}`}>
                     {d.style !== 'space' && <hr className="border-neutral-200" />}
                 </section>
             );
@@ -687,7 +1115,18 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
             const children = block.children ?? [];
 
             return (
-                <section className="mx-auto max-w-6xl px-6 py-10 sm:px-10">
+                <section className={`mx-auto ${cw('max-w-6xl')} px-6 py-10 sm:px-10`}>
+                    {edit ? (
+                        <div className="mb-8 text-center">
+                            <InlineText as="h2" value={d.heading ?? ''} placeholder="Heading (optional)" onChange={(v) => commit({ heading: v })} className="block text-3xl font-semibold tracking-tight text-neutral-900" />
+                            <InlineText as="p" value={d.body ?? ''} placeholder="Intro text (optional)" onChange={(v) => commit({ body: v })} className="mx-auto mt-3 block max-w-2xl text-neutral-600" />
+                        </div>
+                    ) : (d.heading || d.body) && (
+                        <div className="mb-8 text-center">
+                            {d.heading && <h2 className="text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
+                            {d.body && <p className="mx-auto mt-3 max-w-2xl text-neutral-600">{d.body}</p>}
+                        </div>
+                    )}
                     <div className={`grid grid-cols-1 ${colsClass} ${gap}`}>
                         {Array.from({ length: cols }).map((_, col) => (
                             <div key={col} className="min-w-0">
@@ -703,7 +1142,7 @@ function BlockInner({ block, theme, slug, basePath, interactive, posts, categori
         }
 
         case 'contact':
-            return <ContactBlock data={d} theme={theme} slug={slug} basePath={base} interactive={interactive} />;
+            return <ContactBlock data={d} theme={theme} slug={slug} basePath={base} interactive={interactive} width={block.settings?.width} onEditHeading={edit ? (v) => commit({ heading: v }) : undefined} onEditSubheading={edit ? (v) => commit({ subheading: v }) : undefined} />;
 
         case 'footer':
             return (
@@ -742,6 +1181,11 @@ export function BlockView(props: BlockViewProps) {
         s.text_color ? 'blk-text' : '',
         s.text_size && s.text_size !== 'base' ? `blk-size-${s.text_size}` : '',
         s.padding ? `blk-pad-${s.padding}` : '',
+        s.pad_top ? `blk-pt-${s.pad_top}` : '',
+        s.pad_bottom ? `blk-pb-${s.pad_bottom}` : '',
+        s.pad_left ? `blk-pl-${s.pad_left}` : '',
+        s.pad_right ? `blk-pr-${s.pad_right}` : '',
+        s.class_name ?? '',
     ].filter(Boolean).join(' ');
 
     const frameStyle: React.CSSProperties = {};
@@ -752,7 +1196,9 @@ export function BlockView(props: BlockViewProps) {
     // Always wrap so the block-type class is present in the DOM for every block.
     const content = <div className={frameClasses} style={frameStyle}>{inner}</div>;
 
-    if (!editing) return content;
+    // On the live site a hidden block renders nothing; in the builder it stays
+    // visible (dimmed) so it can be selected and toggled back on.
+    if (!editing) return block.hidden ? null : content;
 
     const selected = editing.selectedId === block.id;
     return (
@@ -760,7 +1206,12 @@ export function BlockView(props: BlockViewProps) {
             className={`group/blk relative cursor-pointer ${selected ? 'z-10 ring-2 ring-inset ring-blue-500' : 'ring-1 ring-inset ring-transparent hover:ring-2 hover:ring-blue-300'}`}
             onClick={(e) => { e.stopPropagation(); e.preventDefault(); editing.onSelect(block.id); }}
         >
-            {content}
+            <div className={block.hidden ? 'opacity-40 grayscale' : ''}>{content}</div>
+            {block.hidden && (
+                <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center py-1">
+                    <span className="rounded-full bg-neutral-900/80 px-2 py-0.5 text-[11px] font-medium text-white shadow">Hidden — not shown on live site</span>
+                </div>
+            )}
             <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-center justify-between gap-2 px-2 py-1 transition ${selected ? 'opacity-100' : 'opacity-0 group-hover/blk:opacity-100'}`}>
                 <span className="pointer-events-auto rounded bg-blue-600 px-1.5 py-0.5 text-[11px] font-medium text-white shadow">{blockLabel(block.type)}</span>
                 <span className="pointer-events-auto flex gap-1">
@@ -1129,7 +1580,7 @@ function ReviewsBlock({ block, d, primary, editing }: { block: SiteBlock; d: Rec
     }
 
     return (
-        <section className="mx-auto max-w-6xl px-6 py-20 sm:px-10">
+        <section className={`mx-auto ${containerW(block.settings?.width, 'max-w-6xl')} px-6 py-20 sm:px-10`}>
             {d.heading && <h2 className="text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
             {d.subheading && <p className="mx-auto mt-3 max-w-2xl text-center text-neutral-500">{d.subheading}</p>}
             <div className={d.heading || d.subheading ? 'mt-12' : ''}>
@@ -1191,7 +1642,7 @@ function ReviewsBlock({ block, d, primary, editing }: { block: SiteBlock; d: Rec
 
 // ─── Blog block (post grid + optional category filter) ────────────────────────
 
-function BlogBlock({ d, posts, categories, slug, interactive, primary }: { d: Record<string, any>; posts?: BlogPostCard[]; categories?: SiteCategory[]; slug: string; interactive: boolean; primary: string }) {
+function BlogBlock({ d, posts, categories, slug, interactive, primary, width }: { d: Record<string, any>; posts?: BlogPostCard[]; categories?: SiteCategory[]; slug: string; interactive: boolean; primary: string; width?: string }) {
     const all = posts ?? [];
     const cols = Number(d.columns) === 2 ? 'sm:grid-cols-2' : Number(d.columns) === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-2 lg:grid-cols-3';
     const fmt = (s: string | null) => (s ? new Date(s).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '');
@@ -1235,8 +1686,17 @@ function BlogBlock({ d, posts, categories, slug, interactive, primary }: { d: Re
     const limit = Number(d.limit) || 0;
     const list = limit > 0 ? filtered.slice(0, limit) : filtered;
 
+    // Optional pagination: "Posts per page" on the blog page (0 = show all).
+    const perPage = Number(d.per_page) || 0;
+    const [page, setPage] = useState(1);
+    // Reset to the first page when the category filter changes.
+    useEffect(() => setPage(1), [active]);
+    const pageCount = perPage > 0 ? Math.max(1, Math.ceil(list.length / perPage)) : 1;
+    const currentPage = Math.min(page, pageCount);
+    const pageList = perPage > 0 ? list.slice((currentPage - 1) * perPage, currentPage * perPage) : list;
+
     return (
-        <section className="mx-auto max-w-6xl px-6 py-20 sm:px-10">
+        <section className={`mx-auto ${containerW(width, 'max-w-6xl')} px-6 py-20 sm:px-10`}>
             {d.heading && <h2 className="mb-8 text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
 
             {showFilter && (
@@ -1271,13 +1731,13 @@ function BlogBlock({ d, posts, categories, slug, interactive, primary }: { d: Re
                 <p className="text-center text-sm text-neutral-400">No posts published yet.</p>
             ) : (
                 <div className={`grid grid-cols-1 gap-8 ${cols}`}>
-                    {list.map((p) => {
+                    {pageList.map((p) => {
                         const href = p.url ?? `/site/${slug}/blog/${p.slug}`;
                         const cats = p.categories ?? [];
                         const inner = (
                             <>
                                 {p.cover_image ? (
-                                    <img src={p.cover_image} alt="" loading="lazy" className="aspect-[3/2] w-full rounded-xl object-cover" />
+                                    <img src={p.cover_image} srcSet={buildSrcSet(p.cover_image) ?? undefined} sizes="(min-width:1024px) 33vw, (min-width:640px) 50vw, 100vw" alt="" loading="lazy" decoding="async" className="aspect-[3/2] w-full rounded-xl object-cover" />
                                 ) : (
                                     <div className="flex aspect-[3/2] w-full items-center justify-center rounded-xl bg-neutral-100 text-xs text-neutral-300">Cover</div>
                                 )}
@@ -1296,6 +1756,38 @@ function BlogBlock({ d, posts, categories, slug, interactive, primary }: { d: Re
                             <div key={p.slug} className="block">{inner}</div>
                         );
                     })}
+                </div>
+            )}
+
+            {perPage > 0 && pageCount > 1 && (
+                <div className="mt-14 flex flex-wrap items-center justify-center gap-2">
+                    <button
+                        type="button"
+                        disabled={currentPage <= 1}
+                        onClick={() => interactive && setPage(currentPage - 1)}
+                        className="rounded-full border border-neutral-200 px-4 py-1.5 text-sm font-medium text-neutral-600 transition enabled:hover:border-neutral-300 disabled:opacity-30"
+                    >
+                        Prev
+                    </button>
+                    {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
+                        <button
+                            key={n}
+                            type="button"
+                            onClick={() => interactive && setPage(n)}
+                            className={`h-9 w-9 rounded-full border text-sm font-medium transition ${n === currentPage ? 'border-transparent text-white' : 'border-neutral-200 text-neutral-600 hover:border-neutral-300'}`}
+                            style={n === currentPage ? { backgroundColor: primary } : undefined}
+                        >
+                            {n}
+                        </button>
+                    ))}
+                    <button
+                        type="button"
+                        disabled={currentPage >= pageCount}
+                        onClick={() => interactive && setPage(currentPage + 1)}
+                        className="rounded-full border border-neutral-200 px-4 py-1.5 text-sm font-medium text-neutral-600 transition enabled:hover:border-neutral-300 disabled:opacity-30"
+                    >
+                        Next
+                    </button>
                 </div>
             )}
         </section>
@@ -1324,7 +1816,7 @@ function orderedCategoryTree(categories: SiteCategory[]): { cat: SiteCategory; d
  * for a few seconds until the worker writes the object — this retries until it
  * appears, instead of leaving a broken image until the next save/refresh.
  */
-export function RetryImg({ src, className, style, ...rest }: React.ImgHTMLAttributes<HTMLImageElement> & { src?: string }) {
+export function RetryImg({ src, className, style, sizes, ...rest }: React.ImgHTMLAttributes<HTMLImageElement> & { src?: string }) {
     const [attempt, setAttempt] = useState(0);
     const [errored, setErrored] = useState(false);
 
@@ -1366,12 +1858,18 @@ export function RetryImg({ src, className, style, ...rest }: React.ImgHTMLAttrib
     }
 
     const url = attempt > 0 ? `${src}${src.includes('?') ? '&' : '?'}retry=${attempt}` : src;
+    // Serve right-sized derivatives when the caller declares `sizes` (skipped on a
+    // retry so the cache-busted full image loads if a derivative is mid-write).
+    const srcSet = sizes && attempt === 0 ? buildSrcSet(src) ?? undefined : undefined;
 
     return (
         <img
+            decoding="async"
             {...rest}
             alt={rest.alt ?? ''}
             src={url}
+            srcSet={srcSet}
+            sizes={sizes}
             className={className}
             style={style}
             onError={() => setErrored(true)}
@@ -1408,7 +1906,103 @@ export function galleryCaption(img: GalleryImage): string {
     return typeof img === 'string' ? '' : img?.caption || '';
 }
 
-function GalleryBlock({ d, interactive }: { d: Record<string, any>; interactive: boolean }) {
+/**
+ * JS masonry that mirrors the old WordPress site's `layoutMasonry`: each tile is
+ * measured and absolutely positioned into the currently-shortest column, so a
+ * late-loading image only grows its own column and never reshuffles the others.
+ * The grid stays hidden until its images have loaded and been placed, so it
+ * appears settled rather than "rushing into place" (CSS `columns` reflows as
+ * lazy images load, which caused photos to swap positions mid-scroll).
+ */
+function MasonryGrid({ cols, gap = 16, children }: { cols: number; gap?: number; children: React.ReactNode[] }) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
+    const [revealed, setRevealed] = useState(false);
+
+    const layout = useCallback(() => {
+        const container = containerRef.current;
+        if (!container) return;
+        const width = container.clientWidth;
+        if (!width) return;
+
+        let columns = cols;
+        if (width <= 640) columns = 1;
+        else if (width <= 1024) columns = Math.min(2, cols);
+        columns = Math.max(1, columns);
+
+        const columnWidth = (width - (columns - 1) * gap) / columns;
+        const colHeights = new Array(columns).fill(0);
+
+        itemRefs.current.forEach((el) => {
+            if (!el) return;
+            el.style.width = `${columnWidth}px`;
+            const col = colHeights.indexOf(Math.min(...colHeights));
+            el.style.left = `${col * (columnWidth + gap)}px`;
+            el.style.top = `${colHeights[col]}px`;
+            colHeights[col] += el.offsetHeight + gap;
+        });
+
+        container.style.height = `${Math.max(0, ...colHeights)}px`;
+    }, [cols, gap]);
+
+    useLayoutEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        layout();
+
+        const imgs = Array.from(container.querySelectorAll('img'));
+        const total = imgs.length;
+        let settled = imgs.filter((im) => im.complete).length;
+        const maybeReveal = () => {
+            if (total === 0 || settled >= total) setRevealed(true);
+        };
+        maybeReveal();
+
+        // load/error don't bubble, so listen in the capture phase. Each image
+        // that arrives re-runs the layout and counts toward revealing the grid.
+        const onSettle = () => {
+            settled++;
+            layout();
+            maybeReveal();
+        };
+        container.addEventListener('load', onSettle, true);
+        container.addEventListener('error', onSettle, true);
+
+        const onResize = () => layout();
+        window.addEventListener('resize', onResize);
+
+        // Never stay hidden forever if an image is slow or never loads.
+        const fallback = window.setTimeout(() => setRevealed(true), 2500);
+        const raf = requestAnimationFrame(layout);
+
+        return () => {
+            container.removeEventListener('load', onSettle, true);
+            container.removeEventListener('error', onSettle, true);
+            window.removeEventListener('resize', onResize);
+            clearTimeout(fallback);
+            cancelAnimationFrame(raf);
+        };
+    }, [layout, children.length]);
+
+    return (
+        <div ref={containerRef} className={`relative transition-opacity duration-500 ${revealed ? 'opacity-100' : 'opacity-0'}`}>
+            {children.map((child, i) => (
+                <div
+                    key={i}
+                    ref={(el) => {
+                        itemRefs.current[i] = el;
+                    }}
+                    className="absolute left-0 top-0"
+                >
+                    {child}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function GalleryBlock({ d, interactive, width, onEditHeading }: { d: Record<string, any>; interactive: boolean; width?: string; onEditHeading?: (v: string) => void }) {
     const images: GalleryImage[] = Array.isArray(d.images) ? d.images.filter(Boolean) : [];
     const cols = Math.min(Math.max(Number(d.columns) || 3, 2), 4);
     const layout = ['square', 'landscape', 'portrait', 'masonry'].includes(d.layout) ? d.layout : 'square';
@@ -1416,7 +2010,6 @@ function GalleryBlock({ d, interactive }: { d: Record<string, any>; interactive:
     const [active, setActive] = useState<number | null>(null);
 
     const gridCols = cols === 2 ? 'sm:grid-cols-2' : cols === 4 ? 'sm:grid-cols-2 lg:grid-cols-4' : 'sm:grid-cols-2 lg:grid-cols-3';
-    const masonryCols = cols === 2 ? 'sm:columns-2' : cols === 4 ? 'sm:columns-3 lg:columns-4' : 'sm:columns-2 lg:columns-3';
     const aspect = layout === 'landscape' ? 'aspect-[4/3]' : layout === 'portrait' ? 'aspect-[3/4]' : 'aspect-square';
 
     // Show placeholder tiles in the builder preview when there are no images yet.
@@ -1426,25 +2019,27 @@ function GalleryBlock({ d, interactive }: { d: Record<string, any>; interactive:
     const zoom = canLightbox ? 'cursor-zoom-in' : '';
 
     // Full width breaks out of the usual centered container to span the viewport.
-    const wrap = d.full_width ? 'w-full px-2 py-12 sm:px-3' : 'mx-auto max-w-6xl px-6 py-20 sm:px-10';
+    const wrap = d.full_width ? 'w-full px-2 py-12 sm:px-3' : `mx-auto ${containerW(width, 'max-w-6xl')} px-6 py-20 sm:px-10`;
 
     return (
         <section className={wrap}>
-            {d.heading && <h2 className="mb-12 text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
+            {onEditHeading
+                ? <InlineText as="h2" value={d.heading ?? ''} placeholder="Section heading (optional)" onChange={onEditHeading} className="mb-12 block text-center text-3xl font-semibold tracking-tight text-neutral-900" />
+                : d.heading && <h2 className="mb-12 text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
 
             {tiles.length === 0 ? (
                 <p className="text-center text-sm text-neutral-400">No images yet.</p>
             ) : layout === 'masonry' ? (
-                <div className={`columns-1 gap-3 ${masonryCols} [&>*]:mb-3`}>
+                <MasonryGrid key={tiles.map(galleryThumb).join('|')} cols={cols} gap={12}>
                     {tiles.map((img, i) => {
                         const t = galleryThumb(img);
                         return t ? (
-                            <RetryImg key={i} src={t} alt={galleryAlt(img)} title={galleryTitle(img) || undefined} loading="lazy" onClick={() => open(i)} className={`w-full rounded-lg ${zoom}`} />
+                            <RetryImg key={i} src={t} alt={galleryAlt(img)} title={galleryTitle(img) || undefined} loading="lazy" onClick={() => open(i)} className={`block w-full rounded-lg ${zoom}`} />
                         ) : (
                             <div key={i} className="flex h-40 w-full items-center justify-center rounded-lg bg-neutral-100 text-xs text-neutral-300">Photo</div>
                         );
                     })}
-                </div>
+                </MasonryGrid>
             ) : (
                 <div className={`grid grid-cols-1 gap-3 ${gridCols}`}>
                     {tiles.map((img, i) => {
@@ -1517,12 +2112,21 @@ function Lightbox({ images, index, onClose, onIndex }: { images: LightboxImage[]
 
 // ─── Contact form (the lead capture) ──────────────────────────────────────────
 
-function ContactBlock({ data: d, theme, slug, basePath, interactive }: { data: Record<string, any>; theme: SiteTheme; slug: string; basePath?: string; interactive: boolean }) {
+function ContactBlock({ data: d, theme, slug, basePath, interactive, width, onEditHeading, onEditSubheading }: { data: Record<string, any>; theme: SiteTheme; slug: string; basePath?: string; interactive: boolean; width?: string; onEditHeading?: (v: string) => void; onEditSubheading?: (v: string) => void }) {
     return (
         <section id="contact" className="bg-neutral-50 px-6 py-20 sm:px-10">
-            <div className="mx-auto max-w-xl">
-                {d.heading && <h2 className="text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
-                {d.subheading && <p className="mt-3 text-center text-neutral-600">{d.subheading}</p>}
+            <div className={`mx-auto ${containerW(width, 'max-w-xl')}`}>
+                {onEditHeading ? (
+                    <>
+                        <InlineText as="h2" value={d.heading ?? ''} placeholder="Heading" onChange={onEditHeading} className="block text-center text-3xl font-semibold tracking-tight text-neutral-900" />
+                        <InlineText as="p" value={d.subheading ?? ''} placeholder="Supporting line (optional)" onChange={onEditSubheading!} className="mt-3 block text-center text-neutral-600" />
+                    </>
+                ) : (
+                    <>
+                        {d.heading && <h2 className="text-center text-3xl font-semibold tracking-tight text-neutral-900">{d.heading}</h2>}
+                        {d.subheading && <p className="mt-3 text-center text-neutral-600">{d.subheading}</p>}
+                    </>
+                )}
                 <div className="mt-10">
                     {interactive ? (
                         <ContactFormLive data={d} theme={theme} slug={slug} basePath={basePath ?? `/site/${slug}`} />

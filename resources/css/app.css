@@ -103,3 +103,42 @@
     padding-top: 8rem;
     padding-bottom: 8rem;
 }
+
+/* Per-side padding overrides. Declared after the uniform rules so they win
+   when both are present. Scale: none 0 · sm 1.5rem · md 3rem · lg 5rem · xl 8rem. */
+.blk-pt-none > section, .blk-pt-none > footer { padding-top: 0; }
+.blk-pt-sm   > section, .blk-pt-sm   > footer { padding-top: 1.5rem; }
+.blk-pt-md   > section, .blk-pt-md   > footer { padding-top: 3rem; }
+.blk-pt-lg   > section, .blk-pt-lg   > footer { padding-top: 5rem; }
+.blk-pt-xl   > section, .blk-pt-xl   > footer { padding-top: 8rem; }
+
+.blk-pb-none > section, .blk-pb-none > footer { padding-bottom: 0; }
+.blk-pb-sm   > section, .blk-pb-sm   > footer { padding-bottom: 1.5rem; }
+.blk-pb-md   > section, .blk-pb-md   > footer { padding-bottom: 3rem; }
+.blk-pb-lg   > section, .blk-pb-lg   > footer { padding-bottom: 5rem; }
+.blk-pb-xl   > section, .blk-pb-xl   > footer { padding-bottom: 8rem; }
+
+.blk-pl-none > section, .blk-pl-none > footer { padding-left: 0; }
+.blk-pl-sm   > section, .blk-pl-sm   > footer { padding-left: 1.5rem; }
+.blk-pl-md   > section, .blk-pl-md   > footer { padding-left: 3rem; }
+.blk-pl-lg   > section, .blk-pl-lg   > footer { padding-left: 5rem; }
+.blk-pl-xl   > section, .blk-pl-xl   > footer { padding-left: 8rem; }
+
+.blk-pr-none > section, .blk-pr-none > footer { padding-right: 0; }
+.blk-pr-sm   > section, .blk-pr-sm   > footer { padding-right: 1.5rem; }
+.blk-pr-md   > section, .blk-pr-md   > footer { padding-right: 3rem; }
+.blk-pr-lg   > section, .blk-pr-lg   > footer { padding-right: 5rem; }
+.blk-pr-xl   > section, .blk-pr-xl   > footer { padding-right: 8rem; }
+
+/* In-place (click-to-edit) text fields in the website builder preview. */
+.inline-editable[data-ph]:empty::before {
+    content: attr(data-ph);
+    color: #9ca3af;
+    pointer-events: none;
+}
+
+/* Text caret over editable text, overriding the block wrapper's pointer cursor. */
+.inline-editable,
+.inline-editable * {
+    cursor: text;
+}

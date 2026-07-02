@@ -1,5 +1,5 @@
 import FieldDefinitionsEditor from '@/Components/FieldDefinitionsEditor';
-import RichTextEditor from '@/Components/RichTextEditor';
+import RichTextEditor from '@/Components/LazyRichTextEditor';
 import StudioFieldValues from '@/Components/StudioFieldValues';
 import { ContractField } from '@/types';
 

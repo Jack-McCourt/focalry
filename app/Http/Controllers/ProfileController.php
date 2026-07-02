@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Notifications\NotificationType;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -47,7 +48,32 @@ class ProfileController extends Controller
                 'logo_url' => $studio->logoUrl(),
             ] : null,
             'stripe_key' => config('services.stripe.key'),
+            'notificationTypes' => collect(NotificationType::TYPES)
+                ->map(fn ($t, $key) => [
+                    'key' => $key,
+                    'label' => $t['label'],
+                    'email' => $user->wantsEmail($key),
+                ])->values(),
         ]);
+    }
+
+    /** Update which notification types email this user (in-app bell is always on). */
+    public function updateNotifications(Request $request): RedirectResponse
+    {
+        $allowed = array_keys(NotificationType::TYPES);
+        $data = $request->validate([
+            'preferences' => 'array',
+            'preferences.*' => 'boolean',
+        ]);
+
+        $prefs = collect($data['preferences'] ?? [])
+            ->only($allowed)
+            ->map(fn ($v) => (bool) $v)
+            ->all();
+
+        $request->user()->update(['notification_preferences' => $prefs]);
+
+        return Redirect::route('profile.edit')->with('success', 'Notification preferences saved.');
     }
 
     /**

@@ -1,4 +1,5 @@
 import SiteShell from '@/Components/site/SiteShell';
+import PostHeader, { PostMeta } from '@/Components/site/PostHeader';
 import CookieConsent, { ConsentChoice, readConsent } from '@/Components/site/CookieConsent';
 import { BlogPostCard, PackageCard, SiteBlock, SiteCategory, SiteNavItem, SiteTheme } from '@/types';
 import { Head } from '@inertiajs/react';
@@ -52,6 +53,7 @@ export default function Public({
     categories,
     packages,
     page,
+    post,
 }: {
     site: {
         name: string;
@@ -62,6 +64,7 @@ export default function Public({
         footer_nav: SiteNavItem[];
         head_code: string | null;
         body_code: string | null;
+        custom_css: string | null;
         cookie_consent: boolean;
         cookie_message: string | null;
         cookie_policy_url: string | null;
@@ -76,6 +79,8 @@ export default function Public({
     categories: SiteCategory[];
     packages: PackageCard[];
     page: { title: string; slug: string; blocks: SiteBlock[]; head_code: string | null; body_code: string | null; og_image: string | null; canonical: string };
+    /** Present only on a blog post page — drives the auto-generated post header. */
+    post?: PostMeta;
 }) {
     const ogImage = page.og_image || site.og_image_url;
     // When consent is required, tracking code only injects once the visitor
@@ -96,6 +101,7 @@ export default function Public({
                 {ogImage && <meta property="og:image" content={ogImage} />}
                 <meta name="twitter:card" content={ogImage ? 'summary_large_image' : 'summary'} />
                 {ogImage && <meta name="twitter:image" content={ogImage} />}
+                {site.custom_css && <style id="site-custom-css">{site.custom_css}</style>}
             </Head>
             {trackingAllowed && site.head_code && <CustomCode html={site.head_code} target="head" />}
             {trackingAllowed && page.head_code && <CustomCode html={page.head_code} target="head" />}
@@ -114,6 +120,7 @@ export default function Public({
                 posts={posts}
                 categories={categories}
                 packages={packages}
+                postHeader={post ? <PostHeader post={post} theme={site.theme} /> : undefined}
             />
             {trackingAllowed && site.body_code && <CustomCode html={site.body_code} target="body" />}
             {trackingAllowed && page.body_code && <CustomCode html={page.body_code} target="body" />}

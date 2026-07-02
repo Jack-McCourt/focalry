@@ -5,12 +5,13 @@ import { SITE_FONTS } from '@/lib/siteFonts';
 import { SiteTemplateMeta } from '@/types';
 import { router } from '@inertiajs/react';
 
-export type SettingsTabKey = 'navigation' | 'theme' | 'header_footer' | 'redirects' | 'domain' | 'general' | 'templates';
+export type SettingsTabKey = 'navigation' | 'theme' | 'header_footer' | 'custom_css' | 'redirects' | 'domain' | 'general' | 'templates';
 
 export const SETTINGS_TABS: { key: SettingsTabKey; label: string }[] = [
     { key: 'navigation', label: 'Menus' },
     { key: 'theme', label: 'Theme' },
     { key: 'header_footer', label: 'Header & Footer' },
+    { key: 'custom_css', label: 'Custom CSS' },
     { key: 'redirects', label: 'Redirects' },
     { key: 'domain', label: 'Domain' },
     { key: 'general', label: 'General' },
@@ -21,7 +22,7 @@ export const SETTINGS_TABS: { key: SettingsTabKey; label: string }[] = [
 // Pass `onSave`/`saving` for an explicit Save button (page mode), or `onClose`
 // for a "Done" link.
 export default function SiteSettings(props: any) {
-    const { name, setName, slug, setSlug, contactEmail, setContactEmail, autoCreateProject, setAutoCreateProject, seoTitle, setSeoTitle, seoDescription, setSeoDescription, theme, setTheme, errors, templates, applyTemplate, pageRefs, headerNav, setHeaderNav, footerNav, setFooterNav, headCode, setHeadCode, bodyCode, setBodyCode, cookieConsent, setCookieConsent, cookieMessage, setCookieMessage, cookiePolicyUrl, setCookiePolicyUrl, faviconUrl, setFaviconUrl, ogImageUrl, setOgImageUrl, redirects, setRedirects, site, domainConfig, studioLogo, tab, setTab, onClose, onSave, saving } = props;
+    const { name, setName, slug, setSlug, contactEmail, setContactEmail, autoCreateProject, setAutoCreateProject, seoTitle, setSeoTitle, seoDescription, setSeoDescription, theme, setTheme, errors, templates, applyTemplate, pageRefs, headerNav, setHeaderNav, footerNav, setFooterNav, headCode, setHeadCode, bodyCode, setBodyCode, customCss, setCustomCss, cookieConsent, setCookieConsent, cookieMessage, setCookieMessage, cookiePolicyUrl, setCookiePolicyUrl, faviconUrl, setFaviconUrl, ogImageUrl, setOgImageUrl, redirects, setRedirects, site, domainConfig, studioLogo, tab, setTab, onClose, onSave, saving } = props;
 
     const uploadLogo = (file: File) => {
         const fd = new FormData();
@@ -103,6 +104,24 @@ export default function SiteSettings(props: any) {
                     </div>
                 )}
 
+                {tab === 'custom_css' && (
+                    <div>
+                        <h3 className="mb-1 text-sm font-semibold text-neutral-900">Custom CSS</h3>
+                        <p className="mb-2 text-xs text-neutral-500">Added as a <code>&lt;style&gt;</code> tag on every page of your published site, after the theme styles. Target a block with the class you set in its <strong>Style</strong> tab, or the built-in <code>.site-block</code> / <code>.block-&lt;type&gt;</code> hooks.</p>
+                        <textarea
+                            className="input font-mono text-xs"
+                            rows={16}
+                            value={customCss}
+                            onChange={(e) => setCustomCss(e.target.value)}
+                            placeholder={'.block-hero h1 {\n    letter-spacing: 0.04em;\n}\n\n.my-custom-block {\n    background: #faf7f2;\n}'}
+                            spellCheck={false}
+                        />
+                        <p className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                            Tip: give a block a class in its <strong>Style → Custom class</strong> field, then style it here with <code>.your-class</code>.
+                        </p>
+                    </div>
+                )}
+
                 {tab === 'redirects' && (
                     <div>
                         <h3 className="mb-1 text-sm font-semibold text-neutral-900">Redirects</h3>
@@ -140,6 +159,11 @@ export default function SiteSettings(props: any) {
                             <span className="label mb-1.5 block">Navigation text colour</span>
                             <ColorPicker value={theme.nav_color ?? ''} onChange={(c) => setTheme({ ...theme, nav_color: c || undefined })} allowClear />
                         </div>
+                        <div>
+                            <span className="label mb-1.5 block">Body text colour</span>
+                            <ColorPicker value={theme.text_color ?? ''} onChange={(c) => setTheme({ ...theme, text_color: c || undefined })} allowClear />
+                            <p className="mt-1 text-xs text-neutral-400">Overrides the general text colour across your pages. Clear to use the default.</p>
+                        </div>
                         <label className="block">
                             <span className="label mb-1.5 block">Title font</span>
                             <select className="input" value={theme.heading_font ?? theme.font} onChange={(e) => setTheme({ ...theme, heading_font: e.target.value })}>
@@ -150,6 +174,17 @@ export default function SiteSettings(props: any) {
                             <p className="mt-1 text-xs text-neutral-400">Used for all headings.</p>
                         </label>
                         <label className="block">
+                            <span className="label mb-1.5 block">Title weight</span>
+                            <select className="input" value={theme.heading_weight ?? ''} onChange={(e) => setTheme({ ...theme, heading_weight: e.target.value ? Number(e.target.value) : undefined })}>
+                                <option value="">Default (font's own)</option>
+                                <option value="300">Light</option>
+                                <option value="400">Regular</option>
+                                <option value="500">Medium</option>
+                                <option value="600">Semibold</option>
+                                <option value="700">Bold</option>
+                            </select>
+                        </label>
+                        <label className="block">
                             <span className="label mb-1.5 block">Body font</span>
                             <select className="input" value={theme.body_font ?? theme.font} onChange={(e) => setTheme({ ...theme, body_font: e.target.value, font: e.target.value === 'serif' ? 'serif' : 'sans' })}>
                                 {SITE_FONTS.map((f) => (
@@ -157,6 +192,17 @@ export default function SiteSettings(props: any) {
                                 ))}
                             </select>
                             <p className="mt-1 text-xs text-neutral-400">Used for paragraphs and everything else.</p>
+                        </label>
+                        <label className="block">
+                            <span className="label mb-1.5 block">Body weight</span>
+                            <select className="input" value={theme.body_weight ?? ''} onChange={(e) => setTheme({ ...theme, body_weight: e.target.value ? Number(e.target.value) : undefined })}>
+                                <option value="">Default (font's own)</option>
+                                <option value="300">Light</option>
+                                <option value="400">Regular</option>
+                                <option value="500">Medium</option>
+                                <option value="600">Semibold</option>
+                                <option value="700">Bold</option>
+                            </select>
                         </label>
                         <label className="block">
                             <span className="label mb-1.5 block">Logo &amp; menu font</span>

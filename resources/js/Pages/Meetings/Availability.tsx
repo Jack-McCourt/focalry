@@ -2,18 +2,13 @@ import MeetingsSubNav from '@/Components/MeetingsSubNav';
 import StudioManagerNav from '@/Components/StudioManagerNav';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 
 interface Rule {
     day_of_week: number;
     start_time: string;
     end_time: string;
-}
-
-interface CalendarState {
-    connected: boolean;
-    email: string | null;
 }
 
 interface ZoomState {
@@ -31,7 +26,6 @@ export default function Availability({
     project_dates,
     timezone,
     timezones,
-    calendar,
     zoom,
 }: PageProps<{
     rules: Rule[];
@@ -40,7 +34,6 @@ export default function Availability({
     project_dates: string[];
     timezone: string;
     timezones: string[];
-    calendar: CalendarState;
     zoom: ZoomState;
 }>) {
     const { data, setData, patch, processing, recentlySuccessful } = useForm<{
@@ -107,31 +100,10 @@ export default function Availability({
             <MeetingsSubNav active="availability" />
 
             <div className="px-4 py-6 sm:px-8">
-                {/* Google Calendar connection */}
-                <div className="mb-6 flex max-w-2xl flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4">
-                    <div className="flex items-center gap-3">
-                        <svg className="h-6 w-6 text-neutral-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" /></svg>
-                        <div>
-                            <p className="text-sm font-medium text-neutral-900">Google Calendar</p>
-                            {calendar.connected ? (
-                                <p className="text-xs text-emerald-600">Connected{calendar.email ? ` · ${calendar.email}` : ''} — confirmed meetings sync and invite both parties automatically.</p>
-                            ) : (
-                                <p className="text-xs text-neutral-500">Connect to add confirmed meetings to your calendar, email invites to both parties, and auto-create Google Meet links.</p>
-                            )}
-                        </div>
-                    </div>
-                    {calendar.connected ? (
-                        <button
-                            type="button"
-                            onClick={() => confirm('Disconnect Google Calendar? New meetings will no longer sync.') && router.delete(route('google-calendar.disconnect'))}
-                            className="btn-secondary px-3 py-1.5 text-xs"
-                        >
-                            Disconnect
-                        </button>
-                    ) : (
-                        <a href={route('google-calendar.connect')} className="btn-primary px-3 py-1.5 text-xs">Connect</a>
-                    )}
-                </div>
+                <p className="mb-6 max-w-2xl text-sm text-neutral-500">
+                    Connect Google Calendar from the{' '}
+                    <Link href={route('calendar.index')} className="font-medium text-blue-600 hover:text-blue-800">Calendar</Link> page.
+                </p>
 
                 {/* Zoom connection */}
                 <div className="mb-6 flex max-w-2xl flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4">

@@ -1,5 +1,6 @@
 import ColorPicker from '@/Components/ColorPicker';
 import Modal from '@/Components/Modal';
+import RichTextEditor from '@/Components/LazyRichTextEditor';
 import { BlockSettings, SiteBlock, SiteNavItem } from '@/types';
 import { useRef, useState } from 'react';
 import { EVENT_TYPES, GalleryImage, galleryAlt, galleryCaption, galleryThumb, galleryTitle, RetryImg } from './blocks';
@@ -88,30 +89,6 @@ const posIcon = (x: number, y: number) => (
 );
 
 /** Drag-to-set focal point over a preview image (same UX as gallery covers). */
-function FocalPointPicker({ imageUrl, x, y, onChange }: { imageUrl: string; x: number; y: number; onChange: (x: number, y: number) => void }) {
-    const dragging = useRef(false);
-    const apply = (el: HTMLElement, clientX: number, clientY: number) => {
-        const r = el.getBoundingClientRect();
-        const nx = Math.max(0, Math.min(100, Math.round(((clientX - r.left) / r.width) * 100)));
-        const ny = Math.max(0, Math.min(100, Math.round(((clientY - r.top) / r.height) * 100)));
-        onChange(nx, ny);
-    };
-    return (
-        <Field label="Focal point">
-            <div
-                onPointerDown={(e) => { dragging.current = true; e.currentTarget.setPointerCapture(e.pointerId); apply(e.currentTarget, e.clientX, e.clientY); }}
-                onPointerMove={(e) => { if (dragging.current) apply(e.currentTarget, e.clientX, e.clientY); }}
-                onPointerUp={(e) => { dragging.current = false; if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); }}
-                className="relative h-40 w-full touch-none cursor-grab overflow-hidden rounded-lg bg-neutral-100 active:cursor-grabbing"
-            >
-                <img src={imageUrl} alt="" draggable={false} className="absolute inset-0 h-full w-full select-none object-cover" style={{ objectPosition: `${x}% ${y}%` }} />
-                <div className="pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-white/20 shadow ring-1 ring-black/40" style={{ left: `${x}%`, top: `${y}%` }} />
-            </div>
-            <p className="mt-1 text-xs text-neutral-500">Drag the marker to choose which part of the image stays in view.</p>
-        </Field>
-    );
-}
-
 function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
     return (
         <label className="flex items-center justify-between gap-2 py-1">
@@ -129,7 +106,7 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
 
 // ─── Image upload field ───────────────────────────────────────────────────────
 
-export function ImageField({ label, value, onChange, allowGallery = true, seo, onSeoChange }: {
+export function ImageField({ label, value, onChange, allowGallery = true, seo, onSeoChange, focal, onFocalChange }: {
     label: string;
     value: string;
     onChange: (url: string) => void;
@@ -138,12 +115,27 @@ export function ImageField({ label, value, onChange, allowGallery = true, seo, o
      * preview opens a popup to edit alt text & title (same UX as gallery images). */
     seo?: { alt?: string; title?: string };
     onSeoChange?: (patch: { alt?: string; title?: string }) => void;
+    /** When onFocalChange is provided, the preview doubles as a focal-point picker:
+     * drag the marker to choose which part of the image stays in view. */
+    focal?: { x: number; y: number };
+    onFocalChange?: (x: number, y: number) => void;
 }) {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [pickerOpen, setPickerOpen] = useState(false);
     const [seoOpen, setSeoOpen] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
+    const dragging = useRef(false);
+
+    const focalActive = !!onFocalChange;
+    const fx = focal?.x ?? 50;
+    const fy = focal?.y ?? 50;
+    const applyFocal = (el: HTMLElement, clientX: number, clientY: number) => {
+        const r = el.getBoundingClientRect();
+        const nx = Math.max(0, Math.min(100, Math.round(((clientX - r.left) / r.width) * 100)));
+        const ny = Math.max(0, Math.min(100, Math.round(((clientY - r.top) / r.height) * 100)));
+        onFocalChange?.(nx, ny);
+    };
 
     const upload = async (file: File) => {
         setUploading(true);
@@ -168,16 +160,33 @@ export function ImageField({ label, value, onChange, allowGallery = true, seo, o
             <div className="space-y-2">
                 {value && (
                     <div className="group relative">
-                        <img src={value} alt={seo?.alt || ''} title={seo?.title || undefined} className="h-28 w-full rounded-lg border border-neutral-200 object-cover" />
-                        {onSeoChange && (
-                            <>
-                                <button type="button" onClick={() => setSeoOpen(true)} className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition group-hover:opacity-100" title="Edit alt text & SEO">
-                                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
-                                </button>
-                                {!seo?.alt && (
-                                    <span className="absolute bottom-1.5 left-1.5 rounded bg-amber-500/90 px-1.5 py-0.5 text-[10px] font-medium leading-tight text-white" title="No alt text — add one for SEO">No alt text</span>
-                                )}
-                            </>
+                        <div
+                            {...(focalActive
+                                ? {
+                                      onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => { dragging.current = true; e.currentTarget.setPointerCapture(e.pointerId); applyFocal(e.currentTarget, e.clientX, e.clientY); },
+                                      onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => { if (dragging.current) applyFocal(e.currentTarget, e.clientX, e.clientY); },
+                                      onPointerUp: (e: React.PointerEvent<HTMLDivElement>) => { dragging.current = false; if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); },
+                                  }
+                                : {})}
+                            className={`relative w-full overflow-hidden rounded-lg border border-neutral-200 ${focalActive ? 'h-40 cursor-grab touch-none active:cursor-grabbing' : 'h-28'}`}
+                        >
+                            <RetryImg src={value} alt={seo?.alt || ''} title={seo?.title || undefined} className="pointer-events-none h-full w-full select-none object-cover" style={focalActive ? { objectPosition: `${fx}% ${fy}%` } : undefined} />
+                            {focalActive && (
+                                <div className="pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-white/20 shadow ring-1 ring-black/40" style={{ left: `${fx}%`, top: `${fy}%` }} />
+                            )}
+                            {onSeoChange && (
+                                <>
+                                    <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={() => setSeoOpen(true)} className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition group-hover:opacity-100" title="Edit alt text & SEO">
+                                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
+                                    </button>
+                                    {!seo?.alt && (
+                                        <span className="pointer-events-none absolute bottom-1.5 left-1.5 rounded bg-amber-500/90 px-1.5 py-0.5 text-[10px] font-medium leading-tight text-white" title="No alt text — add one for SEO">No alt text</span>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                        {focalActive && (
+                            <p className="mt-1 text-xs text-neutral-500">Drag the marker to choose which part of the image stays in view.</p>
                         )}
                     </div>
                 )}
@@ -232,6 +241,120 @@ export function ImageField({ label, value, onChange, allowGallery = true, seo, o
                     </div>
                 </Modal>
             )}
+        </div>
+    );
+}
+
+// ─── Hero design controls (shared: hero block + post header) ──────────────────
+
+/**
+ * The hero's visual formatting controls (everything except the content itself:
+ * heading/image/button). Reused for the blog post header so it offers exactly
+ * the same options. Operates on a loose data object via `onChange(partial)`.
+ */
+export function HeroDesignFields({ data, onChange }: { data: Record<string, any>; onChange: (partial: Record<string, unknown>) => void }) {
+    const d = data ?? {};
+    const set = (key: string, val: unknown) => onChange({ [key]: val });
+
+    return (
+        <div className="space-y-4">
+            <Field label={`Image darkening (${d.overlay ?? 0}%)`}>
+                <input type="range" min={0} max={80} value={Number(d.overlay) || 0} onChange={(e) => set('overlay', Number(e.target.value))} className="w-full" />
+            </Field>
+            <Select
+                label="Text background"
+                value={d.text_bg ?? 'none'}
+                onChange={(v) => set('text_bg', v)}
+                options={[
+                    { value: 'none', label: 'None' },
+                    { value: 'gradient', label: 'Gradient (fades up from bottom)' },
+                    { value: 'panel', label: 'Solid panel behind text' },
+                ]}
+            />
+            {(d.text_bg ?? 'none') !== 'none' && (
+                <>
+                    <Field label="Background colour">
+                        <ColorPicker value={d.text_bg_color ?? '#000000'} onChange={(c) => set('text_bg_color', c || '#000000')} />
+                    </Field>
+                    <Field label={`Background opacity (${d.text_bg_opacity ?? 60}%)`}>
+                        <input type="range" min={0} max={100} value={Number(d.text_bg_opacity ?? 60)} onChange={(e) => set('text_bg_opacity', Number(e.target.value))} className="w-full" />
+                    </Field>
+                    {d.text_bg === 'gradient' && (
+                        <Field label={`Gradient height (${d.text_bg_extent ?? 65}%)`}>
+                            <input type="range" min={20} max={100} value={Number(d.text_bg_extent ?? 65)} onChange={(e) => set('text_bg_extent', Number(e.target.value))} className="w-full" />
+                            <p className="mt-1 text-xs text-neutral-500">How far up the photo the gradient reaches. Pairs best with bottom-aligned text.</p>
+                        </Field>
+                    )}
+                </>
+            )}
+            <Select
+                label="Height"
+                value={d.height ?? 'default'}
+                onChange={(v) => set('height', v)}
+                options={[
+                    { value: 'default', label: 'Default' },
+                    { value: 'full', label: 'Full height' },
+                    { value: 'custom', label: 'Custom height' },
+                ]}
+            />
+            {(d.height ?? 'default') === 'custom' && (
+                <Field label="Custom height">
+                    <input className="input" value={d.height_value ?? ''} onChange={(e) => set('height_value', e.target.value)} placeholder="e.g. 600px or 80%" />
+                    <p className="mt-1 text-xs text-neutral-500">Enter a pixel value (600px) or a percentage of the screen height (80%).</p>
+                </Field>
+            )}
+            <Select
+                label="Title size"
+                value={d.title_size ?? 'lg'}
+                onChange={(v) => set('title_size', v)}
+                options={[
+                    { value: 'sm', label: 'Small' },
+                    { value: 'md', label: 'Medium' },
+                    { value: 'lg', label: 'Large' },
+                    { value: 'xl', label: 'Extra large' },
+                ]}
+            />
+            <Select
+                label="Text shadow"
+                value={d.text_shadow ?? 'none'}
+                onChange={(v) => set('text_shadow', v)}
+                options={[
+                    { value: 'none', label: 'None' },
+                    { value: 'soft', label: 'Soft' },
+                    { value: 'medium', label: 'Medium' },
+                    { value: 'strong', label: 'Strong' },
+                ]}
+            />
+            <SegIcon
+                label="Text alignment"
+                value={d.text_align ?? 'center'}
+                onChange={(v) => set('text_align', v)}
+                options={[
+                    { value: 'left', title: 'Align left', icon: ALIGN_ICONS.left },
+                    { value: 'center', title: 'Align centre', icon: ALIGN_ICONS.center },
+                    { value: 'right', title: 'Align right', icon: ALIGN_ICONS.right },
+                ]}
+            />
+            <SegIcon
+                label="Content position — horizontal"
+                value={d.content_x ?? 'center'}
+                onChange={(v) => set('content_x', v)}
+                options={[
+                    { value: 'left', title: 'Left', icon: posIcon(5, 9) },
+                    { value: 'center', title: 'Centre', icon: posIcon(9, 9) },
+                    { value: 'right', title: 'Right', icon: posIcon(13, 9) },
+                ]}
+            />
+            <SegIcon
+                label="Content position — vertical"
+                value={d.content_y ?? 'center'}
+                onChange={(v) => set('content_y', v)}
+                options={[
+                    { value: 'top', title: 'Top', icon: posIcon(9, 5) },
+                    { value: 'center', title: 'Middle', icon: posIcon(9, 9) },
+                    { value: 'bottom', title: 'Bottom', icon: posIcon(9, 13) },
+                ]}
+            />
         </div>
     );
 }
@@ -325,21 +448,55 @@ function StyleFields({ settings, onChange, block, onData }: { settings: BlockSet
                 onChange={(v) => set({ text_size: v as BlockSettings['text_size'] })}
                 options={[{ value: 'sm', label: 'Small' }, { value: 'base', label: 'Default' }, { value: 'lg', label: 'Large' }, { value: 'xl', label: 'Extra large' }]}
             />
+            <div>
+                <span className="label mb-1.5 block">Padding</span>
+                <div className="grid grid-cols-2 gap-2">
+                    <PadSelect label="Top" value={settings.pad_top ?? settings.padding} onChange={(v) => set({ pad_top: v })} />
+                    <PadSelect label="Bottom" value={settings.pad_bottom ?? settings.padding} onChange={(v) => set({ pad_bottom: v })} />
+                    <PadSelect label="Left" value={settings.pad_left} onChange={(v) => set({ pad_left: v })} />
+                    <PadSelect label="Right" value={settings.pad_right} onChange={(v) => set({ pad_right: v })} />
+                </div>
+            </div>
             <Select
-                label="Padding (top & bottom)"
-                value={settings.padding ?? 'default'}
-                onChange={(v) => set({ padding: v === 'default' ? undefined : (v as BlockSettings['padding']) })}
+                label="Container width"
+                value={settings.width ?? 'default'}
+                onChange={(v) => set({ width: v === 'default' ? undefined : (v as BlockSettings['width']) })}
                 options={[
                     { value: 'default', label: 'Default' },
-                    { value: 'none', label: 'None' },
-                    { value: 'sm', label: 'Small' },
+                    { value: 'sm', label: 'Narrow' },
                     { value: 'md', label: 'Medium' },
-                    { value: 'lg', label: 'Large' },
-                    { value: 'xl', label: 'Extra large' },
+                    { value: 'lg', label: 'Wide' },
+                    { value: 'full', label: 'Full width' },
                 ]}
             />
-            <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-500">Background & text colour override the block's defaults. Text size affects body paragraphs.</p>
+            <Text
+                label="Custom class"
+                value={settings.class_name ?? ''}
+                onChange={(v) => set({ class_name: v.trim() ? v : undefined })}
+                placeholder="e.g. my-feature-row"
+            />
+            <p className="rounded-lg bg-neutral-50 px-3 py-2 text-xs text-neutral-500">Background & text colour override the block's defaults. Text size affects body paragraphs. Container width sets how wide the block's content is. Padding can be set per side. A custom class is added to the block so you can target it from <strong>Settings → Custom CSS</strong>.</p>
         </div>
+    );
+}
+
+const PAD_OPTIONS = [
+    { value: 'default', label: 'Default' },
+    { value: 'none', label: 'None' },
+    { value: 'sm', label: 'Small' },
+    { value: 'md', label: 'Medium' },
+    { value: 'lg', label: 'Large' },
+    { value: 'xl', label: 'Extra large' },
+];
+
+function PadSelect({ label, value, onChange }: { label: string; value?: BlockSettings['padding']; onChange: (v: BlockSettings['padding']) => void }) {
+    return (
+        <Select
+            label={label}
+            value={value ?? 'default'}
+            onChange={(v) => onChange(v === 'default' ? undefined : (v as BlockSettings['padding']))}
+            options={PAD_OPTIONS}
+        />
     );
 }
 
@@ -386,14 +543,39 @@ function ContentFields({ block, onChange, onConfigure, pages }: { block: SiteBlo
                         onChange={(v) => set('image_url', v)}
                         seo={{ alt: d.alt, title: d.title }}
                         onSeoChange={(patch) => onChange({ ...d, ...patch })}
+                        focal={{ x: d.focal_x ?? 50, y: d.focal_y ?? 50 }}
+                        onFocalChange={(x, y) => onChange({ ...d, focal_x: x, focal_y: y })}
                     />
                     <p className="-mt-2 text-xs text-neutral-400">For best results use a landscape image around 1920×1080. Hover the image and click the pencil to add alt text for SEO.</p>
-                    {d.image_url && (
-                        <FocalPointPicker imageUrl={d.image_url} x={d.focal_x ?? 50} y={d.focal_y ?? 50} onChange={(x, y) => onChange({ ...d, focal_x: x, focal_y: y })} />
-                    )}
                     <Field label={`Image darkening (${d.overlay ?? 0}%)`}>
                         <input type="range" min={0} max={80} value={Number(d.overlay) || 0} onChange={(e) => set('overlay', Number(e.target.value))} className="w-full" />
                     </Field>
+                    <Select
+                        label="Text background"
+                        value={d.text_bg ?? 'none'}
+                        onChange={(v) => set('text_bg', v)}
+                        options={[
+                            { value: 'none', label: 'None' },
+                            { value: 'gradient', label: 'Gradient (fades up from bottom)' },
+                            { value: 'panel', label: 'Solid panel behind text' },
+                        ]}
+                    />
+                    {(d.text_bg ?? 'none') !== 'none' && (
+                        <>
+                            <Field label="Background colour">
+                                <ColorPicker value={d.text_bg_color ?? '#000000'} onChange={(c) => set('text_bg_color', c || '#000000')} />
+                            </Field>
+                            <Field label={`Background opacity (${d.text_bg_opacity ?? 60}%)`}>
+                                <input type="range" min={0} max={100} value={Number(d.text_bg_opacity ?? 60)} onChange={(e) => set('text_bg_opacity', Number(e.target.value))} className="w-full" />
+                            </Field>
+                            {d.text_bg === 'gradient' && (
+                                <Field label={`Gradient height (${d.text_bg_extent ?? 65}%)`}>
+                                    <input type="range" min={20} max={100} value={Number(d.text_bg_extent ?? 65)} onChange={(e) => set('text_bg_extent', Number(e.target.value))} className="w-full" />
+                                    <p className="mt-1 text-xs text-neutral-500">How far up the photo the gradient reaches. Pairs best with bottom-aligned text.</p>
+                                </Field>
+                            )}
+                        </>
+                    )}
                     <Select
                         label="Height"
                         value={d.height ?? 'default'}
@@ -435,6 +617,70 @@ function ContentFields({ block, onChange, onConfigure, pages }: { block: SiteBlo
                 </div>
             );
 
+        case 'slider': {
+            const slides: any[] = Array.isArray(d.slides) ? d.slides : [];
+            return (
+                <div className="space-y-5">
+                    <div>
+                        <span className="label mb-1.5 block">Slides</span>
+                        <ListEditor
+                            items={slides}
+                            onChange={(items) => set('slides', items)}
+                            blank={{ image_url: '', heading: 'New slide', subheading: '', cta_label: '', cta_link: '', focal_x: 50, focal_y: 50, alt: '', title: '' }}
+                            addLabel="Add slide"
+                            render={(item, update) => {
+                                const i = slides.indexOf(item);
+                                return (
+                                    <div className="space-y-2">
+                                        <ImageField
+                                            label="Slide image"
+                                            value={item.image_url ?? ''}
+                                            onChange={(v) => update({ ...item, image_url: v })}
+                                            seo={{ alt: item.alt, title: item.title }}
+                                            onSeoChange={(patch) => update({ ...item, ...patch })}
+                                            focal={{ x: item.focal_x ?? 50, y: item.focal_y ?? 50 }}
+                                            onFocalChange={(x, y) => update({ ...item, focal_x: x, focal_y: y })}
+                                        />
+                                        <input className="input" placeholder="Heading" value={item.heading ?? ''} onChange={(e) => update({ ...item, heading: e.target.value })} />
+                                        <textarea className="input" rows={2} placeholder="Subheading" value={item.subheading ?? ''} onChange={(e) => update({ ...item, subheading: e.target.value })} />
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <input className="input" placeholder="Button label" value={item.cta_label ?? ''} onChange={(e) => update({ ...item, cta_label: e.target.value })} />
+                                            <input className="input" placeholder="Button link" value={item.cta_link ?? ''} onChange={(e) => update({ ...item, cta_link: e.target.value })} />
+                                        </div>
+                                        {i > 0 || i < slides.length - 1 ? (
+                                            <div className="flex gap-3 pt-0.5">
+                                                <button type="button" disabled={i <= 0} onClick={() => { const n = [...slides]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; set('slides', n); }} className="text-xs text-neutral-500 enabled:hover:text-neutral-900 disabled:opacity-30">↑ Move up</button>
+                                                <button type="button" disabled={i >= slides.length - 1} onClick={() => { const n = [...slides]; [n[i + 1], n[i]] = [n[i], n[i + 1]]; set('slides', n); }} className="text-xs text-neutral-500 enabled:hover:text-neutral-900 disabled:opacity-30">↓ Move down</button>
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                );
+                            }}
+                        />
+                    </div>
+
+                    <div className="space-y-4 border-t border-neutral-100 pt-4">
+                        <span className="label block">Playback</span>
+                        <Toggle label="Autoplay" value={d.autoplay !== false} onChange={(v) => set('autoplay', v)} />
+                        {d.autoplay !== false && (
+                            <Field label="Seconds per slide">
+                                <input type="number" min={1} max={30} className="input" value={Number(d.speed) || 5} onChange={(e) => set('speed', Number(e.target.value))} />
+                            </Field>
+                        )}
+                        <Select label="Transition" value={d.transition ?? 'slide'} onChange={(v) => set('transition', v)} options={[{ value: 'slide', label: 'Slide' }, { value: 'fade', label: 'Fade' }]} />
+                        <Toggle label="Show arrows" value={d.show_arrows !== false} onChange={(v) => set('show_arrows', v)} />
+                        <Toggle label="Show dots" value={d.show_dots !== false} onChange={(v) => set('show_dots', v)} />
+                    </div>
+
+                    <div className="space-y-4 border-t border-neutral-100 pt-4">
+                        <span className="label block">Slide design</span>
+                        <p className="-mt-2 text-xs text-neutral-400">These apply to every slide. Tip: click a slide's heading in the preview to edit it in place.</p>
+                        <HeroDesignFields data={d} onChange={(partial) => onChange({ ...d, ...partial })} />
+                    </div>
+                </div>
+            );
+        }
+
         case 'about':
             return (
                 <div className="space-y-4">
@@ -448,6 +694,45 @@ function ContentFields({ block, onChange, onConfigure, pages }: { block: SiteBlo
                         </>
                     )}
                     <Select label="Image side" value={d.image_side} onChange={(v) => set('image_side', v)} options={[{ value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }]} />
+                    <Select
+                        label="Image aspect ratio"
+                        value={d.image_ratio ?? '4/5'}
+                        onChange={(v) => set('image_ratio', v)}
+                        options={[
+                            { value: '4/5', label: 'Portrait (4:5)' },
+                            { value: '1/1', label: 'Square (1:1)' },
+                            { value: '3/2', label: 'Landscape (3:2)' },
+                            { value: '16/9', label: 'Wide (16:9)' },
+                            { value: 'none', label: 'Original (no crop)' },
+                        ]}
+                    />
+                </div>
+            );
+
+        case 'card':
+            return (
+                <div className="space-y-4">
+                    <ImageField label="Image" value={d.image_url} onChange={(v) => set('image_url', v)} />
+                    {d.image_url && (
+                        <>
+                            <Text label="Image alt text (for SEO & screen readers)" value={d.alt} onChange={(v) => set('alt', v)} placeholder="Describe the image" />
+                            <Text label="Image title" value={d.title} onChange={(v) => set('title', v)} />
+                        </>
+                    )}
+                    <Select
+                        label="Image aspect ratio"
+                        value={d.image_ratio ?? 'none'}
+                        onChange={(v) => set('image_ratio', v)}
+                        options={[
+                            { value: 'none', label: 'Original (no crop)' },
+                            { value: '3/2', label: 'Landscape (3:2)' },
+                            { value: '4/5', label: 'Portrait (4:5)' },
+                            { value: '1/1', label: 'Square (1:1)' },
+                            { value: '16/9', label: 'Wide (16:9)' },
+                        ]}
+                    />
+                    <Text label="Title" value={d.heading} onChange={(v) => set('heading', v)} />
+                    <Area label="Text" value={d.body} onChange={(v) => set('body', v)} rows={6} />
                 </div>
             );
 
@@ -503,6 +788,9 @@ function ContentFields({ block, onChange, onConfigure, pages }: { block: SiteBlo
                     <Select label="Columns" value={String(d.columns ?? 3)} onChange={(v) => set('columns', Number(v))} options={[{ value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' }]} />
                     <Field label="Number of posts (0 = show all)">
                         <input type="number" min={0} className="input" value={Number(d.limit) || 0} onChange={(e) => set('limit', Number(e.target.value))} />
+                    </Field>
+                    <Field label="Posts per page (0 = no pagination)">
+                        <input type="number" min={0} className="input" value={Number(d.per_page) || 0} onChange={(e) => set('per_page', Number(e.target.value))} />
                     </Field>
                     <Toggle label="Show category filter" value={d.show_categories !== false} onChange={(v) => set('show_categories', v)} />
                     <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
@@ -672,6 +960,8 @@ function ContentFields({ block, onChange, onConfigure, pages }: { block: SiteBlo
         case 'grid':
             return (
                 <div className="space-y-4">
+                    <Text label="Title (optional)" value={d.heading} onChange={(v) => set('heading', v)} placeholder="Shown above the grid" />
+                    <Area label="Text (optional)" value={d.body} onChange={(v) => set('body', v)} rows={3} />
                     <Select label="Columns" value={String(d.columns ?? 2)} onChange={(v) => set('columns', Number(v))} options={[{ value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' }]} />
                     <Select label="Gap" value={d.gap ?? 'md'} onChange={(v) => set('gap', v)} options={[{ value: 'sm', label: 'Small' }, { value: 'md', label: 'Medium' }, { value: 'lg', label: 'Large' }]} />
                     <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
@@ -838,26 +1128,30 @@ function TextBlockFields({ d, set }: { d: Record<string, any>; set: (key: string
             </div>
             <Text label="Heading" value={d.heading} onChange={(v) => set('heading', v)} placeholder="Optional — leave empty for no heading" />
             <Select label="Heading style" value={d.heading_level ?? 'h2'} onChange={(v) => set('heading_level', v)} options={levelOptions} />
-            <Area label="Body" value={d.body} onChange={(v) => set('body', v)} rows={6} />
+            <Field label="Body">
+                <RichTextEditor value={d.body ?? ''} onChange={(html) => set('body', html)} />
+            </Field>
             <Select label="Alignment" value={d.align} onChange={(v) => set('align', v)} options={alignOptions} />
 
-            <Modal show={expanded} onClose={() => setExpanded(false)} maxWidth="2xl">
-                <div className="space-y-4 p-6">
-                    <div className="flex items-center justify-between">
+            <Modal show={expanded} onClose={() => setExpanded(false)} maxWidth="4xl">
+                <div className="flex max-h-[85vh] flex-col">
+                    <div className="flex shrink-0 items-center justify-between border-b border-neutral-100 px-6 py-4">
                         <h2 className="text-sm font-semibold text-neutral-900">Edit text</h2>
                         <button type="button" onClick={() => setExpanded(false)} className="text-neutral-400 hover:text-neutral-700">
                             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </div>
-                    <div>
-                        <span className="label mb-1.5 block">Heading</span>
-                        <input className="input text-lg" value={d.heading ?? ''} placeholder="Optional — leave empty for no heading" onChange={(e) => set('heading', e.target.value)} />
+                    <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+                        <div>
+                            <span className="label mb-1.5 block">Heading</span>
+                            <input className="input text-lg" value={d.heading ?? ''} placeholder="Optional — leave empty for no heading" onChange={(e) => set('heading', e.target.value)} />
+                        </div>
+                        <div>
+                            <span className="label mb-1.5 block">Content</span>
+                            <RichTextEditor value={d.body ?? ''} onChange={(html) => set('body', html)} minHeightClass="min-h-[45vh]" />
+                        </div>
                     </div>
-                    <div>
-                        <span className="label mb-1.5 block">Content</span>
-                        <textarea className="input min-h-[40vh]" rows={18} value={d.body ?? ''} onChange={(e) => set('body', e.target.value)} />
-                    </div>
-                    <div className="flex justify-end">
+                    <div className="flex shrink-0 justify-end border-t border-neutral-100 px-6 py-4">
                         <button type="button" onClick={() => setExpanded(false)} className="btn-primary">Done</button>
                     </div>
                 </div>

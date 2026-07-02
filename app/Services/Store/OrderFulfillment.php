@@ -8,6 +8,8 @@ use App\Mail\ClientMessage;
 use App\Models\CreditLedgerEntry;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Support\Money;
+use App\Support\StudioNotifications;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
@@ -59,6 +61,14 @@ class OrderFulfillment
         }
 
         $this->sendConfirmation($order);
+
+        StudioNotifications::send(
+            $order->studio_id,
+            'store_order',
+            'New store order',
+            "{$order->customer_name} placed order {$order->number} for ".Money::format((int) $order->total_cents, $order->currency).'.',
+            route('store.orders.show', $order->id),
+        );
 
         if (! $hasPhysical) {
             // Digital-only order — fully delivered, nothing to fulfil physically.

@@ -25,17 +25,19 @@ export default function RichTextEditor({
     value,
     onChange,
     tokens = [],
+    minHeightClass = 'min-h-[18rem]',
 }: {
     value: string;
     onChange: (html: string) => void;
     tokens?: Token[];
+    minHeightClass?: string;
 }) {
     const [tokOpen, setTokOpen] = useState(false);
     const editor = useEditor({
         extensions: [StarterKit],
         content: value || '',
         onUpdate: ({ editor }) => onChange(editor.getHTML()),
-        editorProps: { attributes: { class: 'min-h-[18rem] focus:outline-none' } },
+        editorProps: { attributes: { class: `${minHeightClass} focus:outline-none` } },
     });
 
     // Sync external value changes (e.g. loading a template) without clobbering typing.

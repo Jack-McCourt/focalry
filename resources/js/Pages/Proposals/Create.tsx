@@ -84,6 +84,9 @@ export default function Create({
                             <option value="">None</option>
                             {packages.map((p) => <option key={p.id} value={p.id}>{p.name} — {formatMoney(p.price_cents, p.currency)}</option>)}
                         </select>
+                        {packages.length === 0 && (
+                            <p className="mt-1 text-xs text-neutral-400">No packages yet — <Link href={route('packages.index')} className="text-blue-600">create one</Link>.</p>
+                        )}
                     </div>
                     <div>
                         <label className="label mb-1.5">Contract to sign</label>

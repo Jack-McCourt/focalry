@@ -9,6 +9,8 @@ use App\Models\Studio;
 use App\Services\PackageFulfillment;
 use App\Services\Store\OrderFulfillment;
 use App\Services\WorkflowEngine;
+use App\Support\Money;
+use App\Support\StudioNotifications;
 use Laravel\Cashier\Http\Controllers\WebhookController as CashierWebhookController;
 
 class WebhookController extends CashierWebhookController
@@ -100,6 +102,16 @@ class WebhookController extends CashierWebhookController
         if (! $wasPaid && $invoice->status === 'paid' && $invoice->project_id) {
             app(WorkflowEngine::class)->dispatch('invoice_paid', $invoice->project);
         }
+
+        // Notify the studio of the client payment (in-app bell + email per prefs).
+        $clientName = $invoice->contact?->name ?? 'A client';
+        StudioNotifications::send(
+            $invoice->studio_id,
+            'invoice_paid',
+            $invoice->status === 'paid' ? 'Invoice paid' : 'Payment received',
+            "{$clientName} paid ".Money::format($amount, $invoice->currency)." on invoice {$invoice->number}.",
+            route('invoices.show', $invoice->id),
+        );
     }
 
     protected function handleCustomerSubscriptionCreated(array $payload): void

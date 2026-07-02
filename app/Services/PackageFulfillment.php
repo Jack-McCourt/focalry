@@ -6,6 +6,8 @@ use App\Models\PackageBooking;
 use App\Models\Project;
 use App\Models\ProjectStatus;
 use App\Models\ProjectType;
+use App\Support\Money;
+use App\Support\StudioNotifications;
 
 /**
  * Marks a package booking paid and creates the linked Project. Idempotent:
@@ -32,6 +34,14 @@ class PackageFulfillment
             $booking->amount_cents = $amount; // trust Stripe's amount
         }
         $booking->save();
+
+        StudioNotifications::send(
+            $booking->studio_id,
+            'package_booked',
+            'New package booking',
+            "{$booking->client_name} booked ".($booking->package?->name ?? 'a package').' for '.Money::format((int) $booking->amount_cents, $booking->currency).'.',
+            route('packages.index'),
+        );
     }
 
     private function createProject(PackageBooking $booking): Project

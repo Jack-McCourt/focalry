@@ -28,6 +28,8 @@ interface SiteShellProps {
     packages?: PackageCard[];
     /** Builder-only: makes blocks clickable/editable in the preview. */
     editing?: BlockEditing;
+    /** Auto-generated header (e.g. a blog post hero) rendered above the blocks. */
+    postHeader?: ReactNode;
     /** Custom main content (e.g. a blog post), rendered instead of blocks. */
     children?: ReactNode;
 }
@@ -73,7 +75,7 @@ function styleCss(scope: string, style?: string): string {
 
 /** Renders a full public page: managed global header, the page's blocks, and a
  *  managed global footer. Shared by the live public site and the builder preview. */
-export default function SiteShell({ siteName, siteSlug, basePath, theme, studioLogo, pages, headerNav, footerNav, blocks = [], activeSlug, interactive, posts, categories, packages, editing, children }: SiteShellProps) {
+export default function SiteShell({ siteName, siteSlug, basePath, theme, studioLogo, pages, headerNav, footerNav, blocks = [], activeSlug, interactive, posts, categories, packages, editing, postHeader, children }: SiteShellProps) {
     const [menuOpen, setMenuOpen] = useState(false);
     // Default to the slug path; custom-domain serving passes "" for root links.
     const base = basePath ?? `/site/${siteSlug}`;
@@ -138,13 +140,22 @@ export default function SiteShell({ siteName, siteSlug, basePath, theme, studioL
     const headingFont = siteFont(theme.heading_font ?? theme.font);
     const logoFont = theme.logo_font ? siteFont(theme.logo_font) : bodyFont;
     const fontsHref = googleFontsHref([theme.body_font ?? theme.font, theme.heading_font ?? theme.font, theme.logo_font]);
+    // Weight: explicit theme override wins, otherwise the font's registered default.
+    const bodyWeight = theme.body_weight ?? bodyFont.weight;
+    const headingWeight = theme.heading_weight ?? headingFont.headingWeight;
     const fontCss =
-        `.${scope}{font-family:${bodyFont.stack};${bodyFont.weight ? `font-weight:${bodyFont.weight};` : ''}}` +
-        `.${scope} :is(h1,h2,h3,h4,h5,h6){font-family:${headingFont.stack};${headingFont.headingWeight ? `font-weight:${headingFont.headingWeight};` : ''}}` +
+        `.${scope}{font-family:${bodyFont.stack};${bodyWeight ? `font-weight:${bodyWeight};` : ''}}` +
+        `.${scope} :is(h1,h2,h3,h4,h5,h6){font-family:${headingFont.stack};${headingWeight ? `font-weight:${headingWeight};` : ''}}` +
         `.${scope} .site-logo-font{font-family:${logoFont.stack};${logoFont.weight ? `font-weight:${logoFont.weight};` : ''}}` +
         styleCss(scope, theme.style) +
         // "Wide" templates bump the main content container up one size (6xl → 7xl).
-        (theme.width === 'wide' ? `.${scope} .max-w-6xl{max-width:80rem;}` : '');
+        (theme.width === 'wide' ? `.${scope} .max-w-6xl{max-width:80rem;}` : '') +
+        // General text colour override: recolour the main content's neutral body/
+        // heading shades. Leaves muted captions (neutral-400/300), hero white text,
+        // and per-block colour overrides untouched.
+        (theme.text_color
+            ? `.${scope} main :is(.text-neutral-900,.text-neutral-800,.text-neutral-700,.text-neutral-600,.text-neutral-500){color:${theme.text_color};}`
+            : '');
 
     // The Studio style uses a centred masthead instead of the inline logo/nav row.
     const centeredHeader = theme.style === 'studio';
@@ -174,7 +185,15 @@ export default function SiteShell({ siteName, siteSlug, basePath, theme, studioL
 
     return (
         <div className={`${scope} min-h-screen bg-white text-neutral-900`} style={{ ['--site-header-h' as string]: `${headerH}px` }}>
-            {fontsHref && <link rel="stylesheet" href={fontsHref} />}
+            {fontsHref && (
+                <>
+                    <link rel="preconnect" href="https://fonts.googleapis.com" />
+                    <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+                    {/* Load Google Fonts without blocking first paint: fetch as
+                        non-applicable "print", then flip to "all" once loaded. */}
+                    <link rel="stylesheet" href={fontsHref} media="print" onLoad={(e) => { (e.currentTarget as HTMLLinkElement).media = 'all'; }} />
+                </>
+            )}
             <style dangerouslySetInnerHTML={{ __html: fontCss }} />
             <header ref={headerRef} className="sticky top-0 z-20 border-b border-neutral-100 bg-white/85 backdrop-blur">
                 {centeredHeader ? (
@@ -186,7 +205,7 @@ export default function SiteShell({ siteName, siteSlug, basePath, theme, studioL
                         </div>
                         {header.length > 0 && (
                             <nav className="mt-3 hidden flex-wrap items-center justify-center gap-x-2 gap-y-1 md:flex">
-                                {header.map((l, i) => renderLink(l, `site-nav-link site-logo-font px-2.5 py-1 ${navSize} font-medium transition ${navColor ? '' : l.active ? 'text-neutral-900' : 'text-neutral-500 hover:text-neutral-900'}`, i, navColor ? { color: navColor, opacity: l.active ? 1 : 0.7 } : undefined))}
+                                {header.map((l, i) => renderLink(l, `site-nav-link site-logo-font px-2.5 py-1 ${navSize} font-medium transition ${navColor ? '' : l.active ? 'text-neutral-900' : 'text-neutral-600 hover:text-neutral-900'}`, i, navColor ? { color: navColor, opacity: l.active ? 1 : 0.85 } : undefined))}
                             </nav>
                         )}
                     </div>
@@ -196,7 +215,7 @@ export default function SiteShell({ siteName, siteSlug, basePath, theme, studioL
                         {header.length > 0 && (
                             <>
                                 <nav className="hidden items-center gap-1 md:flex">
-                                    {header.map((l, i) => renderLink(l, `site-nav-link site-logo-font rounded-full px-3 py-1.5 ${navSize} font-medium transition ${navColor ? '' : l.active ? 'text-neutral-900' : 'text-neutral-500 hover:text-neutral-900'}`, i, navColor ? { color: navColor, opacity: l.active ? 1 : 0.7 } : undefined))}
+                                    {header.map((l, i) => renderLink(l, `site-nav-link site-logo-font rounded-full px-3 py-1.5 ${navSize} font-medium transition ${navColor ? '' : l.active ? 'text-neutral-900' : 'text-neutral-600 hover:text-neutral-900'}`, i, navColor ? { color: navColor, opacity: l.active ? 1 : 0.85 } : undefined))}
                                 </nav>
                                 {menuButton('-mr-1')}
                             </>
@@ -205,16 +224,17 @@ export default function SiteShell({ siteName, siteSlug, basePath, theme, studioL
                 )}
                 {header.length > 0 && menuOpen && (
                     <nav className="flex flex-col gap-1 border-t border-neutral-100 px-6 py-3 md:hidden">
-                        {header.map((l, i) => renderLink(l, `site-nav-link site-logo-font rounded-md px-3 py-2 ${navSize} font-medium transition ${navColor ? '' : l.active ? 'bg-neutral-100 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-50'}`, i, navColor ? { color: navColor, opacity: l.active ? 1 : 0.7 } : undefined))}
+                        {header.map((l, i) => renderLink(l, `site-nav-link site-logo-font rounded-md px-3 py-2 ${navSize} font-medium transition ${navColor ? '' : l.active ? 'bg-neutral-100 text-neutral-900' : 'text-neutral-600 hover:bg-neutral-50'}`, i, navColor ? { color: navColor, opacity: l.active ? 1 : 0.85 } : undefined))}
                     </nav>
                 )}
             </header>
 
             <main>
+                {postHeader}
                 {children ? (
                     children
                 ) : blocks.length === 0 ? (
-                    <div className="flex min-h-[50vh] items-center justify-center text-sm text-neutral-400">This page has no content yet.</div>
+                    postHeader ? null : <div className="flex min-h-[50vh] items-center justify-center text-sm text-neutral-400">This page has no content yet.</div>
                 ) : (
                     blocks.map((block) => <BlockView key={block.id} block={block} theme={theme} slug={siteSlug} basePath={base} interactive={interactive} posts={posts} categories={categories} packages={packages} editing={editing} />)
                 )}
@@ -225,7 +245,7 @@ export default function SiteShell({ siteName, siteSlug, basePath, theme, studioL
                     <p className="site-logo-font text-base font-semibold tracking-tight text-neutral-900" style={logoColor ? { color: logoColor } : undefined}>{siteName}</p>
                     {footer.length > 0 && (
                         <nav className="mt-4 flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
-                            {footer.map((l, i) => renderLink(l, 'text-sm text-neutral-500 hover:text-neutral-900', i))}
+                            {footer.map((l, i) => renderLink(l, 'text-sm text-neutral-600 hover:text-neutral-900', i))}
                         </nav>
                     )}
                     <p className="mt-6 text-xs text-neutral-400">© {new Date().getFullYear()} {siteName}</p>

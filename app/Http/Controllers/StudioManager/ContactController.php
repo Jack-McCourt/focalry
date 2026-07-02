@@ -50,9 +50,15 @@ class ContactController extends Controller
     public function show(Contact $contact): Response
     {
         $contact->loadCount('collections');
+        $contact->load('portalAccess');
 
         return Inertia::render('Contacts/Show', [
             'contact' => $contact,
+            'portal' => $contact->portalAccess ? [
+                'url' => $contact->portalAccess->url(),
+                'code' => $contact->portalAccess->code,
+                'last_viewed_at' => $contact->portalAccess->last_viewed_at?->toIso8601String(),
+            ] : null,
             'collections' => $contact->collections()
                 ->orderByDesc('event_date')
                 ->get(['id', 'title', 'slug', 'status', 'event_date']),

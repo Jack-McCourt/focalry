@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\TwoFactorAuthenticatable;
+use App\Notifications\NotificationType;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -24,6 +25,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'password',
         'role',
         'is_super_admin',
+        'notification_preferences',
     ];
 
     protected $hidden = [
@@ -39,7 +41,19 @@ class User extends Authenticatable implements MustVerifyEmail
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_super_admin' => 'boolean',
+            'notification_preferences' => 'array',
         ];
+    }
+
+    /**
+     * Whether this user wants an email for a given notification type. Falls back
+     * to the type's default when the user hasn't set an explicit preference.
+     */
+    public function wantsEmail(string $type): bool
+    {
+        $prefs = $this->notification_preferences ?? [];
+
+        return (bool) ($prefs[$type] ?? NotificationType::emailsByDefault($type));
     }
 
     /**

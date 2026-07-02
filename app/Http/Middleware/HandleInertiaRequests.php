@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\Conversation;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use Tighten\Ziggy\Ziggy;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -63,6 +64,12 @@ class HandleInertiaRequests extends Middleware
                     'created_at' => $n->created_at?->toIso8601String(),
                 ]) : [],
             'unread_notifications' => fn () => $user ? $user->unreadNotifications()->count() : 0,
+            // Ziggy routes — shared so route() works during Inertia SSR (the browser
+            // gets route() from the @routes directive instead).
+            'ziggy' => fn () => [
+                ...(new Ziggy)->toArray(),
+                'location' => $request->url(),
+            ],
         ];
     }
 }

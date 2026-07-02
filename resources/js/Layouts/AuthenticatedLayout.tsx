@@ -92,6 +92,7 @@ const SM_NAV: SmEntry[] = [
     {
         group: 'Clients',
         items: [
+            { label: 'Calendar', href: '/calendar', pattern: 'calendar.*' },
             { label: 'Contacts', href: '/contacts', pattern: 'contacts.*' },
             { label: 'Projects', href: '/projects', pattern: 'projects.*' },
             { label: 'Meetings', href: '/meetings', pattern: 'meetings.*' },
@@ -117,6 +118,13 @@ const SM_NAV: SmEntry[] = [
         items: [
             { label: 'Tasks', href: '/tasks', pattern: 'tasks.*' },
             { label: 'Workflows', href: '/workflows', pattern: 'workflows.*' },
+        ],
+    },
+    {
+        group: 'Insights',
+        items: [
+            { label: 'Reports', href: '/reports', pattern: 'reports.*' },
+            { label: 'Expenses', href: '/expenses', pattern: 'expenses.*' },
         ],
     },
 ];
@@ -165,6 +173,7 @@ function SidebarLink({
     soon,
     badge,
     locked,
+    onNavigate,
 }: {
     href: string;
     icon: React.FC<{ className?: string }>;
@@ -173,10 +182,12 @@ function SidebarLink({
     soon?: boolean;
     badge?: number;
     locked?: boolean;
+    onNavigate?: () => void;
 }) {
     // Locked items aren't disabled — they route to billing so the user can upgrade.
     return (
         <Link
+            onClick={onNavigate}
             href={soon ? '#' : locked ? route('billing.index') : href}
             className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all ${
                 active
@@ -378,6 +389,13 @@ function NotificationBell() {
                             ))
                         )}
                     </div>
+                    <Link
+                        href={route('notifications.index')}
+                        onClick={() => setOpen(false)}
+                        className="block border-t border-neutral-100 px-4 py-2.5 text-center text-xs font-medium text-blue-600 hover:bg-neutral-50"
+                    >
+                        View all notifications
+                    </Link>
                 </div>
             )}
         </div>
@@ -526,8 +544,9 @@ function SubNav({ entries, onNavigate }: { entries: SmEntry[]; onNavigate: () =>
 export default function AuthenticatedLayout({
     header,
     actions,
+    sidebar,
     children,
-}: PropsWithChildren<{ header?: ReactNode; actions?: ReactNode }>) {
+}: PropsWithChildren<{ header?: ReactNode; actions?: ReactNode; sidebar?: ReactNode }>) {
     const { auth, unread_messages, impersonation } = usePage<{
         auth: Auth;
         flash: Flash;
@@ -537,6 +556,20 @@ export default function AuthenticatedLayout({
     const user = auth.user!;
     const studio = auth.studio;
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    // Desktop-only: collapse the sidebar to a thin strip to reclaim space.
+    const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && localStorage.getItem('sidebar-collapsed') === '1');
+    const toggleCollapsed = () => setCollapsed((c) => { const next = !c; try { localStorage.setItem('sidebar-collapsed', next ? '1' : '0'); } catch { /* ignore */ } return next; });
+    // Profile popout (Plans & Billing / Settings / Log out) anchored to the user row.
+    const [profileOpen, setProfileOpen] = useState(false);
+    const profileRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        if (!profileOpen) return;
+        const onDown = (e: MouseEvent) => {
+            if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
+        };
+        document.addEventListener('mousedown', onDown);
+        return () => document.removeEventListener('mousedown', onDown);
+    }, [profileOpen]);
 
     // A nav item is "locked" when its product area isn't part of the studio's plan.
     const features = studio?.features ?? [];
@@ -566,9 +599,14 @@ export default function AuthenticatedLayout({
             feature: 'website',
             nav: [
                 { label: 'Editor', href: route('website.edit'), pattern: 'website.edit' },
-                { label: 'Settings', href: route('website.settings'), pattern: 'website.settings' },
-                { label: 'Leads', href: route('website.leads'), pattern: 'website.leads' },
-                { label: 'Analytics', href: route('website.analytics'), pattern: 'website.analytics' },
+                {
+                    group: 'Settings',
+                    items: [
+                        { label: 'General', href: route('website.settings'), pattern: 'website.settings' },
+                        { label: 'Leads', href: route('website.leads'), pattern: 'website.leads' },
+                        { label: 'Analytics', href: route('website.analytics'), pattern: 'website.analytics' },
+                    ],
+                },
             ],
         },
         {
@@ -621,11 +659,25 @@ export default function AuthenticatedLayout({
 
             {/* ── Sidebar ── */}
             <aside
-                className={`fixed inset-y-0 left-0 z-40 flex w-56 shrink-0 flex-col transition-transform duration-200 lg:static lg:translate-x-0 ${
+                className={`fixed inset-y-0 left-0 z-40 flex w-56 shrink-0 flex-col transition-all duration-200 lg:static lg:translate-x-0 ${
                     sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-                }`}
+                } ${collapsed ? 'lg:w-14' : sidebar ? 'lg:w-80' : 'lg:w-56'}`}
                 style={{ background: '#141414' }}
             >
+                {/* Collapsed strip — desktop only; click to expand. */}
+                {collapsed && (
+                    <div className="hidden flex-col items-center gap-3 py-3 lg:flex">
+                        <Link href={route('dashboard')} className="flex h-7 w-7 items-center justify-center rounded-md bg-white" title={studio?.name ?? 'Studio'}>
+                            <svg className="h-4 w-4 text-neutral-900" fill="currentColor" viewBox="0 0 24 24"><path d="M12 9a3.75 3.75 0 100 7.5A3.75 3.75 0 0012 9z" /><path fillRule="evenodd" d="M9.344 3.071a49.52 49.52 0 015.312 0c.967.052 1.83.585 2.332 1.39l.821 1.317c.24.383.645.643 1.11.71.386.054.77.113 1.152.177 1.432.239 2.429 1.493 2.429 2.909V18a3 3 0 01-3 3h-15a3 3 0 01-3-3V9.574c0-1.416.997-2.67 2.429-2.909.382-.064.766-.123 1.151-.178a1.56 1.56 0 001.11-.71l.822-1.315a2.942 2.942 0 012.332-1.39zM6.75 12.75a5.25 5.25 0 1110.5 0 5.25 5.25 0 01-10.5 0zm12-1.5a.75.75 0 100-1.5.75.75 0 000 1.5z" clipRule="evenodd" /></svg>
+                        </Link>
+                        <button type="button" onClick={toggleCollapsed} title="Expand sidebar" aria-label="Expand sidebar" className="rounded-md p-1.5 text-zinc-400 transition hover:bg-sidebar-hover hover:text-white">
+                            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                        </button>
+                    </div>
+                )}
+
+                {/* Full sidebar — always on mobile; on desktop only when expanded. */}
+                <div className={`flex min-h-0 flex-1 flex-col ${collapsed ? 'lg:hidden' : ''}`}>
                 {/* Logo */}
                 <div className="flex h-14 items-center justify-between px-4">
                     <Link href={route('dashboard')} className="flex items-center gap-2" onClick={() => setSidebarOpen(false)}>
@@ -649,6 +701,17 @@ export default function AuthenticatedLayout({
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
+                    <button
+                        type="button"
+                        onClick={toggleCollapsed}
+                        className="hidden rounded-md p-1.5 text-zinc-400 hover:bg-sidebar-hover hover:text-white lg:block"
+                        title="Collapse sidebar"
+                        aria-label="Collapse sidebar"
+                    >
+                        <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                        </svg>
+                    </button>
                 </div>
 
                 {/* Product switcher (top-left dropdown) */}
@@ -656,50 +719,65 @@ export default function AuthenticatedLayout({
                     <ProductSwitcher pillars={pillars} active={activePillar} onNavigate={() => setSidebarOpen(false)} />
                 </div>
 
-                {/* The active product's own navigation */}
-                <nav className="flex-1 overflow-y-auto px-2 py-2">
-                    <SubNav entries={activePillar.nav} onNavigate={() => setSidebarOpen(false)} />
-                </nav>
+                {/* The active product's own navigation — or a page-provided panel
+                    (e.g. the website builder's pages/blocks/settings). */}
+                {sidebar ? (
+                    <div className="relative flex min-h-0 flex-1 flex-col">{sidebar}</div>
+                ) : (
+                    <nav className="flex-1 overflow-y-auto px-2 py-2">
+                        <SubNav entries={activePillar.nav} onNavigate={() => setSidebarOpen(false)} />
+                    </nav>
+                )}
 
-                {/* Bottom */}
-                <div className="border-t border-sidebar-border px-2 py-3 space-y-0.5">
-                    {user.is_super_admin && (
-                        <Link
-                            href={route('admin.dashboard')}
-                            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-rose-300 transition hover:bg-sidebar-hover hover:text-rose-200"
-                        >
-                            <IconShield className="h-[18px] w-[18px] shrink-0" />
-                            <span className="flex-1">Super Admin</span>
-                        </Link>
+                {/* Bottom — the profile row opens a popout with account actions. */}
+                <div ref={profileRef} className="relative border-t border-sidebar-border px-2 py-3">
+                    {profileOpen && (
+                        <div className="absolute bottom-full left-2 right-2 mb-2 space-y-0.5 rounded-xl border border-sidebar-border bg-sidebar p-1.5 shadow-xl">
+                            {user.is_super_admin && (
+                                <Link
+                                    href={route('admin.dashboard')}
+                                    onClick={() => setProfileOpen(false)}
+                                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-rose-300 transition hover:bg-sidebar-hover hover:text-rose-200"
+                                >
+                                    <IconShield className="h-[18px] w-[18px] shrink-0" />
+                                    <span className="flex-1">Super Admin</span>
+                                </Link>
+                            )}
+                            <SidebarLink
+                                href={route('billing.index')}
+                                icon={IconBilling}
+                                label="Plans & Billing"
+                                active={route().current('billing.*')}
+                                onNavigate={() => setProfileOpen(false)}
+                            />
+                            <SidebarLink
+                                href={route('profile.edit')}
+                                icon={IconSettings}
+                                label="Settings"
+                                active={route().current('profile.*')}
+                                onNavigate={() => setProfileOpen(false)}
+                            />
+                            <Link
+                                href={route('logout')}
+                                method="post"
+                                as="button"
+                                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-text transition hover:bg-sidebar-hover hover:text-white"
+                            >
+                                <IconLogout className="h-[18px] w-[18px] shrink-0" />
+                                <span className="font-medium">Log out</span>
+                            </Link>
+                        </div>
                     )}
-                    <SidebarLink
-                        href={route('billing.index')}
-                        icon={IconBilling}
-                        label="Plans & Billing"
-                        active={route().current('billing.*')}
-                    />
-                    <SidebarLink
-                        href={route('profile.edit')}
-                        icon={IconSettings}
-                        label="Settings"
-                        active={route().current('profile.*')}
-                    />
 
-                    <Link
-                        href={route('logout')}
-                        method="post"
-                        as="button"
-                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-text transition hover:bg-sidebar-hover hover:text-white"
+                    <button
+                        type="button"
+                        onClick={() => setProfileOpen((o) => !o)}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition hover:bg-sidebar-hover"
                     >
-                        <IconLogout className="h-[18px] w-[18px] shrink-0" />
-                        <span className="font-medium">Log out</span>
-                    </Link>
-
-                    <div className="mt-2 flex items-center gap-2.5 px-3 py-2">
                         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-700 text-xs font-semibold text-white">
                             {initials}
                         </div>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                             <p className="truncate text-xs font-medium text-white">
                                 {user.name}
                             </p>
@@ -707,7 +785,11 @@ export default function AuthenticatedLayout({
                                 {studio?.plan ?? 'free'} plan
                             </p>
                         </div>
-                    </div>
+                        <svg className={`h-4 w-4 shrink-0 text-zinc-500 transition-transform ${profileOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                        </svg>
+                    </button>
+                </div>
                 </div>
             </aside>
 

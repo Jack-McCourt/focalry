@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Proposal;
 use App\Services\WorkflowEngine;
 use App\Support\Money;
+use App\Support\StudioNotifications;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -95,6 +96,14 @@ class PublicProposalController extends Controller
         }
 
         $this->refreshAcceptance($proposal);
+
+        StudioNotifications::send(
+            $proposal->studio_id,
+            'proposal_accepted',
+            'Proposal accepted',
+            "{$data['signer_name']} accepted \"{$proposal->title}\".",
+            route('proposals.show', $proposal->id),
+        );
 
         return redirect()
             ->route('proposals.public.show', $proposal->public_id)

@@ -190,6 +190,21 @@ class PublicSiteController extends Controller
                 'og_image' => $entry->og_image ?: $entry->cover_image,
                 'canonical' => $this->siteUrl($site, "{$blog->slug}/{$entry->slug}"),
             ],
+            // Drives the auto-generated post header (hero cover + date + categories).
+            'post' => [
+                'title' => $entry->title,
+                'cover_image' => $entry->cover_image,
+                'cover_focal' => $entry->cover_focal,
+                // Header formatting is a single setting on the parent blog page,
+                // shared by every post.
+                'header' => $blog->header,
+                'published_at' => $entry->published_at?->toDateString(),
+                'categories' => collect($entry->category_ids ?? [])
+                    ->map(fn ($id) => $site->categories->firstWhere('id', (int) $id))
+                    ->filter()
+                    ->map(fn (SiteCategory $c) => $this->categoryProps($c))
+                    ->values(),
+            ],
         ]);
     }
 
@@ -478,6 +493,7 @@ class PublicSiteController extends Controller
             'footer_nav' => $site->footer_nav ?? [],
             'head_code' => $site->head_code,
             'body_code' => $site->body_code,
+            'custom_css' => $site->custom_css,
             'cookie_consent' => $site->cookie_consent,
             'cookie_message' => $site->cookie_message,
             'cookie_policy_url' => $site->cookie_policy_url,

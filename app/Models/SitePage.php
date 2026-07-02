@@ -31,6 +31,8 @@ class SitePage extends Model
         'category_ids',
         'hidden_category_ids',
         'cover_image',
+        'cover_focal',
+        'header',
         'seo_title',
         'seo_description',
         'head_code',
@@ -48,6 +50,8 @@ class SitePage extends Model
             'blocks' => 'array',
             'category_ids' => 'array',
             'hidden_category_ids' => 'array',
+            'cover_focal' => 'array',
+            'header' => 'array',
             'published_at' => 'datetime',
         ];
     }
