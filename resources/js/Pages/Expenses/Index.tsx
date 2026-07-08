@@ -3,6 +3,8 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { centsToInput, formatMoney, toCents } from '@/lib/money';
 import { Head, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
+import Paginator from '@/Components/Paginator';
 
 interface ExpenseRow {
     id: number;
@@ -215,8 +217,8 @@ export default function Expenses({ currency, range, filters, expenses, total_cen
         setEditing(row);
         setModal(true);
     };
-    const remove = (row: ExpenseRow) => {
-        if (confirm('Delete this expense?')) {
+    const remove = async (row: ExpenseRow) => {
+        if (await confirmDialog('Delete this expense?')) {
             router.delete(route('expenses.destroy', row.id), { preserveScroll: true });
         }
     };
@@ -283,7 +285,7 @@ export default function Expenses({ currency, range, filters, expenses, total_cen
                 )}
 
                 {/* Table */}
-                <div className="card overflow-hidden">
+                <div className="card overflow-x-auto">
                     {expenses.data.length === 0 ? (
                         <p className="py-16 text-center text-sm text-neutral-400">No expenses in this period. Add your first one.</p>
                     ) : (
@@ -304,7 +306,7 @@ export default function Expenses({ currency, range, filters, expenses, total_cen
                                         <td className="whitespace-nowrap px-4 py-3 text-neutral-600">{e.spent_on}</td>
                                         <td className="px-4 py-3">
                                             <span className="text-neutral-900">{e.category}</span>
-                                            {e.billable && <span className="ml-2 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">Billable</span>}
+                                            {e.billable && <span className="ml-2 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-medium text-brand">Billable</span>}
                                         </td>
                                         <td className="px-4 py-3 text-neutral-600">
                                             {[e.vendor, e.description].filter(Boolean).join(' · ') || '—'}
@@ -331,23 +333,7 @@ export default function Expenses({ currency, range, filters, expenses, total_cen
                     )}
                 </div>
 
-                {expenses.last_page > 1 && (
-                    <div className="mt-8 flex items-center justify-center gap-2">
-                        {expenses.prev_page_url && (
-                            <button onClick={() => router.get(expenses.prev_page_url!)} className="btn-secondary px-3 py-1.5 text-xs">
-                                Previous
-                            </button>
-                        )}
-                        <span className="text-xs text-neutral-500">
-                            Page {expenses.current_page} of {expenses.last_page}
-                        </span>
-                        {expenses.next_page_url && (
-                            <button onClick={() => router.get(expenses.next_page_url!)} className="btn-secondary px-3 py-1.5 text-xs">
-                                Next
-                            </button>
-                        )}
-                    </div>
-                )}
+                <Paginator paginator={expenses} />
             </div>
 
             <ExpenseModal show={modal} onClose={() => setModal(false)} editing={editing} currency={currency} categories={categories} projects={projects} />

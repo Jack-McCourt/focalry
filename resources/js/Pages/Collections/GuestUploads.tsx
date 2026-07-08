@@ -3,6 +3,7 @@ import { PageProps } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import axios from 'axios';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface GuestSettings {
     enabled: boolean;
@@ -91,8 +92,8 @@ export default function GuestUploads({
         );
     };
 
-    const remove = (id: number) => {
-        if (!confirm('Delete this guest photo?')) return;
+    const remove = async (id: number) => {
+        if (!(await confirmDialog('Delete this guest photo?'))) return;
         axios
             .delete(`/api/photos/${id}`, { headers: { 'X-XSRF-TOKEN': decodeURIComponent(getCsrfToken()) } })
             .then(() => setList((prev) => prev.filter((p) => p.id !== id)));

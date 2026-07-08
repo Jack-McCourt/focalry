@@ -82,7 +82,7 @@ export default function Book({
 
     const pickDate = (iso: string) => { setSelectedDate(iso); setSelectedSlot(null); setData('starts_at', ''); };
 
-    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900';
+    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500';
 
     return (
         <div className="min-h-screen bg-neutral-50">

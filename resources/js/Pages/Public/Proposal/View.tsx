@@ -23,6 +23,7 @@ export default function View({
     invoice,
     studio_name,
     studio_logo,
+    studio_logo_size,
     flash,
 }: PageProps<{
     proposal: Proposal;
@@ -31,6 +32,7 @@ export default function View({
     invoice: Invoice | null;
     studio_name: string | null;
     studio_logo: string | null;
+    studio_logo_size: string | null;
 }>) {
     const form = useForm<SignatureValue>({ signer_name: '', signature_type: 'typed', signature_data: '' });
 
@@ -46,7 +48,7 @@ export default function View({
     return (
         <>
             <Head title={proposal.title} />
-            <PublicShell brand={{ name: studio_name, logo: studio_logo }} maxWidth="lg">
+            <PublicShell brand={{ name: studio_name, logo: studio_logo, size: studio_logo_size }} maxWidth="lg">
                 {flash?.success && (
                     <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{flash.success}</div>
                 )}

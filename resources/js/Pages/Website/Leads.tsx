@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps, Paginated, SiteLeadRow } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
+import Paginator from '@/Components/Paginator';
 
 function fmtDate(d: string | null) {
     return d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
@@ -24,7 +25,7 @@ export default function Leads({ leads }: PageProps<{ leads: Paginated<SiteLeadRo
                         <p className="mt-1 text-sm text-neutral-500">Enquiries from your website's contact form will appear here and in your CRM.</p>
                     </div>
                 ) : (
-                    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                    <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-neutral-100 text-left text-xs font-medium text-neutral-400">
@@ -39,7 +40,7 @@ export default function Leads({ leads }: PageProps<{ leads: Paginated<SiteLeadRo
                                 {leads.data.map((l) => (
                                     <tr key={l.id} className="align-top">
                                         <td className="px-4 py-3">
-                                            <button onClick={() => setActive(l)} className="text-left font-medium text-neutral-900 hover:text-blue-700 hover:underline">
+                                            <button onClick={() => setActive(l)} className="text-left font-medium text-neutral-900 hover:text-brand-700 hover:underline">
                                                 {l.name ?? '—'}
                                             </button>
                                             {l.event_type && <div className="text-xs text-neutral-400">{l.event_type}{l.event_date ? ` · ${fmtDate(l.event_date)}` : ''}</div>}
@@ -53,7 +54,7 @@ export default function Leads({ leads }: PageProps<{ leads: Paginated<SiteLeadRo
                                         </td>
                                         <td className="px-4 py-3">
                                             {l.contact ? (
-                                                <Link href={route('contacts.show', l.contact.id)} className="text-blue-700 hover:underline">{l.contact.name}</Link>
+                                                <Link href={route('contacts.show', l.contact.id)} className="text-brand-700 hover:underline">{l.contact.name}</Link>
                                             ) : '—'}
                                         </td>
                                         <td className="px-4 py-3 text-right text-neutral-500">{fmtDate(l.created_at)}</td>
@@ -64,13 +65,7 @@ export default function Leads({ leads }: PageProps<{ leads: Paginated<SiteLeadRo
                     </div>
                 )}
 
-                {leads.last_page > 1 && (
-                    <div className="mt-8 flex items-center justify-center gap-2">
-                        {leads.prev_page_url && <button onClick={() => router.get(leads.prev_page_url!)} className="btn-secondary px-3 py-1.5 text-xs">Previous</button>}
-                        <span className="text-xs text-neutral-500">Page {leads.current_page} of {leads.last_page}</span>
-                        {leads.next_page_url && <button onClick={() => router.get(leads.next_page_url!)} className="btn-secondary px-3 py-1.5 text-xs">Next</button>}
-                    </div>
-                )}
+                <Paginator paginator={leads} />
             </div>
 
             <LeadDetailsModal lead={active} onClose={() => setActive(null)} />
@@ -101,7 +96,7 @@ function LeadDetailsModal({ lead, onClose }: { lead: SiteLeadRow | null; onClose
                     <dl className="mt-4 space-y-3 text-sm">
                         <div className="grid grid-cols-[6rem,1fr] gap-2">
                             <dt className="text-neutral-400">Email</dt>
-                            <dd className="text-neutral-700">{lead.email ? <a href={`mailto:${lead.email}`} className="text-blue-700 hover:underline">{lead.email}</a> : '—'}</dd>
+                            <dd className="text-neutral-700">{lead.email ? <a href={`mailto:${lead.email}`} className="text-brand-700 hover:underline">{lead.email}</a> : '—'}</dd>
                         </div>
                         <div className="grid grid-cols-[6rem,1fr] gap-2">
                             <dt className="text-neutral-400">Phone</dt>
@@ -124,7 +119,7 @@ function LeadDetailsModal({ lead, onClose }: { lead: SiteLeadRow | null; onClose
                         {attachment && (
                             <div className="grid grid-cols-[6rem,1fr] gap-2">
                                 <dt className="text-neutral-400">Attachment</dt>
-                                <dd><a href={attachment} target="_blank" rel="noreferrer" className="text-blue-700 hover:underline">View attachment</a></dd>
+                                <dd><a href={attachment} target="_blank" rel="noreferrer" className="text-brand-700 hover:underline">View attachment</a></dd>
                             </div>
                         )}
                     </dl>

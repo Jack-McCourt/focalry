@@ -165,6 +165,8 @@ class WorkflowEngine
             studioName: $project->studio?->name ?: config('app.name'),
             subjectLine: $subject,
             bodyText: $body,
+            logoUrl: $project->studio?->logoUrl(),
+            logoHeight: $project->studio?->emailLogoHeight(),
         ));
 
         return "Emailed {$email}.";
@@ -240,6 +242,8 @@ class WorkflowEngine
                 bodyText: $this->merge("Hi {{client_first_name}},\n\nPlease take a few minutes to complete the questionnaire below — it helps us prepare for your big day.\n\nThank you,\n{{studio_name}}", $project),
                 ctaLabel: 'Open questionnaire',
                 ctaUrl: route('questionnaires.public.show', $questionnaire->public_id),
+                logoUrl: $project->studio?->logoUrl(),
+                logoHeight: $project->studio?->emailLogoHeight(),
             ));
 
             return "Questionnaire sent to {$email}.";

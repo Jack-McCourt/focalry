@@ -12,8 +12,10 @@ import {
 } from '@/types';
 import { CoverHero, CoverStyle, DEFAULT_COVER_STYLE, FONT_OPTIONS, normalizeCoverStyle } from '@/lib/coverStyle';
 import { GALLERY_THEMES, GALLERY_THEME_OPTIONS } from '@/lib/galleryTheme';
+import { useUrlState } from '@/lib/useUrlState';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import axios from 'axios';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 import {
     ChangeEvent,
     DragEvent,
@@ -137,9 +139,9 @@ function SetsManager({
         );
     };
 
-    const deleteSet = (set: GallerySet) => {
+    const deleteSet = async (set: GallerySet) => {
         if (sets.length <= 1) return;
-        if (!confirm(`Delete set "${set.name}"? Its photos will move to another set.`)) return;
+        if (!(await confirmDialog(`Delete set "${set.name}"? Its photos will move to another set.`))) return;
         router.delete(route('sets.destroy', [collection.id, set.id]), { preserveScroll: true });
     };
 
@@ -156,7 +158,7 @@ function SetsManager({
                             onClick={() => onSetFilter(s.id)}
                             className={`group/pill flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition ${
                                 isDropTarget
-                                    ? 'bg-blue-600 text-white ring-2 ring-blue-300 ring-offset-1 scale-105'
+                                    ? 'bg-brand text-white ring-2 ring-brand-300 ring-offset-1 scale-105'
                                     : activeSetId === s.id
                                     ? 'bg-neutral-900 text-white'
                                     : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
@@ -382,7 +384,7 @@ function StorePanel({ collection, priceSheets }: { collection: Collection; price
     if (priceSheets.length === 0) {
         return (
             <p className="text-sm text-neutral-500">
-                Create a <a href={route('store.products.index')} className="text-blue-600 hover:underline">price sheet</a> first, then assign it here to sell prints and downloads in this gallery.
+                Create a <a href={route('store.products.index')} className="text-brand hover:underline">price sheet</a> first, then assign it here to sell prints and downloads in this gallery.
             </p>
         );
     }
@@ -394,7 +396,7 @@ function StorePanel({ collection, priceSheets }: { collection: Collection; price
                 value={sheetId ?? ''}
                 onChange={(e) => save(e.target.value ? Number(e.target.value) : null)}
                 disabled={saving}
-                className="block w-full max-w-xs rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900"
+                className="block w-full max-w-xs rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
             >
                 <option value="">Not for sale</option>
                 {priceSheets.map((s) => (
@@ -425,7 +427,7 @@ function ProjectPanel({ collection, projects }: { collection: Collection; projec
     if (projects.length === 0) {
         return (
             <p className="text-sm text-neutral-500">
-                Create a <a href="/projects" className="text-blue-600 hover:underline">project</a> first, then attach this gallery to it. The gallery's client comes from the project.
+                Create a <a href="/projects" className="text-brand hover:underline">project</a> first, then attach this gallery to it. The gallery's client comes from the project.
             </p>
         );
     }
@@ -437,7 +439,7 @@ function ProjectPanel({ collection, projects }: { collection: Collection; projec
                 value={projectId ?? ''}
                 onChange={(e) => save(e.target.value ? Number(e.target.value) : null)}
                 disabled={saving}
-                className="block w-full max-w-xs rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900"
+                className="block w-full max-w-xs rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
             >
                 <option value="">Not linked to a project</option>
                 {projects.map((p) => (
@@ -1182,7 +1184,7 @@ const PhotoTile = memo(function PhotoTile({
             {/* Drop-position indicator while drag-reordering */}
             {dropEdge && (
                 <span
-                    className={`pointer-events-none absolute inset-y-0 z-40 w-1 rounded-full bg-blue-500 ${dropEdge === 'before' ? '-left-1' : '-right-1'}`}
+                    className={`pointer-events-none absolute inset-y-0 z-40 w-1 rounded-full bg-brand-500 ${dropEdge === 'before' ? '-left-1' : '-right-1'}`}
                 />
             )}
 
@@ -1190,8 +1192,8 @@ const PhotoTile = memo(function PhotoTile({
                 Aspect ratio comes from the photo's real dimensions so the masonry
                 columns reserve the right height (square fallback while processing). */}
             <div
-                className={`relative h-full overflow-hidden rounded-lg bg-neutral-100 ${
-                    selected ? 'ring-2 ring-blue-500 ring-offset-2' : ''
+                className={`relative h-full overflow-hidden rounded-lg bg-neutral-100 ${loaded ? '' : 'animate-pulse'} ${
+                    selected ? 'ring-2 ring-brand-500 ring-offset-2' : ''
                 }`}
                 style={spanRows ? undefined : { aspectRatio: photo.width && photo.height ? `${photo.width} / ${photo.height}` : '1 / 1' }}
             >
@@ -1208,7 +1210,7 @@ const PhotoTile = memo(function PhotoTile({
 
                 {/* Selection check */}
                 {selected && (
-                    <div className="absolute left-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-blue-500 text-white shadow">
+                    <div className="absolute left-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-brand-500 text-white shadow">
                         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                         </svg>
@@ -1578,10 +1580,7 @@ export default function Show({
     const [photos, setPhotos] = useState<Photo[]>(initialPhotos);
     const [sets, setSets] = useState<GallerySet[]>(initialSets);
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-    const initialTab = (new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '').get('tab') ?? 'photos') as 'photos' | 'settings' | 'activity';
-    const [activeTab, setActiveTab] = useState<'photos' | 'settings' | 'activity'>(
-        ['photos', 'settings', 'activity'].includes(initialTab) ? initialTab : 'photos',
-    );
+    const [activeTab, setActiveTab] = useUrlState<'photos' | 'settings' | 'activity'>('tab', 'photos', ['photos', 'settings', 'activity']);
     const [settingsSection, setSettingsSection] = useState<'details' | 'cover' | 'privacy' | 'store'>('details');
     const [activeSetId, setActiveSetId] = useState<number | null>(initialSets[0]?.id ?? null);
     const [showShare, setShowShare] = useState(false);
@@ -2040,9 +2039,9 @@ export default function Show({
                                 />
 
                                 {processingCount > 0 && (
-                                    <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-4 py-3">
-                                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-200 border-t-blue-500 shrink-0" />
-                                        <p className="text-sm text-blue-700">
+                                    <div className="flex items-center gap-2 rounded-lg bg-brand-50 px-4 py-3">
+                                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-brand-200 border-t-brand-500 shrink-0" />
+                                        <p className="text-sm text-brand-700">
                                             {processingCount} photo{processingCount > 1 ? 's' : ''} processing — thumbnails will appear shortly
                                         </p>
                                     </div>
@@ -2091,7 +2090,7 @@ export default function Show({
                                         {/* Marquee selection box */}
                                         {marqueeRect && (
                                             <div
-                                                className="pointer-events-none absolute z-40 rounded-sm border border-blue-400 bg-blue-400/15"
+                                                className="pointer-events-none absolute z-40 rounded-sm border border-accent bg-accent/15"
                                                 style={{
                                                     left: marqueeRect.left,
                                                     top: marqueeRect.top,
@@ -2176,8 +2175,8 @@ export default function Show({
                                                     method="delete"
                                                     as="button"
                                                     className="btn-secondary border-red-200 text-red-600 hover:border-red-300 hover:bg-red-50"
-                                                    onClick={(e) => {
-                                                        if (!confirm('Delete this gallery and all its photos? This cannot be undone.')) {
+                                                    onClick={async (e) => {
+                                                        if (!(await confirmDialog('Delete this gallery and all its photos? This cannot be undone.'))) {
                                                             e.preventDefault();
                                                         }
                                                     }}
@@ -2412,7 +2411,7 @@ function StatRow({
     return (
         <div className="flex items-center justify-between">
             <span className="text-xs text-neutral-500">{label}</span>
-            <span className={`text-sm font-semibold ${accent ? 'text-blue-600' : 'text-neutral-900'}`}>
+            <span className={`text-sm font-semibold ${accent ? 'text-brand' : 'text-neutral-900'}`}>
                 {value}
             </span>
         </div>

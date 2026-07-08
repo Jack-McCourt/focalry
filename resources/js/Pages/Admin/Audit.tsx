@@ -1,6 +1,7 @@
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Paginated } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
+import Paginator from '@/Components/Paginator';
 
 interface LogRow {
     id: number;
@@ -54,7 +55,7 @@ export default function AdminAudit({ logs, filters, actions }: Props) {
                     </select>
                 </div>
 
-                <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-neutral-100 text-left text-xs uppercase tracking-wide text-neutral-400">
@@ -95,29 +96,7 @@ export default function AdminAudit({ logs, filters, actions }: Props) {
                     </table>
                 </div>
 
-                {(logs.prev_page_url || logs.next_page_url) && (
-                    <div className="mt-4 flex items-center justify-between text-sm">
-                        <span className="text-neutral-400">
-                            Page {logs.current_page} of {logs.last_page} · {logs.total} total
-                        </span>
-                        <div className="flex gap-2">
-                            <Link
-                                href={logs.prev_page_url ?? '#'}
-                                preserveState
-                                className={`rounded-lg border px-3 py-1.5 ${logs.prev_page_url ? 'border-neutral-300 hover:bg-neutral-50' : 'pointer-events-none border-neutral-100 text-neutral-300'}`}
-                            >
-                                Previous
-                            </Link>
-                            <Link
-                                href={logs.next_page_url ?? '#'}
-                                preserveState
-                                className={`rounded-lg border px-3 py-1.5 ${logs.next_page_url ? 'border-neutral-300 hover:bg-neutral-50' : 'pointer-events-none border-neutral-100 text-neutral-300'}`}
-                            >
-                                Next
-                            </Link>
-                        </div>
-                    </div>
-                )}
+                <Paginator paginator={logs} />
             </div>
         </AdminLayout>
     );

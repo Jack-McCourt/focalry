@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Contract, PageProps, Paginated } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
+import Paginator from '@/Components/Paginator';
 
 interface Filters {
     search: string;
@@ -20,7 +21,7 @@ type ContractRow = {
 
 const STATUS_STYLES: Record<Contract['status'], string> = {
     draft: 'bg-neutral-100 text-neutral-500',
-    sent: 'bg-blue-50 text-blue-700',
+    sent: 'bg-brand-50 text-brand-700',
     signed: 'bg-emerald-50 text-emerald-700',
     declined: 'bg-red-50 text-red-700',
     void: 'bg-neutral-100 text-neutral-400 line-through',
@@ -95,7 +96,7 @@ export default function Index({
             <Head title="Contracts" />
             <StudioManagerNav active="contracts" />
 
-            <div className="px-4 sm:px-8 py-8">
+            <div className="px-4 py-8 sm:px-8">
                 <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-wrap gap-1.5">
                         {statusTabs.map((t) => {
@@ -134,7 +135,7 @@ export default function Index({
                         )}
                     </div>
                 ) : (
-                    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                    <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-neutral-100 text-left text-xs font-medium text-neutral-400">
@@ -160,17 +161,7 @@ export default function Index({
                     </div>
                 )}
 
-                {contracts.last_page > 1 && (
-                    <div className="mt-8 flex items-center justify-center gap-2">
-                        {contracts.prev_page_url && (
-                            <button onClick={() => router.get(contracts.prev_page_url!)} className="btn-secondary px-3 py-1.5 text-xs">Previous</button>
-                        )}
-                        <span className="text-xs text-neutral-500">Page {contracts.current_page} of {contracts.last_page}</span>
-                        {contracts.next_page_url && (
-                            <button onClick={() => router.get(contracts.next_page_url!)} className="btn-secondary px-3 py-1.5 text-xs">Next</button>
-                        )}
-                    </div>
-                )}
+                <Paginator paginator={contracts} />
             </div>
         </AuthenticatedLayout>
     );

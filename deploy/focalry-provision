@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#
+# Focalry custom-domain provisioner (root wrapper).
+#
+# Installed to /usr/local/sbin/focalry-provision, root-owned, invoked as root
+# via sudo by the web/queue user after a domain is verified, and by a periodic
+# timer as a backstop for domains whose DNS had not yet propagated.
+#
+# It takes NO arguments on purpose: it always runs the full, idempotent batch
+# (domains:provision skips anything already provisioned) so the unprivileged
+# caller cannot influence what nginx config is written or which host is certbot'd.
+#
+set -euo pipefail
+
+APP_DIR=/var/www/wedding-app
+PHP=/usr/bin/php
+
+cd "$APP_DIR"
+exec "$PHP" artisan domains:provision --apply

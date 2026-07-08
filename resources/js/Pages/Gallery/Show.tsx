@@ -546,7 +546,7 @@ const GalleryPhoto = memo(function GalleryPhoto({
 
     return (
         <div
-            className={`group relative cursor-zoom-in overflow-hidden rounded-sm ${selected ? 'ring-2 ring-offset-2 ring-offset-[var(--g-bg)] ring-[var(--g-text)]' : ''}`}
+            className={`group relative cursor-zoom-in overflow-hidden rounded-sm ${loaded ? '' : 'animate-pulse bg-[var(--g-panel)]'} ${selected ? 'ring-2 ring-offset-2 ring-offset-[var(--g-bg)] ring-[var(--g-text)]' : ''}`}
             style={spanRows ? { gridRowEnd: `span ${spanRows}` } : undefined}
             onClick={() => onOpen(index)}
         >

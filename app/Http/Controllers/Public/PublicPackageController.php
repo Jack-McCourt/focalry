@@ -33,7 +33,7 @@ class PublicPackageController extends Controller
             ->map(fn (Package $p) => $this->payload($p));
 
         return Inertia::render('Public/Packages/Index', [
-            'studio' => ['name' => $studio->name, 'slug' => $studio->slug, 'logo_url' => $studio->logoUrl()],
+            'studio' => ['name' => $studio->name, 'slug' => $studio->slug, 'logo_url' => $studio->logoUrl(), 'logo_size' => $studio->logoSize()],
             'packages' => $packages,
             'embed' => $request->boolean('embed'),
             'can_pay' => $studio->stripe_connect_status === 'active',
@@ -51,7 +51,7 @@ class PublicPackageController extends Controller
             ->firstOrFail();
 
         return Inertia::render('Public/Packages/Show', [
-            'studio' => ['name' => $studio->name, 'slug' => $studio->slug, 'logo_url' => $studio->logoUrl()],
+            'studio' => ['name' => $studio->name, 'slug' => $studio->slug, 'logo_url' => $studio->logoUrl(), 'logo_size' => $studio->logoSize()],
             'package' => $this->payload($record),
             'embed' => $request->boolean('embed'),
             'can_pay' => $studio->stripe_connect_status === 'active',
@@ -164,7 +164,7 @@ class PublicPackageController extends Controller
         $studio = Studio::findOrFail($record->studio_id);
 
         return Inertia::render('Public/Packages/Confirmation', [
-            'studio' => ['name' => $studio->name, 'slug' => $studio->slug, 'logo_url' => $studio->logoUrl()],
+            'studio' => ['name' => $studio->name, 'slug' => $studio->slug, 'logo_url' => $studio->logoUrl(), 'logo_size' => $studio->logoSize()],
             'booking' => [
                 'client_name' => $record->client_name,
                 'package' => $record->package?->name,

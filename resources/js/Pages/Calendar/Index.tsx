@@ -1,6 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 type EventType = 'meeting' | 'shoot' | 'payment' | 'task';
 
@@ -30,10 +31,10 @@ const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 const LEGEND: { type: EventType; label: string; color: string }[] = [
-    { type: 'meeting', label: 'Meetings', color: '#3b82f6' },
+    { type: 'meeting', label: 'Meetings', color: '#2a305d' },
     { type: 'shoot', label: 'Shoots', color: '#8b5cf6' },
-    { type: 'payment', label: 'Payments due', color: '#10b981' },
-    { type: 'task', label: 'Tasks', color: '#6366f1' },
+    { type: 'payment', label: 'Payments due', color: '#f67952' },
+    { type: 'task', label: 'Tasks', color: '#7079a4' },
 ];
 
 function ymd(d: Date): string {
@@ -112,7 +113,7 @@ export default function Calendar({ month, prev, next, today, events, calendar }:
                     {calendar.connected ? (
                         <button
                             type="button"
-                            onClick={() => confirm('Disconnect Google Calendar? New meetings will no longer sync.') && router.delete(route('google-calendar.disconnect'))}
+                            onClick={async () => (await confirmDialog('Disconnect Google Calendar? New meetings will no longer sync.')) && router.delete(route('google-calendar.disconnect'))}
                             className="btn-secondary px-3 py-1.5 text-xs"
                         >
                             Disconnect

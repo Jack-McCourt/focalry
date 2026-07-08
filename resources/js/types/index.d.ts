@@ -260,10 +260,14 @@ export interface SiteTheme {
     nav_size?: string;
     /** Logo/wordmark text size: 'base' (default) | 'lg' | 'xl' | '2xl'. */
     logo_size?: string;
+    /** Uploaded header logo IMAGE size: 'small' | 'medium' (default) | 'large'. */
+    header_logo_size?: string;
     /** Visual style preset: 'classic' (default) | 'editorial'. */
     style?: string;
     /** Content container width: 'normal' (default) | 'wide'. */
     width?: string;
+    /** Header: 'solid' (default) | 'transparent' (overlays the hero, solid on scroll). */
+    header_style?: string;
 }
 
 export type SiteBlockType =
@@ -274,6 +278,11 @@ export type SiteBlockType =
     | 'gallery'
     | 'blog'
     | 'contact'
+    | 'newsletter'
+    | 'instagram'
+    | 'beforeafter'
+    | 'countdown'
+    | 'booking'
     | 'text'
     | 'image'
     | 'card'
@@ -290,9 +299,18 @@ export type SiteBlockType =
     | 'cta'
     | 'pricing'
     | 'map'
+    | 'post_header'
     | 'footer';
 
 export type BlockPadScale = 'none' | 'sm' | 'md' | 'lg' | 'xl';
+
+/** Server-side blog pagination state (live site, paginating blog blocks only). */
+export interface BlogState {
+    page: number;
+    page_count: number;
+    total: number;
+    category: string | null;
+}
 
 export interface BlockSettings {
     background?: string;
@@ -306,6 +324,11 @@ export interface BlockSettings {
     pad_right?: BlockPadScale;
     /** Container max-width override; 'full' removes the constraint. */
     width?: 'sm' | 'md' | 'lg' | 'full';
+    /** Scroll-in animation on the live site. */
+    animate?: 'none' | 'fade' | 'slide-up';
+    /** Responsive visibility (live site only — the builder always shows blocks). */
+    hide_mobile?: boolean;
+    hide_desktop?: boolean;
     /** Extra CSS class(es) added to the block's frame for custom styling. */
     class_name?: string;
 }
@@ -314,6 +337,10 @@ export interface SiteNavItem {
     label: string;
     kind: 'page' | 'url';
     target: string;
+    /** Header only: render as a call-to-action button instead of a text link. */
+    style?: 'link' | 'button';
+    /** Header only: one level of dropdown links under this item. */
+    children?: SiteNavItem[];
 }
 
 export interface SiteCategory {
@@ -367,6 +394,8 @@ export interface SitePageData {
     status?: 'draft' | 'published';
     published_at?: string | null;
     excerpt?: string | null;
+    /** Post byline, shown under the title. */
+    author?: string | null;
     category_ids?: number[];
     hidden_category_ids?: number[];
     cover_image?: string | null;
@@ -382,12 +411,29 @@ export interface SitePageData {
 
 export interface SiteData {
     id: number;
+    /** Optimistic-lock token echoed on builder saves (stale = 409-style error). */
+    version?: string;
+    /** Instagram connection state (feed block editor). */
+    instagram?: { available: boolean; connected: boolean; username: string | null };
+    announcement?: { enabled?: boolean; text?: string; link?: string; background?: string };
+    social?: Record<string, string>;
+    footer?: { tagline?: string; email?: string; phone?: string; show_social?: boolean; logo_size?: string };
+    logo_url?: string | null;
+    footer_logo?: string | null;
+    coming_soon?: boolean;
+    preview_url?: string | null;
+    /** Studio's own Turnstile widget (public key; the secret never round-trips). */
+    turnstile_site_key?: string | null;
+    turnstile_secret_set?: boolean;
+    /** Self-hosted fonts: [{name, url}] (woff2 on the CDN). */
+    custom_fonts?: { name: string; url: string }[];
     name: string;
     slug: string;
     custom_domain: string | null;
     domain_token: string | null;
     domain_verified: boolean;
     domain_live: boolean;
+    public_url: string;
     template: string;
     theme: SiteTheme;
     header_nav: SiteNavItem[];
@@ -416,6 +462,8 @@ export interface SiteTemplateMeta {
     key: string;
     name: string;
     description: string;
+    /** Screenshot of the template's home page (public/images/templates/thumbs). */
+    thumbnail: string;
 }
 
 export interface SiteLeadRow {

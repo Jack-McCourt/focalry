@@ -145,6 +145,28 @@ class Studio extends Model
     }
 
     /**
+     * The studio's chosen logo size (small | medium | large | xlarge). Applied
+     * to client emails AND browser-viewed documents (contracts, invoices,
+     * proposals, questionnaires, …). Stored under the branding blob.
+     */
+    public function logoSize(): string
+    {
+        $size = $this->branding['email_logo_size'] ?? 'medium';
+
+        return in_array($size, ['small', 'medium', 'large', 'xlarge'], true) ? $size : 'medium';
+    }
+
+    /**
+     * Pixel max-height for the logo in client emails. Medium (48px) is the
+     * established default; large is roughly double, small roughly two-thirds,
+     * and extra large is 50% larger than large.
+     */
+    public function emailLogoHeight(): int
+    {
+        return ['small' => 32, 'medium' => 48, 'large' => 96, 'xlarge' => 144][$this->logoSize()];
+    }
+
+    /**
      * Absolute filesystem path to the logo, for embedding in PDFs (dompdf needs a
      * local path). The logo lives in Wasabi, so cache a copy in the temp dir.
      */

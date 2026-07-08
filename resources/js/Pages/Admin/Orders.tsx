@@ -3,6 +3,7 @@ import { formatMoney } from '@/lib/money';
 import { Paginated } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
+import Paginator from '@/Components/Paginator';
 
 interface OrderRow {
     id: number;
@@ -26,7 +27,7 @@ interface Props {
 
 const STATUS_STYLES: Record<string, string> = {
     pending: 'bg-neutral-100 text-neutral-500',
-    paid: 'bg-blue-50 text-blue-700',
+    paid: 'bg-brand-50 text-brand-700',
     in_production: 'bg-amber-50 text-amber-700',
     shipped: 'bg-indigo-50 text-indigo-700',
     completed: 'bg-emerald-50 text-emerald-700',
@@ -94,7 +95,7 @@ export default function AdminOrders({ orders, filters, statuses, currency, total
                     </select>
                 </div>
 
-                <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-neutral-100 text-left text-xs uppercase tracking-wide text-neutral-400">
@@ -150,29 +151,7 @@ export default function AdminOrders({ orders, filters, statuses, currency, total
                     </table>
                 </div>
 
-                {(orders.prev_page_url || orders.next_page_url) && (
-                    <div className="mt-4 flex items-center justify-between text-sm">
-                        <span className="text-neutral-400">
-                            Page {orders.current_page} of {orders.last_page} · {orders.total} total
-                        </span>
-                        <div className="flex gap-2">
-                            <Link
-                                href={orders.prev_page_url ?? '#'}
-                                preserveState
-                                className={`rounded-lg border px-3 py-1.5 ${orders.prev_page_url ? 'border-neutral-300 hover:bg-neutral-50' : 'pointer-events-none border-neutral-100 text-neutral-300'}`}
-                            >
-                                Previous
-                            </Link>
-                            <Link
-                                href={orders.next_page_url ?? '#'}
-                                preserveState
-                                className={`rounded-lg border px-3 py-1.5 ${orders.next_page_url ? 'border-neutral-300 hover:bg-neutral-50' : 'pointer-events-none border-neutral-100 text-neutral-300'}`}
-                            >
-                                Next
-                            </Link>
-                        </div>
-                    </div>
-                )}
+                <Paginator paginator={orders} />
             </div>
         </AdminLayout>
     );

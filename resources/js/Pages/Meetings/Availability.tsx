@@ -4,6 +4,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface Rule {
     day_of_week: number;
@@ -99,10 +100,10 @@ export default function Availability({
             <StudioManagerNav active="meetings" />
             <MeetingsSubNav active="availability" />
 
-            <div className="px-4 py-6 sm:px-8">
+            <div className="px-4 py-8 sm:px-8">
                 <p className="mb-6 max-w-2xl text-sm text-neutral-500">
                     Connect Google Calendar from the{' '}
-                    <Link href={route('calendar.index')} className="font-medium text-blue-600 hover:text-blue-800">Calendar</Link> page.
+                    <Link href={route('calendar.index')} className="font-medium text-brand hover:text-brand-800">Calendar</Link> page.
                 </p>
 
                 {/* Zoom connection */}
@@ -123,7 +124,7 @@ export default function Availability({
                     {zoom.configured && (zoom.connected ? (
                         <button
                             type="button"
-                            onClick={() => confirm('Disconnect Zoom? New Zoom meetings will no longer be created automatically.') && router.delete(route('zoom.disconnect'))}
+                            onClick={async () => (await confirmDialog('Disconnect Zoom? New Zoom meetings will no longer be created automatically.')) && router.delete(route('zoom.disconnect'))}
                             className="btn-secondary px-3 py-1.5 text-xs"
                         >
                             Disconnect
@@ -145,7 +146,7 @@ export default function Availability({
                         <select
                             value={data.timezone}
                             onChange={(e) => setData('timezone', e.target.value)}
-                            className="block w-full max-w-xs rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900"
+                            className="block w-full max-w-xs rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
                         >
                             {timezones.map((tz) => (
                                 <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
@@ -169,20 +170,20 @@ export default function Availability({
                                                     type="time"
                                                     value={r.start_time}
                                                     onChange={(e) => updateWindow(i, { start_time: e.target.value })}
-                                                    className="rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900"
+                                                    className="rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
                                                 />
                                                 <span className="text-neutral-400">–</span>
                                                 <input
                                                     type="time"
                                                     value={r.end_time}
                                                     onChange={(e) => updateWindow(i, { end_time: e.target.value })}
-                                                    className="rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900"
+                                                    className="rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
                                                 />
                                                 <button type="button" onClick={() => removeWindow(i)} className="rounded p-1 text-neutral-400 hover:bg-red-50 hover:text-red-600" title="Remove">✕</button>
                                             </div>
                                         ))}
                                     </div>
-                                    <button type="button" onClick={() => addWindow(dow)} className="shrink-0 text-xs font-medium text-blue-600 hover:text-blue-800">
+                                    <button type="button" onClick={() => addWindow(dow)} className="shrink-0 text-xs font-medium text-brand hover:text-brand-800">
                                         + Add hours
                                     </button>
                                 </div>
@@ -197,11 +198,11 @@ export default function Availability({
                         <div className="mt-3 flex flex-wrap items-end gap-2">
                             <label className="text-xs text-neutral-500">
                                 <span className="mb-1 block">From</span>
-                                <input type="date" value={blockFrom} onChange={(e) => setBlockFrom(e.target.value)} className="rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900" />
+                                <input type="date" value={blockFrom} onChange={(e) => setBlockFrom(e.target.value)} className="rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500" />
                             </label>
                             <label className="text-xs text-neutral-500">
                                 <span className="mb-1 block">To <span className="text-neutral-400">(optional)</span></span>
-                                <input type="date" value={blockTo} min={blockFrom || undefined} onChange={(e) => setBlockTo(e.target.value)} className="rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900" />
+                                <input type="date" value={blockTo} min={blockFrom || undefined} onChange={(e) => setBlockTo(e.target.value)} className="rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500" />
                             </label>
                             <button type="button" onClick={addBlock} disabled={!blockFrom} className="btn-secondary px-3 py-1.5 text-xs disabled:opacity-40">Block days</button>
                         </div>

@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { formatMoney } from '@/lib/money';
 import { PageProps } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
+import Paginator from '@/Components/Paginator';
 
 interface OrderRow {
     id: number;
@@ -18,12 +19,16 @@ interface OrderRow {
 
 interface Paginator<T> {
     data: T[];
-    links: { url: string | null; label: string; active: boolean }[];
+    current_page: number;
+    last_page: number;
+    total: number;
+    prev_page_url: string | null;
+    next_page_url: string | null;
 }
 
 const STATUS_STYLES: Record<string, string> = {
     pending: 'bg-neutral-100 text-neutral-600',
-    paid: 'bg-blue-50 text-blue-700',
+    paid: 'bg-brand-50 text-brand-700',
     in_production: 'bg-amber-50 text-amber-700',
     shipped: 'bg-indigo-50 text-indigo-700',
     completed: 'bg-emerald-50 text-emerald-700',
@@ -54,7 +59,7 @@ export default function Orders({
             <Head title="Store · Orders" />
             <StoreNav active="orders" />
 
-            <div className="px-4 py-6 sm:px-8">
+            <div className="px-4 py-8 sm:px-8">
                 <div className="mb-6 grid gap-3 sm:grid-cols-3">
                     <Stat label="Revenue" value={formatMoney(totals.revenue_cents, default_currency)} />
                     <Stat label="Your payout" value={formatMoney(totals.payout_cents, default_currency)} />
@@ -76,7 +81,7 @@ export default function Orders({
                         <p className="mt-1 text-sm text-neutral-400">Orders placed from your galleries show up here.</p>
                     </div>
                 ) : (
-                    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                    <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
                         <table className="w-full text-sm">
                             <thead className="border-b border-neutral-100 text-left text-xs text-neutral-400">
                                 <tr>
@@ -117,20 +122,7 @@ export default function Orders({
                     </div>
                 )}
 
-                {orders.links.length > 3 && (
-                    <div className="mt-4 flex flex-wrap gap-1">
-                        {orders.links.map((l, i) => (
-                            <Link
-                                key={i}
-                                href={l.url ?? '#'}
-                                className={`rounded px-2.5 py-1 text-xs ${
-                                    l.active ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:bg-neutral-100'
-                                } ${!l.url ? 'pointer-events-none opacity-40' : ''}`}
-                                dangerouslySetInnerHTML={{ __html: l.label }}
-                            />
-                        ))}
-                    </div>
-                )}
+                <Paginator paginator={orders} />
             </div>
         </AuthenticatedLayout>
     );

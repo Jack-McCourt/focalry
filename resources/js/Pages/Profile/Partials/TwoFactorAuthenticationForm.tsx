@@ -6,6 +6,7 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import TextInput from '@/Components/TextInput';
 import { router, useForm } from '@inertiajs/react';
 import { FormEventHandler } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 export interface TwoFactorState {
     enabled: boolean;
@@ -25,8 +26,8 @@ export default function TwoFactorAuthenticationForm({
     const confirmForm = useForm({ code: '' });
 
     const enable = () => router.post(route('two-factor.enable'), {}, { preserveScroll: true });
-    const disable = () => {
-        if (confirm('Disable two-factor authentication? Your account will be less secure.')) {
+    const disable = async () => {
+        if (await confirmDialog('Disable two-factor authentication? Your account will be less secure.')) {
             router.delete(route('two-factor.disable'), { preserveScroll: true });
         }
     };

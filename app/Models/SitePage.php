@@ -13,6 +13,10 @@ class SitePage extends Model
 {
     use BelongsToStudio, HasFactory;
 
+    /** Page writes bump the site's updated_at → busts the public-page cache.
+     *  (Publishing does this anyway; this covers importers/commands too.) */
+    protected $touches = ['site'];
+
     protected $fillable = [
         'studio_id',
         'site_id',
@@ -27,6 +31,7 @@ class SitePage extends Model
         'status',
         'published_at',
         'excerpt',
+        'author',
         'category',
         'category_ids',
         'hidden_category_ids',

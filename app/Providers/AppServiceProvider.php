@@ -35,6 +35,15 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('public-forms', fn (Request $request) => Limit::perMinute(10)->by($request->ip()));
         RateLimiter::for('public-checkout', fn (Request $request) => Limit::perMinute(20)->by($request->ip()));
 
+        // Image endpoints — worker-protection, not spam control, so the limits
+        // are deliberately generous: one visitor opening a 120-photo masonry
+        // gallery fires that many requests at once and must never be clipped.
+        // /img cache-misses cost a GD decode+resize (CPU), so it gets a tighter
+        // budget than the plain /assets streamer (bandwidth). 429s on images
+        // self-heal anyway — RetryImg retries with backoff.
+        RateLimiter::for('public-images', fn (Request $request) => Limit::perMinute(300)->by($request->ip()));
+        RateLimiter::for('public-assets', fn (Request $request) => Limit::perMinute(600)->by($request->ip()));
+
         // Studio is the Cashier billable entity, not User.
         Cashier::useCustomerModel(Studio::class);
 

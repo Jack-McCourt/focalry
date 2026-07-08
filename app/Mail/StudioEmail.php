@@ -23,6 +23,8 @@ class StudioEmail extends Mailable
         public ?string $ctaLabel = null,
         public ?string $ctaUrl = null,
         public ?string $replyToEmail = null,
+        public ?string $logoUrl = null,
+        public ?int $logoHeight = null,
     ) {}
 
     public function envelope(): Envelope
@@ -39,6 +41,8 @@ class StudioEmail extends Mailable
             markdown: 'mail.studio-email',
             with: [
                 'studioName' => $this->studioName,
+                'logoUrl' => $this->logoUrl,
+                'logoHeight' => $this->logoHeight,
                 'bodyText' => $this->bodyText,
                 'ctaLabel' => $this->ctaLabel,
                 'ctaUrl' => $this->ctaUrl,

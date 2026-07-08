@@ -48,6 +48,7 @@ class ClientPortalController extends Controller
                 'sent' => (bool) $request->session()->get('portal_code_sent'),
                 'studio_name' => $studio?->name,
                 'studio_logo' => $studio?->logoUrl(),
+                'studio_logo_size' => $studio?->logoSize(),
             ]);
         }
 
@@ -57,6 +58,7 @@ class ClientPortalController extends Controller
             'client_name' => $contact->first_name ?: $contact->name,
             'studio_name' => $studio?->name,
             'studio_logo' => $studio?->logoUrl(),
+            'studio_logo_size' => $studio?->logoSize(),
             'projects' => $this->projects($contact->id, $contact->studio_id),
         ]);
     }

@@ -6,6 +6,7 @@ import { centsToInput, formatMoney, toCents } from '@/lib/money';
 import { PageProps } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface Coupon {
     id: number;
@@ -48,7 +49,7 @@ export default function Coupons({
             <Head title="Store · Coupons" />
             <StoreNav active="coupons" />
 
-            <div className="px-4 py-6 sm:px-8">
+            <div className="px-4 py-8 sm:px-8">
                 <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-sm font-semibold text-neutral-900">Coupons</h2>
                     <button onClick={() => setCreating(true)} className="btn-primary">New coupon</button>
@@ -66,7 +67,7 @@ export default function Coupons({
                                 <div>
                                     <span className="font-mono text-sm font-semibold text-neutral-900">{c.code}</span>
                                     {!c.active && <span className="ml-2 rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-500">Inactive</span>}
-                                    {c.show_banner && <span className="ml-2 rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-600">Banner</span>}
+                                    {c.show_banner && <span className="ml-2 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] text-brand">Banner</span>}
                                     <p className="text-[11px] text-neutral-400">{describe(c)} · {c.redeemed_count}{c.max_redemptions ? `/${c.max_redemptions}` : ''} used</p>
                                 </div>
                                 <span className="text-xs text-neutral-400">{c.expires_at ? `Expires ${c.expires_at}` : 'No expiry'}</span>
@@ -97,7 +98,7 @@ function CouponModal({ onClose, coupon, defaultCurrency }: { onClose: () => void
         starts_at: coupon?.starts_at ?? '',
         expires_at: coupon?.expires_at ?? '',
     });
-    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900';
+    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500';
     const needsValue = data.type === 'percent' || data.type === 'fixed';
 
     const submit = (e: React.FormEvent) => {
@@ -118,8 +119,8 @@ function CouponModal({ onClose, coupon, defaultCurrency }: { onClose: () => void
         if (isEdit) router.patch(route('store.coupons.update', coupon!.id), payload, { onSuccess: onClose });
         else router.post(route('store.coupons.store'), payload, { onSuccess: onClose });
     };
-    const del = () => {
-        if (confirm('Delete this coupon?')) router.delete(route('store.coupons.destroy', coupon!.id), { onSuccess: onClose });
+    const del = async () => {
+        if (await confirmDialog('Delete this coupon?')) router.delete(route('store.coupons.destroy', coupon!.id), { onSuccess: onClose });
     };
 
     return (

@@ -2,9 +2,9 @@
 
 use App\Support\SiteTemplates;
 
-$knownBlockTypes = ['hero', 'about', 'services', 'gallery', 'blog', 'packages', 'reviews', 'text', 'image', 'video', 'button', 'cta', 'faq', 'testimonials', 'pricing', 'logos', 'map', 'embed', 'divider', 'contact', 'grid'];
+$knownBlockTypes = ['hero', 'about', 'services', 'gallery', 'blog', 'packages', 'reviews', 'text', 'image', 'video', 'button', 'cta', 'faq', 'testimonials', 'pricing', 'logos', 'map', 'embed', 'divider', 'contact', 'newsletter', 'instagram', 'slider', 'grid'];
 
-$customTemplates = ['editorial', 'studio', 'documentary'];
+$customTemplates = ['editorial', 'studio', 'documentary', 'noir', 'coastal', 'atelier', 'heirloom'];
 
 it('registers the editorial, studio and documentary templates', function () {
     $keys = array_column(SiteTemplates::all(), 'key');
@@ -32,10 +32,12 @@ it('builds well-formed pages for the new templates', function () use ($knownBloc
         foreach ($pages as $page) {
             expect($page['slug'])->not->toBeEmpty();
 
-            // Every page should have exactly one h1 source: either a hero, or a
-            // text block with heading_level h1 — important for SEO.
+            // Every page should have exactly one h1 source: either an h1-level
+            // hero (heroes can demote to h2 via heading_level, e.g. heirloom's
+            // stacked portfolio banners), or a text block with heading_level h1
+            // — important for SEO.
             $h1s = collect($page['blocks'])->filter(
-                fn ($b) => $b['type'] === 'hero'
+                fn ($b) => ($b['type'] === 'hero' && ($b['data']['heading_level'] ?? 'h1') === 'h1')
                     || ($b['type'] === 'text' && ($b['data']['heading_level'] ?? null) === 'h1')
             );
             expect($h1s->count())->toBe(1, "page {$page['slug']} in $key must have exactly one h1");

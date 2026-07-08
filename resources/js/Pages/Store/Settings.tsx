@@ -4,6 +4,7 @@ import { centsToInput, formatMoney, toCents } from '@/lib/money';
 import { PageProps } from '@/types';
 import { Head, router } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface TaxRate { id: number; name: string; rate_bps: number; region: string | null; is_default: boolean; active: boolean }
 interface ShippingMethod { id: number; name: string; price_cents: number; is_pickup: boolean; active: boolean; description: string | null }
@@ -28,7 +29,7 @@ export default function Settings({
     const [hours, setHours] = useState(settings.review_window_hours);
     const [saving, setSaving] = useState(false);
 
-    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900';
+    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500';
 
     const saveSettings = (e: React.FormEvent) => {
         e.preventDefault();
@@ -180,8 +181,8 @@ function CrudSection<T extends { id: number }>({
         if (editing === 'new') router.post(storeRoute, payload, { preserveScroll: true, onSuccess: () => setEditing(null) });
         else if (editing) router.patch(updateRoute((editing as T).id), payload, { preserveScroll: true, onSuccess: () => setEditing(null) });
     };
-    const del = (id: number) => {
-        if (confirm('Delete this?')) router.delete(destroyRoute(id), { preserveScroll: true, onSuccess: () => setEditing(null) });
+    const del = async (id: number) => {
+        if (await confirmDialog('Delete this?')) router.delete(destroyRoute(id), { preserveScroll: true, onSuccess: () => setEditing(null) });
     };
 
     return (
@@ -227,7 +228,7 @@ function Input({ label, value, onChange, placeholder }: { label: string; value: 
         <div>
             <span className="label">{label}</span>
             <input
-                className="mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900"
+                className="mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder}

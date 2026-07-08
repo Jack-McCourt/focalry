@@ -155,6 +155,8 @@ class OrderFulfillment
                 ctaLabel: 'View order',
                 ctaUrl: route('store.public.confirmation', $order->public_id),
                 details: $details,
+                logoUrl: $order->studio?->logoUrl(),
+                logoHeight: $order->studio?->emailLogoHeight(),
             ));
         } catch (\Throwable $e) {
             report($e);

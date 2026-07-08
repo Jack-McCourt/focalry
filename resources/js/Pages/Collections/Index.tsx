@@ -1,6 +1,8 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Collection, PageProps, Paginated } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
+import Paginator from '@/Components/Paginator';
+import SkeletonImage from '@/Components/SkeletonImage';
 
 function StatusBadge({ status }: { status: Collection['status'] }) {
     return status === 'published' ? (
@@ -22,7 +24,7 @@ function CollectionCard({ collection }: { collection: Collection }) {
             {/* Cover image / placeholder */}
             <div className="relative mb-3 aspect-[4/3] overflow-hidden rounded-xl bg-neutral-100">
                 {collection.cover_url ? (
-                    <img
+                    <SkeletonImage
                         src={collection.cover_url}
                         alt={collection.title}
                         loading="lazy"
@@ -95,7 +97,7 @@ export default function Index({
         >
             <Head title="Galleries" />
 
-            <div className="px-4 sm:px-8 py-10">
+            <div className="px-4 py-8 sm:px-8">
                 {collections.data.length === 0 ? (
                     <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-neutral-200 py-32">
                         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-neutral-100">
@@ -121,29 +123,7 @@ export default function Index({
                             ))}
                         </div>
 
-                        {collections.last_page > 1 && (
-                            <div className="mt-10 flex items-center justify-center gap-2">
-                                {collections.prev_page_url && (
-                                    <button
-                                        onClick={() => router.get(collections.prev_page_url!)}
-                                        className="btn-secondary px-3 py-1.5 text-xs"
-                                    >
-                                        Previous
-                                    </button>
-                                )}
-                                <span className="text-xs text-neutral-500">
-                                    Page {collections.current_page} of {collections.last_page}
-                                </span>
-                                {collections.next_page_url && (
-                                    <button
-                                        onClick={() => router.get(collections.next_page_url!)}
-                                        className="btn-secondary px-3 py-1.5 text-xs"
-                                    >
-                                        Next
-                                    </button>
-                                )}
-                            </div>
-                        )}
+                        <Paginator paginator={collections} />
                     </>
                 )}
             </div>

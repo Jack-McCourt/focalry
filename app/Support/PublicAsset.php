@@ -16,6 +16,9 @@ namespace App\Support;
  */
 class PublicAsset
 {
+    /** Cache-Control for uploaded assets — filenames are unique, so cache forever. */
+    public const CACHE_FOREVER = 'public, max-age=31536000, immutable';
+
     public static function url(?string $key): ?string
     {
         if (! $key) {

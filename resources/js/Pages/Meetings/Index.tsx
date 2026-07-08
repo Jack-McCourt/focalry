@@ -3,6 +3,7 @@ import StudioManagerNav from '@/Components/StudioManagerNav';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface MeetingItem {
     id: number;
@@ -24,7 +25,7 @@ const STATUS_STYLE: Record<string, string> = {
     confirmed: 'bg-emerald-100 text-emerald-700',
     declined: 'bg-red-100 text-red-700',
     cancelled: 'bg-neutral-200 text-neutral-600',
-    completed: 'bg-blue-100 text-blue-700',
+    completed: 'bg-brand-100 text-brand-700',
 };
 
 function fmtRange(start: string, end: string) {
@@ -47,8 +48,8 @@ export default function Index({
     const setStatus = (status: string) =>
         router.get(route('meetings.index'), { status }, { preserveState: true, preserveScroll: true, replace: true });
 
-    const act = (m: MeetingItem, action: 'confirm' | 'decline' | 'cancel') => {
-        if (action === 'cancel' && !confirm('Cancel this meeting?')) return;
+    const act = async (m: MeetingItem, action: 'confirm' | 'decline' | 'cancel') => {
+        if (action === 'cancel' && !(await confirmDialog('Cancel this meeting?'))) return;
         router.post(route(`meetings.${action}`, m.id), {}, { preserveScroll: true });
     };
 
@@ -65,7 +66,7 @@ export default function Index({
             <StudioManagerNav active="meetings" />
             <MeetingsSubNav active="meetings" />
 
-            <div className="px-4 py-6 sm:px-8">
+            <div className="px-4 py-8 sm:px-8">
                 <div className="mb-4 flex gap-1">
                     {TABS.map((t) => (
                         <button
@@ -107,7 +108,7 @@ export default function Index({
                                             {m.location ? ` · ${m.location}` : ''}
                                         </p>
                                         {m.meeting_url && (
-                                            <a href={m.meeting_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-blue-600 hover:underline">
+                                            <a href={m.meeting_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-brand hover:underline">
                                                 Join video call
                                             </a>
                                         )}

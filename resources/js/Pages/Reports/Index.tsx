@@ -286,7 +286,7 @@ export default function Reports({
                                     iconSize={8}
                                     formatter={(v) => <span className="text-xs text-neutral-500">{v === 'collected_cents' ? 'Revenue' : 'Expenses'}</span>}
                                 />
-                                <Bar dataKey="collected_cents" fill="#4f46e5" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                                <Bar dataKey="collected_cents" fill="#2a305d" radius={[4, 4, 0, 0]} maxBarSize={32} />
                                 <Bar dataKey="expenses_cents" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={32} />
                             </BarChart>
                         </ResponsiveContainer>

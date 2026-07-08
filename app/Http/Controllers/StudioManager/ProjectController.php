@@ -243,6 +243,7 @@ class ProjectController extends Controller
             'fields' => ProjectFieldDefinition::orderBy('position')->get(['key', 'label', 'type', 'options']),
             'studio_name' => $studio?->name,
             'studio_logo' => $studio?->logoUrl(),
+            'studio_logo_size' => $studio?->logoSize(),
         ]);
     }
 

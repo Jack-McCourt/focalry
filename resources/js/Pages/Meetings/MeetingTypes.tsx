@@ -5,6 +5,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface MeetingType {
     id: number;
@@ -52,7 +53,7 @@ export default function MeetingTypes({
             <StudioManagerNav active="meetings" />
             <MeetingsSubNav active="meeting-types" />
 
-            <div className="px-4 py-6 sm:px-8">
+            <div className="px-4 py-8 sm:px-8">
                 <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4">
                     <div className="min-w-0">
                         <p className="text-xs font-medium text-neutral-500">Your public booking link</p>
@@ -90,7 +91,7 @@ export default function MeetingTypes({
                                 className="rounded-xl border border-neutral-200 bg-white p-4 text-left transition hover:border-neutral-300 hover:shadow-sm"
                             >
                                 <div className="flex items-center gap-2">
-                                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: t.color ?? '#6366f1' }} />
+                                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: t.color ?? '#2a305d' }} />
                                     <span className="text-sm font-semibold text-neutral-900">{t.name}</span>
                                     {!t.active && <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-500">Hidden</span>}
                                 </div>
@@ -131,7 +132,7 @@ function MeetingTypeModal({
         location_type: meetingType?.location_type ?? 'video',
         location: meetingType?.location ?? '',
         video_provider: meetingType?.video_provider ?? 'google_meet',
-        color: meetingType?.color ?? '#6366f1',
+        color: meetingType?.color ?? '#2a305d',
         buffer_minutes: meetingType?.buffer_minutes ?? 0,
         min_lead_hours: meetingType?.min_lead_hours ?? 24,
         max_per_day: meetingType?.max_per_day ?? ('' as number | ''),
@@ -150,13 +151,13 @@ function MeetingTypeModal({
         else post(route('meeting-types.store'), { onSuccess: onClose });
     };
 
-    const del = () => {
-        if (confirm('Delete this meeting type? Existing meetings are kept.')) {
+    const del = async () => {
+        if (await confirmDialog('Delete this meeting type? Existing meetings are kept.')) {
             router.delete(route('meeting-types.destroy', meetingType!.id), { onSuccess: onClose });
         }
     };
 
-    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900';
+    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500';
 
     return (
         <Modal show onClose={onClose} maxWidth="lg">

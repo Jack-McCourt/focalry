@@ -1,0 +1,13 @@
+[Unit]
+Description=Focalry custom-domain provisioning backstop (retries slow-DNS domains)
+
+[Timer]
+# First run 5 min after boot, then every 15 min. Persistent=true makes systemd
+# run a missed occurrence once the machine is back up. The wrapper skips any
+# domain already provisioned, so this is cheap when there is nothing to do.
+OnBootSec=5min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,6 +1,4 @@
-<x-mail::message>
-# {{ $studioName }}
-
+<x-mail::message :studio-name="$studioName" :logo-url="$logoUrl" :logo-height="$logoHeight ?? null">
 {!! nl2br(e($bodyText)) !!}
 
 <x-mail::button :url="$ctaUrl">

@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface ContactRef {
     id: number;
@@ -261,7 +262,7 @@ const RichComposer = forwardRef<RichComposerHandle, {
                     const files = Array.from(e.dataTransfer?.files ?? []).filter((f) => f.type.startsWith('image/'));
                     if (files.length) { e.preventDefault(); insertImages(files); }
                 }}
-                className={`max-w-none break-words text-sm leading-relaxed outline-none [&_a]:text-blue-600 [&_a]:underline [&_img]:my-1.5 [&_img]:max-h-80 [&_img]:max-w-full [&_img]:rounded-lg ${className ?? ''}`}
+                className={`max-w-none break-words text-sm leading-relaxed outline-none [&_a]:text-brand [&_a]:underline [&_img]:my-1.5 [&_img]:max-h-80 [&_img]:max-w-full [&_img]:rounded-lg ${className ?? ''}`}
             />
         </div>
     );
@@ -342,7 +343,7 @@ function LinkDocumentModal({ show, onClose, conversationId, onPick }: {
                                         <span className="block truncate text-sm font-medium text-neutral-800">{it.label}</span>
                                         <span className="block text-xs capitalize text-neutral-400">{it.type} · {it.meta}</span>
                                     </span>
-                                    <span className="text-xs text-blue-600">Insert</span>
+                                    <span className="text-xs text-brand">Insert</span>
                                 </button>
                             </li>
                         ))}
@@ -661,7 +662,7 @@ export default function Index({
                         <div className="mt-2 flex gap-1">
                             {(['open', 'archived'] as const).map((s) => (
                                 <button key={s} onClick={() => setStatus(s)} className={`rounded-full px-3 py-1 text-xs font-medium capitalize transition ${filters.status === s ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}>
-                                    {s} {s === 'open' && counts.unread > 0 && <span className="ml-0.5 rounded-full bg-blue-600 px-1.5 text-[10px] text-white">{counts.unread}</span>}
+                                    {s} {s === 'open' && counts.unread > 0 && <span className="ml-0.5 rounded-full bg-brand px-1.5 text-[10px] text-white">{counts.unread}</span>}
                                 </button>
                             ))}
                         </div>
@@ -676,14 +677,14 @@ export default function Index({
                                     key={c.id}
                                     href={route('messages.show', c.id)}
                                     preserveScroll
-                                    className={`block border-b border-neutral-50 px-4 py-3 transition hover:bg-neutral-50 ${selected?.id === c.id ? 'bg-blue-50/60' : ''}`}
+                                    className={`block border-b border-neutral-50 px-4 py-3 transition hover:bg-neutral-50 ${selected?.id === c.id ? 'bg-brand-50/60' : ''}`}
                                 >
                                     <div className="flex items-center justify-between gap-2">
                                         <span className={`truncate text-sm ${c.unread ? 'font-semibold text-neutral-900' : 'font-medium text-neutral-700'}`}>{c.contact?.name ?? 'Unknown'}</span>
                                         <span className="shrink-0 text-[11px] text-neutral-400">{fmtTime(c.last_message_at)}</span>
                                     </div>
                                     <div className="mt-0.5 flex items-center gap-1.5">
-                                        {c.unread && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600" />}
+                                        {c.unread && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand" />}
                                         <span className={`truncate text-xs ${c.unread ? 'text-neutral-700' : 'text-neutral-400'}`}>{c.subject}</span>
                                     </div>
                                     {c.preview && <p className="mt-0.5 truncate text-xs text-neutral-400">{c.preview}</p>}
@@ -750,7 +751,7 @@ export default function Index({
                                             {selected.status === 'archived' ? 'Restore' : 'Archive'}
                                         </button>
                                         <button
-                                            onClick={() => confirm('Delete this conversation? This cannot be undone.') && router.delete(route('messages.destroy', selected.id))}
+                                            onClick={async () => (await confirmDialog('Delete this conversation? This cannot be undone.')) && router.delete(route('messages.destroy', selected.id))}
                                             className="rounded-md p-1.5 text-neutral-400 hover:bg-red-50 hover:text-red-600"
                                             title="Delete conversation"
                                         >
@@ -775,7 +776,7 @@ export default function Index({
                                                 {m.attachments.length > 0 && (
                                                     <div className={`space-y-1 ${hasBody ? 'mt-2' : ''}`}>
                                                         {m.attachments.map((a, i) => (
-                                                            <a key={i} href={a.url} target="_blank" rel="noreferrer" className={`flex items-center gap-1.5 text-xs hover:underline ${out ? 'text-white/90' : 'text-blue-700'}`}>
+                                                            <a key={i} href={a.url} target="_blank" rel="noreferrer" className={`flex items-center gap-1.5 text-xs hover:underline ${out ? 'text-white/90' : 'text-brand-700'}`}>
                                                                 <IconPaperclip className="h-3.5 w-3.5 shrink-0" />
                                                                 <span className="truncate">{a.name}</span>
                                                                 {a.size > 0 && <span className="shrink-0 opacity-60">({fmtSize(a.size)})</span>}
@@ -927,8 +928,8 @@ function TemplatesModal({ show, onClose, templates }: { show: boolean; onClose: 
         form.post(route('message-templates.store'), { preserveScroll: true, onSuccess: () => form.reset() });
     };
 
-    const remove = (id: number) => {
-        if (confirm('Delete this template?')) router.delete(route('message-templates.destroy', id), { preserveScroll: true });
+    const remove = async (id: number) => {
+        if (await confirmDialog('Delete this template?')) router.delete(route('message-templates.destroy', id), { preserveScroll: true });
     };
 
     return (

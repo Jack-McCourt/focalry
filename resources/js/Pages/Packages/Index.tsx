@@ -6,6 +6,7 @@ import { centsToInput, formatMoney, toCents } from '@/lib/money';
 import { PageProps } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface Package {
     id: number;
@@ -69,7 +70,7 @@ export default function Index({
             <Head title="Payment links" />
             <StudioManagerNav active="bookings" />
 
-            <div className="px-4 py-6 sm:px-8">
+            <div className="px-4 py-8 sm:px-8">
                 {!stripe_ready && (
                     <div className="mb-5 rounded-lg bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
                         Connect Stripe (Settings → payments) to take payment through your payment links. You can still create them now.
@@ -120,7 +121,7 @@ export default function Index({
                                             role="button"
                                             tabIndex={0}
                                             onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(p.url!); setCopiedId(p.id); setTimeout(() => setCopiedId(null), 1500); }}
-                                            className="mt-2 inline-block text-[11px] font-medium text-blue-600 hover:underline"
+                                            className="mt-2 inline-block text-[11px] font-medium text-brand hover:underline"
                                         >
                                             {copiedId === p.id ? 'Copied!' : 'Copy link'}
                                         </span>
@@ -144,7 +145,7 @@ export default function Index({
                                     </div>
                                     <div className="flex shrink-0 items-center gap-3">
                                         <span className="text-neutral-700">{formatMoney(b.amount_cents, b.currency)}{b.payment_type === 'deposit' ? ' deposit' : ''}</span>
-                                        {b.project_id && <a href={`/projects?open=${b.project_id}`} className="text-xs text-blue-600 hover:underline">Project</a>}
+                                        {b.project_id && <a href={`/projects?open=${b.project_id}`} className="text-xs text-brand hover:underline">Project</a>}
                                     </div>
                                 </div>
                             ))}
@@ -212,13 +213,13 @@ function PackageModal({ onClose, pkg, defaultCurrency }: { onClose: () => void; 
         });
     };
 
-    const del = () => {
-        if (confirm('Delete this payment link? Existing payments are kept.')) {
+    const del = async () => {
+        if (await confirmDialog('Delete this payment link? Existing payments are kept.')) {
             router.delete(route('packages.destroy', pkg!.id), { onSuccess: onClose });
         }
     };
 
-    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900';
+    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500';
 
     return (
         <Modal show onClose={onClose} maxWidth="lg">

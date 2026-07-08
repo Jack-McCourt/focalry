@@ -20,7 +20,7 @@ function guessCountry(): string {
 }
 
 const selectClasses =
-    'mt-1.5 block w-full rounded-lg border-neutral-300 text-neutral-900 shadow-sm transition focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900';
+    'mt-1.5 block w-full rounded-lg border-neutral-300 text-neutral-900 shadow-sm transition focus:border-brand-500 focus:ring-1 focus:ring-brand-500';
 
 export default function Register() {
     const { data, setData, post, processing, errors, reset } = useForm({

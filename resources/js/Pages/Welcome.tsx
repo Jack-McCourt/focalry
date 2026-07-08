@@ -29,8 +29,16 @@ const ArrowIcon = (p: IconProps) => <Icon {...p} d="M13.5 4.5L21 12m0 0l-7.5 7.5
 
 /* ─────────────────────────  Building blocks  ───────────────────────── */
 
-function Screenshot({ label, className = '', ratio = 'aspect-[16/10]' }: { label: string; className?: string; ratio?: string }) {
-    // Drop a real <img> in place of this block when you have a screenshot.
+function Screenshot({ label, src, className = '', ratio = 'aspect-[16/10]' }: { label: string; src?: string; className?: string; ratio?: string }) {
+    if (src) {
+        return (
+            <div className={`relative overflow-hidden rounded-xl ${ratio} ${className}`}>
+                <img src={src} alt={label} loading="lazy" className="absolute inset-0 h-full w-full object-cover object-top" />
+            </div>
+        );
+    }
+
+    // Placeholder until a real screenshot is provided.
     return (
         <div className={`relative overflow-hidden rounded-xl border border-dashed border-neutral-300 bg-gradient-to-br from-neutral-50 to-neutral-100 ${ratio} ${className}`}>
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-neutral-400">
@@ -64,7 +72,7 @@ const PILLARS = [
     { icon: GlobeIcon, title: 'Your own website', body: 'A block-based site builder with a lead-capturing contact form, no code.' },
 ];
 
-type Feature = { eyebrow: string; title: string; body: string; points: string[]; shot: string; reverse?: boolean };
+type Feature = { eyebrow: string; title: string; body: string; points: string[]; shot: string; src?: string; reverse?: boolean };
 const FEATURES: Feature[] = [
     {
         eyebrow: 'Client galleries',
@@ -72,6 +80,7 @@ const FEATURES: Feature[] = [
         body: 'Deliver work in a fast, full-screen experience. Masonry layouts adapt to every crop, photos are ordered the way the day unfolded, and clients can favourite, comment and download — all from a link.',
         points: ['Masonry layouts & cover styling', 'Favourites, notes & activity dashboard', 'Password / email-gated privacy', 'Controlled downloads with limits & PIN'],
         shot: 'Client gallery view',
+        src: '/images/marketing/feature-gallery.jpg',
     },
     {
         eyebrow: 'Lightroom plugin',
@@ -79,6 +88,7 @@ const FEATURES: Feature[] = [
         body: 'Our Lightroom Classic plugin publishes straight from your catalogue. Create a Collection with multiple Sets, drag in your selects, hit Publish, and originals stream directly to secure storage.',
         points: ['Native Publish Service for Lightroom Classic', 'Collections & sets mirrored to the cloud', 'Re-publish edits, remove deletes', 'Direct-to-storage uploads — no middle-man'],
         shot: 'Lightroom publish panel',
+        src: '/images/marketing/feature-lightroom.jpg',
         reverse: true,
     },
     {
@@ -87,6 +97,7 @@ const FEATURES: Feature[] = [
         body: 'Turn galleries into income. Price sheets, products, coupons and gift cards, an in-gallery cart, secure checkout, and hands-off lab fulfilment — with the lowest commission in the business.',
         points: ['In-gallery cart & secure checkout', 'Automatic pro-lab fulfilment', 'Coupons, gift cards & tax handling', '0% commission on paid plans'],
         shot: 'Store & checkout',
+        src: '/images/marketing/feature-store.jpg',
     },
     {
         eyebrow: 'Studio manager',
@@ -94,6 +105,7 @@ const FEATURES: Feature[] = [
         body: 'Stop stitching together five tools. Contacts, an Airtable-style projects board, invoices, contracts with e-signature, and call scheduling — all connected, all in your studio.',
         points: ['Contacts & visual projects board', 'Invoices with online payment', 'Contracts & legally-binding e-signatures', 'Meeting scheduling with calendar sync'],
         shot: 'Studio manager / CRM',
+        src: '/images/marketing/feature-crm.jpg',
         reverse: true,
     },
     {
@@ -102,6 +114,7 @@ const FEATURES: Feature[] = [
         body: 'Build workflows that fire on the events that matter — a booking, a paid invoice, a signed contract. Send questionnaires, proposals and reminders automatically, so nothing slips.',
         points: ['Trigger-based workflow engine', 'Questionnaires & proposals', 'Task lists & templates', 'Scheduled, delayed steps'],
         shot: 'Workflow automation builder',
+        src: '/images/marketing/feature-workflows.jpg',
     },
 ];
 
@@ -126,12 +139,7 @@ export default function Welcome({ auth }: PageProps) {
                 {/* Nav */}
                 <header className="sticky top-0 z-50 border-b border-neutral-100 bg-white/80 backdrop-blur-md">
                     <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-                        <div className="flex items-center gap-2">
-                            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 text-white">
-                                <CameraIcon className="h-5 w-5" />
-                            </span>
-                            <span className="text-lg font-semibold tracking-tight">{BRAND}</span>
-                        </div>
+                        <img src="/images/logo/focalry-logo.png" alt={BRAND} className="h-10 w-auto" />
                         <nav className="hidden items-center gap-8 text-sm font-medium text-neutral-600 md:flex">
                             <a href="#features" className="transition hover:text-neutral-900">Features</a>
                             <a href="#why" className="transition hover:text-neutral-900">Why {BRAND}</a>
@@ -139,7 +147,7 @@ export default function Welcome({ auth }: PageProps) {
                         </nav>
                         <div className="flex items-center gap-2">
                             {auth.user ? (
-                                <Link href={route('dashboard')} className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-700">
+                                <Link href={route('dashboard')} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700">
                                     Dashboard
                                 </Link>
                             ) : (
@@ -147,7 +155,7 @@ export default function Welcome({ auth }: PageProps) {
                                     <Link href={route('login')} className="hidden rounded-lg px-4 py-2 text-sm font-semibold text-neutral-700 transition hover:text-neutral-900 sm:block">
                                         Log in
                                     </Link>
-                                    <Link href={route('register')} className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-700">
+                                    <Link href={route('register')} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700">
                                         Get started
                                     </Link>
                                 </>
@@ -160,17 +168,17 @@ export default function Welcome({ auth }: PageProps) {
                 <section className="relative overflow-hidden">
                     {/* gradient blobs */}
                     <div className="pointer-events-none absolute inset-0 -z-10">
-                        <div className="absolute -top-32 left-1/2 h-[36rem] w-[36rem] -translate-x-1/2 rounded-full bg-gradient-to-br from-indigo-200/50 via-violet-200/40 to-rose-200/40 blur-3xl" />
+                        <div className="absolute -top-32 left-1/2 h-[36rem] w-[36rem] -translate-x-1/2 rounded-full bg-gradient-to-br from-brand-200/60 via-brand-100/40 to-accent-200/50 blur-3xl" />
                     </div>
 
                     <div className="mx-auto max-w-7xl px-6 pb-12 pt-20 text-center sm:pt-28">
                         <div className="mx-auto mb-6 inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/70 px-4 py-1.5 text-xs font-medium text-neutral-600 shadow-sm">
-                            <SparkIcon className="h-4 w-4 text-violet-600" />
+                            <SparkIcon className="h-4 w-4 text-accent-600" />
                             Galleries · Store · CRM · Website — in one platform
                         </div>
                         <h1 className="mx-auto max-w-4xl text-4xl font-bold tracking-tight text-neutral-900 sm:text-6xl">
                             Everything your photography studio needs,{' '}
-                            <span className="bg-gradient-to-r from-indigo-600 via-violet-600 to-rose-500 bg-clip-text text-transparent">
+                            <span className="bg-gradient-to-r from-brand via-brand-500 to-accent-600 bg-clip-text text-transparent">
                                 beautifully in one place
                             </span>
                         </h1>
@@ -178,7 +186,7 @@ export default function Welcome({ auth }: PageProps) {
                             Deliver stunning galleries, sell prints with zero commission, manage clients and contracts, and publish straight from Lightroom — without juggling six different tools.
                         </p>
                         <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                            <Link href={ctaHref} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-violet-600/20 transition hover:opacity-95">
+                            <Link href={ctaHref} className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand to-brand-500 px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 transition hover:opacity-95">
                                 {ctaLabel}
                                 <ArrowIcon className="h-4 w-4" />
                             </Link>
@@ -191,7 +199,7 @@ export default function Welcome({ auth }: PageProps) {
                         {/* Hero screenshot */}
                         <div className="mx-auto mt-16 max-w-5xl">
                             <BrowserFrame>
-                                <Screenshot label="Dashboard / hero screenshot" ratio="aspect-[16/9]" />
+                                <Screenshot label="Dashboard / hero screenshot" ratio="aspect-[16/9]" src="/images/marketing/hero-dashboard.jpg" />
                             </BrowserFrame>
                         </div>
                     </div>
@@ -206,7 +214,7 @@ export default function Welcome({ auth }: PageProps) {
                     <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                         {PILLARS.map(({ icon: Ic, title, body }) => (
                             <div key={title} className="group rounded-2xl border border-neutral-100 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
-                                <span className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-50 to-violet-100 text-violet-700">
+                                <span className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-600">
                                     <Ic className="h-6 w-6" />
                                 </span>
                                 <h3 className="text-base font-semibold">{title}</h3>
@@ -222,7 +230,7 @@ export default function Welcome({ auth }: PageProps) {
                         <section key={f.title} className="mx-auto max-w-7xl px-6">
                             <div className={`grid items-center gap-12 lg:grid-cols-2 ${f.reverse ? 'lg:[&>*:first-child]:order-2' : ''}`}>
                                 <div>
-                                    <span className="text-xs font-semibold uppercase tracking-[0.15em] text-violet-600">{f.eyebrow}</span>
+                                    <span className="text-xs font-semibold uppercase tracking-[0.15em] text-accent-600">{f.eyebrow}</span>
                                     <h3 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">{f.title}</h3>
                                     <p className="mt-4 text-neutral-600">{f.body}</p>
                                     <ul className="mt-6 space-y-3">
@@ -237,7 +245,7 @@ export default function Welcome({ auth }: PageProps) {
                                     </ul>
                                 </div>
                                 <BrowserFrame>
-                                    <Screenshot label={f.shot} />
+                                    <Screenshot label={f.shot} src={f.src} />
                                 </BrowserFrame>
                             </div>
                         </section>
@@ -253,7 +261,7 @@ export default function Welcome({ auth }: PageProps) {
                     <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
                         {DIFFERENTIATORS.map(({ icon: Ic, title, body }) => (
                             <div key={title} className="rounded-2xl border border-neutral-100 bg-white p-6 text-center shadow-sm">
-                                <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white">
+                                <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand text-white">
                                     <Ic className="h-6 w-6" />
                                 </span>
                                 <h3 className="text-base font-semibold">{title}</h3>
@@ -268,7 +276,7 @@ export default function Welcome({ auth }: PageProps) {
                     <div className="overflow-hidden rounded-3xl border border-neutral-100 bg-white shadow-sm">
                         <div className="grid items-center gap-10 p-8 sm:p-12 lg:grid-cols-2">
                             <div>
-                                <span className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-50 to-violet-100 text-violet-700">
+                                <span className="mb-4 inline-flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-600">
                                     <CalendarIcon className="h-6 w-6" />
                                 </span>
                                 <h3 className="text-2xl font-bold tracking-tight sm:text-3xl">Let clients book you in their sleep</h3>
@@ -276,17 +284,17 @@ export default function Welcome({ auth }: PageProps) {
                                     Share a booking link, set your availability, and let clients schedule discovery calls. Video links and calendar invites are created automatically for both of you.
                                 </p>
                             </div>
-                            <Screenshot label="Booking page" ratio="aspect-[16/10]" />
+                            <Screenshot label="Booking page" ratio="aspect-[16/10]" src="/images/marketing/feature-booking.jpg" />
                         </div>
                     </div>
                 </section>
 
                 {/* Pricing teaser / CTA band */}
                 <section id="pricing" className="mx-auto max-w-7xl px-6 pb-24">
-                    <div className="relative overflow-hidden rounded-3xl bg-neutral-900 px-8 py-16 text-center sm:px-16">
+                    <div className="relative overflow-hidden rounded-3xl bg-brand-900 px-8 py-16 text-center sm:px-16">
                         <div className="pointer-events-none absolute inset-0 -z-10 opacity-60">
-                            <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-violet-600/40 blur-3xl" />
-                            <div className="absolute -bottom-24 -left-10 h-80 w-80 rounded-full bg-indigo-600/40 blur-3xl" />
+                            <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-accent-500/30 blur-3xl" />
+                            <div className="absolute -bottom-24 -left-10 h-80 w-80 rounded-full bg-brand-400/40 blur-3xl" />
                         </div>
                         <h2 className="mx-auto max-w-2xl text-3xl font-bold tracking-tight text-white sm:text-4xl">
                             Start free. Upgrade when you grow.
@@ -311,12 +319,7 @@ export default function Welcome({ auth }: PageProps) {
                 {/* Footer */}
                 <footer className="border-t border-neutral-100">
                     <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 py-10 text-sm text-neutral-500 sm:flex-row">
-                        <div className="flex items-center gap-2">
-                            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 text-white">
-                                <CameraIcon className="h-4 w-4" />
-                            </span>
-                            <span className="font-semibold text-neutral-700">{BRAND}</span>
-                        </div>
+                        <img src="/images/logo/focalry-logo.png" alt={BRAND} className="h-9 w-auto" />
                         <p>© {new Date().getFullYear()} {BRAND}. All rights reserved.</p>
                     </div>
                 </footer>

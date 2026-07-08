@@ -23,6 +23,8 @@ class ClientMessage extends Mailable
         public string $ctaUrl,
         public array $details = [],
         public ?string $replyToEmail = null,
+        public ?string $logoUrl = null,
+        public ?int $logoHeight = null,
     ) {}
 
     public function envelope(): Envelope
@@ -39,6 +41,8 @@ class ClientMessage extends Mailable
             markdown: 'mail.client-message',
             with: [
                 'studioName' => $this->studioName,
+                'logoUrl' => $this->logoUrl,
+                'logoHeight' => $this->logoHeight,
                 'bodyText' => $this->bodyText,
                 'ctaLabel' => $this->ctaLabel,
                 'ctaUrl' => $this->ctaUrl,

@@ -1,6 +1,7 @@
 import AdminLayout from '@/Layouts/AdminLayout';
 import { formatMoney } from '@/lib/money';
 import { Head, Link, router, useForm } from '@inertiajs/react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface StudioData {
     id: number;
@@ -59,8 +60,8 @@ export default function StudioShow({ studio, users, counts, plans, currency }: P
     const impersonate = (userId: number) =>
         router.post(route('admin.users.impersonate', userId));
 
-    const destroy = () => {
-        if (confirm(`Permanently delete "${studio.name}" and all its data? This cannot be undone.`)) {
+    const destroy = async () => {
+        if (await confirmDialog(`Permanently delete "${studio.name}" and all its data? This cannot be undone.`)) {
             router.delete(route('admin.studios.destroy', studio.id));
         }
     };
@@ -186,7 +187,7 @@ export default function StudioShow({ studio, users, counts, plans, currency }: P
                             </div>
                             <button
                                 disabled={processing}
-                                className="mt-4 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
+                                className="mt-4 rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
                             >
                                 {processing ? 'Saving…' : 'Save changes'}
                             </button>

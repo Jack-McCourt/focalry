@@ -13,15 +13,16 @@ use App\Models\Site;
 use App\Models\SiteCategory;
 use App\Models\SiteLead;
 use App\Models\SitePage;
-use App\Models\SiteVisit;
+use App\Models\SiteSubscriber;
 use App\Models\User;
 use App\Notifications\NewLead;
-use App\Support\PublicAsset;
-use App\Support\StudioPaths;
+use App\Support\SiteVisits;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Inertia;
@@ -44,6 +45,9 @@ class PublicSiteController extends Controller
     private function siteUrl(Site $site, string $suffix = ''): string
     {
         $suffix = ltrim($suffix, '/');
+        if ($base = request()->attributes->get('site_preview_base')) {
+            return url($base.($suffix !== '' ? '/'.$suffix : ''));
+        }
         if ($host = $this->domainHost()) {
             return 'https://'.$host.($suffix !== '' ? '/'.$suffix : '');
         }
@@ -54,12 +58,127 @@ class PublicSiteController extends Controller
     /** Root-relative base for in-page links ('' on a custom domain). */
     private function basePath(Site $site): string
     {
+        if ($base = request()->attributes->get('site_preview_base')) {
+            return $base;
+        }
+
         return $this->domainHost() ? '' : '/site/'.$site->slug;
     }
 
     public function show(Request $request, string $slug, ?string $page = null)
     {
-        return $this->renderPage($request, $this->resolvePublished($slug), $page);
+        // Unpublished sites can opt into a branded "coming soon" holding page
+        // instead of a bare 404 (great while collecting enquiries pre-launch).
+        $site = Site::withoutGlobalScopes()
+            ->with(['pages', 'studio', 'categories'])
+            ->where('slug', $slug)
+            ->firstOrFail();
+
+        if (! $site->is_published) {
+            abort_unless($site->coming_soon, 404);
+
+            return Inertia::render('Sites/ComingSoon', [
+                'name' => $site->name,
+                'studio_logo' => $site->headerLogoUrl(),
+                'favicon_url' => $site->favicon_url,
+                'contact_email' => $site->contact_email,
+                'theme' => $site->themeSettings(),
+            ]);
+        }
+
+        return $this->renderPage($request, $site, $page);
+    }
+
+    /** Tokenized draft preview: renders the work-in-progress draft (noindex). */
+    public function preview(Request $request, string $token, ?string $page = null)
+    {
+        return $this->renderPage($request, $this->resolvePreview($request, $token), $page);
+    }
+
+    public function previewPost(Request $request, string $token, string $parent, string $post): Response
+    {
+        return $this->renderPost($request, $this->resolvePreview($request, $token), $parent, $post);
+    }
+
+    /**
+     * Resolve a site by preview token and overlay its draft IN MEMORY (transient
+     * SitePage models — nothing is written), so the link shows exactly what
+     * Publish would produce. Marks the request as a preview: links use the
+     * preview base, robots get noindex, and no visit is recorded.
+     */
+    private function resolvePreview(Request $request, string $token): Site
+    {
+        $site = Site::withoutGlobalScopes()
+            ->with(['pages', 'studio', 'categories'])
+            ->where('preview_token', $token)
+            ->firstOrFail();
+
+        $request->attributes->set('site_preview', true);
+        $request->attributes->set('site_preview_base', '/site/preview/'.$token);
+
+        if (! is_array($site->draft)) {
+            return $site;
+        }
+
+        $draft = $site->draft;
+        foreach (['name', 'seo_title', 'seo_description', 'favicon_url', 'og_image_url', 'theme', 'header_nav', 'footer_nav', 'custom_css'] as $key) {
+            if (array_key_exists($key, $draft)) {
+                $site->setAttribute($key, $draft[$key]);
+            }
+        }
+
+        // Hydrate transient pages from the draft (two passes: pages, then posts).
+        $pages = collect();
+        $blogPageId = null;
+        $id = 0;
+        foreach (array_values($draft['pages'] ?? []) as $p) {
+            if (! empty($p['is_post'])) {
+                continue;
+            }
+            $model = new SitePage([
+                'title' => $p['title'] ?? '',
+                'slug' => $p['slug'] ?: str($p['title'] ?? 'page')->slug()->value(),
+                'is_home' => (bool) ($p['is_home'] ?? false),
+                'is_blog' => (bool) ($p['is_blog'] ?? false),
+                'is_404' => (bool) ($p['is_404'] ?? false),
+                'blocks' => array_values($p['blocks'] ?? []),
+                'hidden_category_ids' => $p['hidden_category_ids'] ?? [],
+                'header' => is_array($p['header'] ?? null) ? $p['header'] : null,
+                'seo_title' => $p['seo_title'] ?? null,
+                'seo_description' => $p['seo_description'] ?? null,
+                'og_image' => $p['og_image'] ?? null,
+                'position' => $id,
+            ]);
+            $model->id = ++$id;
+            if ($model->is_blog) {
+                $blogPageId = $model->id;
+            }
+            $pages->push($model);
+        }
+        foreach (array_values($draft['pages'] ?? []) as $p) {
+            if (empty($p['is_post']) || ! $blogPageId) {
+                continue;
+            }
+            $model = new SitePage([
+                'parent_id' => $blogPageId,
+                'title' => $p['title'] ?? '',
+                'slug' => $p['slug'] ?: str($p['title'] ?? 'post')->slug()->value(),
+                'blocks' => array_values($p['blocks'] ?? []),
+                'status' => ($p['status'] ?? 'published') === 'draft' ? 'draft' : 'published',
+                'published_at' => $p['published_at'] ?: now(),
+                'excerpt' => $p['excerpt'] ?? null,
+                'category_ids' => $p['category_ids'] ?? [],
+                'cover_image' => $p['cover_image'] ?? null,
+                'cover_focal' => is_array($p['cover_focal'] ?? null) ? $p['cover_focal'] : null,
+                'header' => is_array($p['header'] ?? null) ? $p['header'] : null,
+                'position' => $id,
+            ]);
+            $model->id = ++$id;
+            $pages->push($model);
+        }
+        $site->setRelation('pages', $pages);
+
+        return $site;
     }
 
     private function renderPage(Request $request, Site $site, ?string $page = null)
@@ -85,22 +204,38 @@ class PublicSiteController extends Controller
 
         $this->recordVisit($site, $page ?? '', $request);
 
-        return $this->pageResponse($site, $current);
+        return $this->pageResponse($site, $current, $request);
     }
 
     /** Build the Inertia page response for a resolved page. */
-    private function pageResponse(Site $site, SitePage $current): Response
+    private function pageResponse(Site $site, SitePage $current, ?Request $request = null): Response
     {
+        // Only assemble (and ship) the data the page's blocks actually use —
+        // a 150-post blog shouldn't be serialized into the homepage payload.
+        $needsPosts = $this->hasBlockType($current, 'blog');
+
+        $posts = $needsPosts ? $this->postCards($site) : collect();
+        $blogState = null;
+
+        // A paginating blog block gets paginated SERVER-side (?page / ?category),
+        // so a 200-post blog ships one page of posts, not the whole archive.
+        // Non-paginating blog blocks ("latest 3 posts" etc.) keep the simple path.
+        if ($needsPosts && $request && ($blockData = $this->firstBlockData($current, 'blog')) && (int) ($blockData['per_page'] ?? 0) > 0) {
+            [$posts, $blogState] = $this->paginatePosts($site, $posts, $blockData, $request);
+        }
+
         return Inertia::render('Sites/Public', [
             'site' => $this->siteProps($site, $current),
-            'studio_logo' => $site->studio?->logoUrl(),
+            'studio_logo' => $site->headerLogoUrl(),
             'pages' => $this->topNav($site),
-            'posts' => $this->postCards($site),
-            'categories' => $this->siteCategories($site),
-            'packages' => $this->packageCards($site),
+            'posts' => $posts,
+            'categories' => $needsPosts ? $this->siteCategories($site) : collect(),
+            'packages' => $this->hasBlockType($current, 'packages') ? $this->packageCards($site) : collect(),
+            'blog_state' => $blogState,
             'page' => [
                 'title' => $current->title,
                 'slug' => $current->slug,
+                'is_home' => $current->is_home,
                 'blocks' => $current->blocks ?? [],
                 'head_code' => $current->head_code,
                 'body_code' => $current->body_code,
@@ -110,32 +245,91 @@ class PublicSiteController extends Controller
         ]);
     }
 
-    /** Record a page view (skipping obvious bots) for built-in analytics. */
-    private function recordVisit(Site $site, string $path, Request $request): void
+    /**
+     * Filter (by ?category, including its descendants) and slice (?page) the
+     * post cards for a paginating blog block.
+     *
+     * @param  Collection<int, array<string, mixed>>  $posts
+     * @param  array<string, mixed>  $blockData
+     * @return array{0: Collection<int, array<string, mixed>>, 1: array<string, mixed>}
+     */
+    private function paginatePosts(Site $site, Collection $posts, array $blockData, Request $request): array
     {
-        $ua = (string) $request->userAgent();
-        if ($ua === '' || preg_match('/bot|crawl|spider|slurp|bing|facebookexternalhit|headless|preview|monitor/i', $ua)) {
-            return;
+        $perPage = (int) $blockData['per_page'];
+
+        // Category filter — a parent category includes its descendants' posts.
+        $categorySlug = trim((string) $request->query('category', ''));
+        $active = $categorySlug !== '' ? $site->categories->firstWhere('slug', $categorySlug) : null;
+        if ($active) {
+            $ids = $this->categoryWithDescendants($site, $active->id);
+            $posts = $posts->filter(
+                fn (array $p) => collect($p['categories'])->pluck('id')->intersect($ids)->isNotEmpty()
+            )->values();
         }
 
-        app()->instance('current.studio.id', $site->studio_id);
+        // The block's own "number of posts" cap still applies before paging.
+        if (($limit = (int) ($blockData['limit'] ?? 0)) > 0) {
+            $posts = $posts->take($limit)->values();
+        }
 
-        try {
-            $ref = $request->headers->get('referer');
-            $host = $ref ? parse_url($ref, PHP_URL_HOST) : null;
-            // Ignore self-referrals (internal navigation).
-            if ($host === $request->getHost()) {
-                $host = null;
+        $total = $posts->count();
+        $pageCount = max(1, (int) ceil($total / $perPage));
+        $pageNo = min(max(1, (int) $request->query('page', 1)), $pageCount);
+
+        return [
+            $posts->slice(($pageNo - 1) * $perPage, $perPage)->values(),
+            ['page' => $pageNo, 'page_count' => $pageCount, 'total' => $total, 'category' => $active?->slug],
+        ];
+    }
+
+    /** The category's id plus all of its descendants' ids. @return list<int> */
+    private function categoryWithDescendants(Site $site, int $id): array
+    {
+        $ids = [$id];
+        $added = true;
+        while ($added) {
+            $added = false;
+            foreach ($site->categories as $c) {
+                if ($c->parent_id !== null && in_array($c->parent_id, $ids, true) && ! in_array($c->id, $ids, true)) {
+                    $ids[] = $c->id;
+                    $added = true;
+                }
+            }
+        }
+
+        return $ids;
+    }
+
+    /** The first block of `$type` on the page (nested grids included), or null. */
+    private function firstBlockData(SitePage $page, string $type): ?array
+    {
+        $find = function (array $blocks) use (&$find, $type): ?array {
+            foreach ($blocks as $block) {
+                if (($block['type'] ?? null) === $type) {
+                    return is_array($block['data'] ?? null) ? $block['data'] : [];
+                }
+                foreach ($block['children'] ?? [] as $column) {
+                    if (is_array($column) && ! is_null($found = $find($column))) {
+                        return $found;
+                    }
+                }
             }
 
-            SiteVisit::create([
-                'site_id' => $site->id,
-                'path' => mb_substr($path !== '' ? $path : '/', 0, 250),
-                'referrer_host' => $host ? mb_substr($host, 0, 250) : null,
-            ]);
-        } catch (\Throwable $e) {
-            report($e);
+            return null;
+        };
+
+        return $find($page->blocks ?? []);
+    }
+
+    /** Record a page view for built-in analytics (see SiteVisits — deferred,
+     *  bot-filtered, and also invoked by the full-page cache on hits). */
+    private function recordVisit(Site $site, string $path, Request $request): void
+    {
+        if ($request->attributes->get('site_preview')) {
+            return; // draft previews aren't traffic
         }
+
+        SiteVisits::record($site->id, $site->studio_id, $path, $request);
     }
 
     /** Resolve a redirect target for a requested path segment, or null. */
@@ -173,31 +367,42 @@ class PublicSiteController extends Controller
 
         $this->recordVisit($site, "{$parent}/{$post}", $request);
 
+        // The post header is a regular `post_header` block at the top of the post.
+        // Posts created before that (their header used to be auto-injected) get one
+        // seeded here from the legacy shared design on the parent blog page, so they
+        // keep their look until the studio re-saves them in the builder.
+        $blocks = $this->withPostHeaderBlock($entry->blocks ?? [], $blog->header);
+
+        // As in pageResponse: only ship what this post's blocks reference (the
+        // post header's own categories come via the `post` prop below).
+        $needsPosts = $this->hasBlockType($entry, 'blog');
+
         return Inertia::render('Sites/Public', [
             'site' => $this->siteProps($site, $entry, $entry->title),
-            'studio_logo' => $site->studio?->logoUrl(),
+            'studio_logo' => $site->headerLogoUrl(),
             'pages' => $this->topNav($site),
-            'posts' => $this->postCards($site),
-            'categories' => $this->siteCategories($site),
-            'packages' => $this->packageCards($site),
+            'posts' => $needsPosts ? $this->postCards($site) : collect(),
+            'categories' => $needsPosts ? $this->siteCategories($site) : collect(),
+            'packages' => $this->hasBlockType($entry, 'packages') ? $this->packageCards($site) : collect(),
             // Keep the blog page highlighted in the nav while viewing a post.
             'page' => [
                 'title' => $entry->title,
                 'slug' => $blog->slug,
-                'blocks' => $entry->blocks ?? [],
+                'blocks' => $blocks,
                 'head_code' => $entry->head_code,
                 'body_code' => $entry->body_code,
                 'og_image' => $entry->og_image ?: $entry->cover_image,
                 'canonical' => $this->siteUrl($site, "{$blog->slug}/{$entry->slug}"),
             ],
+            // Up to 3 other live posts sharing a category (else the latest).
+            'related_posts' => $this->relatedPosts($site, $blog, $entry),
             // Drives the auto-generated post header (hero cover + date + categories).
             'post' => [
                 'title' => $entry->title,
+                'author' => $entry->author,
+                'reading_minutes' => $this->readingMinutes($entry),
                 'cover_image' => $entry->cover_image,
                 'cover_focal' => $entry->cover_focal,
-                // Header formatting is a single setting on the parent blog page,
-                // shared by every post.
-                'header' => $blog->header,
                 'published_at' => $entry->published_at?->toDateString(),
                 'categories' => collect($entry->category_ids ?? [])
                     ->map(fn ($id) => $site->categories->firstWhere('id', (int) $id))
@@ -211,7 +416,7 @@ class PublicSiteController extends Controller
     /** sitemap.xml for a published site (home + top pages + published posts). */
     public function sitemap(string $slug): \Illuminate\Http\Response
     {
-        return $this->renderSitemap($this->resolvePublished($slug));
+        return $this->renderSitemap($this->resolvePublished($slug, ['pages']));
     }
 
     private function renderSitemap(Site $site): \Illuminate\Http\Response
@@ -219,28 +424,74 @@ class PublicSiteController extends Controller
         $urls = [];
 
         foreach ($site->pages->whereNull('parent_id') as $p) {
-            $urls[] = $p->is_home ? $this->siteUrl($site) : $this->siteUrl($site, $p->slug);
+            $urls[] = [
+                'loc' => $p->is_home ? $this->siteUrl($site) : $this->siteUrl($site, $p->slug),
+                'lastmod' => $p->updated_at,
+            ];
         }
 
         $blog = $site->blogPage();
         if ($blog) {
             foreach ($site->pages->where('parent_id', $blog->id)->filter(fn (SitePage $p) => $this->isLive($p)) as $p) {
-                $urls[] = $this->siteUrl($site, "{$blog->slug}/{$p->slug}");
+                $urls[] = [
+                    'loc' => $this->siteUrl($site, "{$blog->slug}/{$p->slug}"),
+                    // Posts advertise their publish date when it's the later of the two.
+                    'lastmod' => $p->published_at?->gt($p->updated_at ?? $p->published_at) ? $p->published_at : $p->updated_at,
+                ];
             }
         }
 
         $xml = '<?xml version="1.0" encoding="UTF-8"?>'
             .'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
-            .collect($urls)->map(fn ($u) => '<url><loc>'.e($u).'</loc></url>')->implode('')
+            .collect($urls)->map(fn ($u) => '<url><loc>'.e($u['loc']).'</loc>'
+                .($u['lastmod'] ? '<lastmod>'.$u['lastmod']->toDateString().'</lastmod>' : '')
+                .'</url>')->implode('')
             .'</urlset>';
 
         return response($xml, 200, ['Content-Type' => 'application/xml']);
     }
 
+    /** RSS 2.0 feed of the site's published blog posts. */
+    public function feed(string $slug): \Illuminate\Http\Response
+    {
+        $site = $this->resolvePublished($slug, ['pages']);
+        $blog = $site->blogPage();
+
+        $posts = $blog
+            ? $site->pages
+                ->where('parent_id', $blog->id)
+                ->filter(fn (SitePage $p) => $this->isLive($p))
+                ->sortByDesc(fn (SitePage $p) => $p->published_at)
+                ->take(20)
+            : collect();
+
+        $items = $posts->map(function (SitePage $p) use ($site, $blog) {
+            $url = $this->siteUrl($site, "{$blog->slug}/{$p->slug}");
+
+            return '<item>'
+                .'<title>'.e($p->title).'</title>'
+                .'<link>'.e($url).'</link>'
+                .'<guid isPermaLink="true">'.e($url).'</guid>'
+                .($p->published_at ? '<pubDate>'.$p->published_at->toRssString().'</pubDate>' : '')
+                .($p->excerpt ? '<description>'.e($p->excerpt).'</description>' : '')
+                .'</item>';
+        })->implode('');
+
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>'
+            .'<rss version="2.0"><channel>'
+            .'<title>'.e($site->name).'</title>'
+            .'<link>'.e($this->siteUrl($site)).'</link>'
+            .'<description>'.e($site->seo_description ?: $site->name).'</description>'
+            .$items
+            .'</channel></rss>';
+
+        return response($xml, 200, ['Content-Type' => 'application/rss+xml; charset=UTF-8']);
+    }
+
     /** robots.txt pointing at the site's sitemap. */
     public function robots(string $slug): \Illuminate\Http\Response
     {
-        return $this->renderRobots($this->resolvePublished($slug));
+        return $this->renderRobots($this->resolvePublished($slug, []));
     }
 
     private function renderRobots(Site $site): \Illuminate\Http\Response
@@ -254,9 +505,37 @@ class PublicSiteController extends Controller
      * A contact-form submission. Logs a SiteLead and fans out into a CRM
      * Contact + Project (a "Lead"), reusing an existing contact by email.
      */
+    /** Newsletter block signup — a lightweight JSON endpoint (throttled). */
+    public function subscribe(Request $request, string $slug): JsonResponse
+    {
+        $site = $this->resolvePublished($slug, []);
+
+        // Same honeypot as the contact form: bots that fill it get a fake OK.
+        if (filled($request->input('company_website'))) {
+            return response()->json(['ok' => true]);
+        }
+
+        $data = $request->validate([
+            'email' => 'required|email|max:255',
+            'name' => 'nullable|string|max:255',
+            'source' => 'nullable|string|max:250',
+        ]);
+
+        app()->instance('current.studio.id', $site->studio_id);
+
+        SiteSubscriber::firstOrCreate(
+            ['site_id' => $site->id, 'email' => mb_strtolower(trim($data['email']))],
+            ['name' => $data['name'] ?? null, 'source' => $data['source'] ?? null],
+        );
+
+        return response()->json(['ok' => true]);
+    }
+
     public function submitLead(Request $request, string $slug): RedirectResponse
     {
-        return $this->processLead($request, $this->resolvePublished($slug));
+        // Pages are needed for the contact block's autoresponder config; the
+        // studio for the notification email. Categories aren't used here.
+        return $this->processLead($request, $this->resolvePublished($slug, ['pages', 'studio']));
     }
 
     private function processLead(Request $request, Site $site): RedirectResponse
@@ -265,6 +544,27 @@ class PublicSiteController extends Controller
         // pretend success and drop the submission silently.
         if (filled($request->input('company_website'))) {
             return back()->with('success', "Thanks — your enquiry has been sent. We'll be in touch soon!");
+        }
+
+        // Cloudflare Turnstile — verified server-side when the saved contact
+        // block opts in (config comes from the block, never the request).
+        $block = $this->contactBlockData($site);
+        $turnstileSecret = $site->turnstileKeys()['secret'];
+        if (! empty($block['captcha']) && $turnstileSecret) {
+            $ok = false;
+            try {
+                $ok = Http::asForm()
+                    ->post('https://challenges.cloudflare.com/turnstile/v0/siteverify', [
+                        'secret' => $turnstileSecret,
+                        'response' => (string) $request->input('cf-turnstile-response'),
+                        'remoteip' => $request->ip(),
+                    ])->json('success') === true;
+            } catch (\Throwable $e) {
+                report($e);
+            }
+            if (! $ok) {
+                return back()->withErrors(['captcha' => 'Please complete the verification and try again.']);
+            }
         }
 
         // Public route: no authenticated studio. Bind the site's studio so the
@@ -282,19 +582,26 @@ class PublicSiteController extends Controller
             'custom_values.*.label' => 'nullable|string|max:200',
             'custom_values.*.value' => 'nullable|string|max:5000',
             'attachment' => 'nullable|file|max:10240|mimes:pdf,jpg,jpeg,png,webp,doc,docx',
-            'autoresponder' => 'boolean',
-            'autoresponder_subject' => 'nullable|string|max:200',
-            'autoresponder_message' => 'nullable|string|max:5000',
+            // NOTE: the autoresponder settings are deliberately NOT accepted from
+            // the request — they're read from the saved contact block server-side
+            // (see contactBlockData), otherwise anyone could POST arbitrary
+            // subject/body/recipient and use the platform as an email relay.
         ]);
 
-        // Stash an uploaded attachment and replace the file object with its URL.
-        $attachmentUrl = null;
+        // Stash an uploaded attachment PRIVATELY (outside the public/ prefix, so
+        // it's never CDN/anonymously reachable — visitor uploads shouldn't become
+        // hosted files on the studio's trusted domain). The Leads screen serves
+        // it via a short-lived signed URL.
+        $attachmentPath = null;
+        $attachmentName = null;
         if ($request->hasFile('attachment')) {
-            $path = $request->file('attachment')->storePublicly(StudioPaths::asset($site->studio_id, 'site/uploads'), 'wasabi');
-            $attachmentUrl = PublicAsset::url($path);
+            $file = $request->file('attachment');
+            $attachmentPath = $file->store("studios/{$site->studio_id}/leads/attachments", 'wasabi');
+            $attachmentName = $file->getClientOriginalName();
         }
         unset($data['attachment']);
-        $data['attachment_url'] = $attachmentUrl;
+        $data['attachment_path'] = $attachmentPath;
+        $data['attachment_name'] = $attachmentName;
 
         // Compose CRM notes from the message + any custom field answers + attachment.
         $noteLines = [];
@@ -306,8 +613,9 @@ class PublicSiteController extends Controller
                 $noteLines[] = "{$cv['label']}: {$cv['value']}";
             }
         }
-        if ($attachmentUrl) {
-            $noteLines[] = "Attachment: {$attachmentUrl}";
+        if ($attachmentPath) {
+            // No raw link — the file is private; it's viewable from Website → Leads.
+            $noteLines[] = 'Attachment: '.($attachmentName ?: 'file').' (view it under Website → Leads)';
         }
         $notes = $noteLines ? implode("\n", $noteLines) : null;
 
@@ -441,8 +749,9 @@ class PublicSiteController extends Controller
                         $details[] = ['label' => $cv['label'], 'value' => $cv['value']];
                     }
                 }
-                if (! empty($data['attachment_url'])) {
-                    $details[] = ['label' => 'Attachment', 'value' => $data['attachment_url']];
+                if (! empty($data['attachment_path'])) {
+                    // The file is private — name only; the CTA links into Leads.
+                    $details[] = ['label' => 'Attachment', 'value' => $data['attachment_name'] ?: 'Attached file (view in Leads)'];
                 }
 
                 Mail::to($studio->email)->send(new ClientMessage(
@@ -453,6 +762,8 @@ class PublicSiteController extends Controller
                     ctaUrl: route('website.leads'),
                     details: $details,
                     replyToEmail: $data['email'],
+                    logoUrl: $studio?->logoUrl(),
+                    logoHeight: $studio?->emailLogoHeight(),
                 ));
             } catch (\Throwable $e) {
                 report($e);
@@ -460,23 +771,88 @@ class PublicSiteController extends Controller
         }
 
         // ── Autoresponder to the enquirer ──
-        if (! empty($data['autoresponder']) && filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+        // Config comes from the site's saved contact block — never the request.
+        $block = $this->contactBlockData($site);
+        if (! empty($block['autoresponder']) && filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
             try {
-                $body = trim((string) ($data['autoresponder_message'] ?? '')) ?:
+                $body = trim((string) ($block['autoresponder_message'] ?? '')) ?:
                     "Thanks for getting in touch — we've received your enquiry and will reply as soon as we can.";
 
                 Mail::to($data['email'])->send(new ClientMessage(
                     studioName: $studioName,
-                    subjectLine: trim((string) ($data['autoresponder_subject'] ?? '')) ?: 'Thanks for your enquiry',
+                    subjectLine: trim((string) ($block['autoresponder_subject'] ?? '')) ?: 'Thanks for your enquiry',
                     bodyText: $body,
                     ctaLabel: 'Visit our website',
                     ctaUrl: $this->siteUrl($site),
                     replyToEmail: $studio?->email,
+                    logoUrl: $studio?->logoUrl(),
+                    logoHeight: $studio?->emailLogoHeight(),
                 ));
             } catch (\Throwable $e) {
                 report($e);
             }
         }
+    }
+
+    /**
+     * The first contact block's saved data across the site's pages (nested grid
+     * columns included). The autoresponder settings are read from here so the
+     * public form can't be abused to send arbitrary email through the platform.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function contactBlockData(Site $site): ?array
+    {
+        foreach ($site->pages as $page) {
+            if (! is_null($found = $this->findContactBlock($page->blocks ?? []))) {
+                return $found;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<int, mixed>  $blocks
+     * @return array<string, mixed>|null
+     */
+    private function findContactBlock(array $blocks): ?array
+    {
+        foreach ($blocks as $block) {
+            if (($block['type'] ?? null) === 'contact') {
+                return is_array($block['data'] ?? null) ? $block['data'] : [];
+            }
+            foreach ($block['children'] ?? [] as $column) {
+                if (is_array($column) && ! is_null($found = $this->findContactBlock($column))) {
+                    return $found;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /** True when the page contains a block of `$type` (nested grids included). */
+    private function hasBlockType(?SitePage $page, string $type): bool
+    {
+        return $page !== null && $this->blocksContain($page->blocks ?? [], $type);
+    }
+
+    /** @param  array<int, mixed>  $blocks */
+    private function blocksContain(array $blocks, string $type): bool
+    {
+        foreach ($blocks as $block) {
+            if (($block['type'] ?? null) === $type) {
+                return true;
+            }
+            foreach ($block['children'] ?? [] as $column) {
+                if (is_array($column) && $this->blocksContain($column, $type)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     // ── Helpers ──
@@ -501,6 +877,18 @@ class PublicSiteController extends Controller
             'og_image_url' => $site->og_image_url,
             'seo_title' => $seoTitleOverride ?: ($current?->seo_title ?: $site->seo_title ?: $site->name),
             'seo_description' => $current?->seo_description ?: $site->seo_description,
+            // RSS autodiscovery link (only when the site has a blog).
+            'feed_url' => $site->blogPage() ? $this->siteUrl($site, 'feed') : null,
+            'announcement' => $site->announcement ?? [],
+            'social' => $site->social ?? [],
+            'footer' => $site->footer ?? [],
+            'footer_logo' => $site->footerLogoUrl(),
+            // Cloudflare Turnstile site key (contact-form captcha), when configured.
+            'turnstile_site_key' => $site->turnstileKeys()['site'],
+            'noindex' => (bool) request()->attributes->get('site_preview'),
+            // Booking block: the studio's public scheduling page (meetings module).
+            'booking_url' => $site->studio?->slug ? route('meetings.public.studio', $site->studio->slug) : null,
+            'custom_fonts' => $site->custom_fonts ?? [],
         ];
     }
 
@@ -518,7 +906,7 @@ class PublicSiteController extends Controller
     /** A single payment link rendered inside the studio's website (its shell). */
     public function paymentLink(Request $request, string $slug, string $package): Response
     {
-        $site = $this->resolvePublished($slug);
+        $site = $this->resolvePublished($slug, ['pages', 'studio']);
         $studio = $site->studio;
 
         $record = Package::withoutGlobalScopes()
@@ -527,7 +915,7 @@ class PublicSiteController extends Controller
 
         return Inertia::render('Sites/PaymentLink', [
             'site' => $this->siteProps($site),
-            'studio_logo' => $studio?->logoUrl(),
+            'studio_logo' => $site->headerLogoUrl(),
             'pages' => $this->topNav($site),
             'studio_slug' => $studio?->slug,
             'can_pay' => $studio?->stripe_connect_status === 'active',
@@ -617,16 +1005,99 @@ class PublicSiteController extends Controller
         return ['id' => $c->id, 'name' => $c->name, 'slug' => $c->slug, 'parent_id' => $c->parent_id];
     }
 
+    /** Estimated reading time from the post's text content (~200 wpm, min 1). */
+    /**
+     * Ensure a post's blocks open with a `post_header` block. Posts authored
+     * before the header became a block get one prepended, seeded from the legacy
+     * shared design ($seed) on the parent blog page so they render unchanged.
+     *
+     * @param  array<int, mixed>  $blocks
+     * @param  mixed  $seed  The parent blog page's legacy `header` design (or null).
+     * @return array<int, mixed>
+     */
+    private function withPostHeaderBlock(array $blocks, $seed): array
+    {
+        foreach ($blocks as $block) {
+            if (($block['type'] ?? null) === 'post_header') {
+                return $blocks;
+            }
+        }
+
+        array_unshift($blocks, [
+            'id' => 'post-header',
+            'type' => 'post_header',
+            'data' => is_array($seed) ? $seed : new \stdClass(),
+        ]);
+
+        return $blocks;
+    }
+
+    private function readingMinutes(SitePage $post): int
+    {
+        $words = 0;
+        $walk = function (array $blocks) use (&$walk, &$words): void {
+            foreach ($blocks as $block) {
+                foreach (['body', 'heading', 'subheading', 'caption'] as $key) {
+                    if (is_string($block['data'][$key] ?? null)) {
+                        $words += str_word_count(strip_tags($block['data'][$key]));
+                    }
+                }
+                foreach ($block['children'] ?? [] as $column) {
+                    if (is_array($column)) {
+                        $walk($column);
+                    }
+                }
+            }
+        };
+        $walk($post->blocks ?? []);
+
+        return max(1, (int) ceil($words / 200));
+    }
+
+    /**
+     * Up to 3 other live posts, preferring shared categories, newest first.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function relatedPosts(Site $site, SitePage $blog, SitePage $current): array
+    {
+        $categoryIds = array_map('intval', $current->category_ids ?? []);
+
+        $candidates = $site->pages
+            ->where('parent_id', $blog->id)
+            ->filter(fn (SitePage $p) => $p->id !== $current->id && $this->isLive($p))
+            ->sortByDesc(fn (SitePage $p) => [
+                // Shared-category posts first, then recency.
+                count(array_intersect($categoryIds, array_map('intval', $p->category_ids ?? []))) > 0 ? 1 : 0,
+                $p->published_at?->timestamp ?? 0,
+            ])
+            ->take(3);
+
+        return $candidates->map(fn (SitePage $p) => [
+            'title' => $p->title,
+            'slug' => $p->slug,
+            'excerpt' => $p->excerpt,
+            'cover_image' => $p->cover_image,
+            'published_at' => $p->published_at?->toDateString(),
+            'url' => $this->basePath($site)."/{$blog->slug}/{$p->slug}",
+        ])->values()->all();
+    }
+
     private function isLive(SitePage $p): bool
     {
         return $p->status === 'published'
             && (is_null($p->published_at) || $p->published_at->lte(now()));
     }
 
-    private function resolvePublished(string $slug): Site
+    /**
+     * @param  list<string>  $with  Relations the caller actually uses — pages
+     *                              carry every block's JSON, so endpoints like
+     *                              robots.txt shouldn't pay to load them.
+     */
+    private function resolvePublished(string $slug, array $with = ['pages', 'studio', 'categories']): Site
     {
         return Site::withoutGlobalScopes()
-            ->with(['pages', 'studio', 'categories'])
+            ->with($with)
             ->where('slug', $slug)
             ->where('is_published', true)
             ->firstOrFail();

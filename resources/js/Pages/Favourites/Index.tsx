@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import SkeletonImage from '@/Components/SkeletonImage';
 import { PageProps } from '@/types';
 import { Head, Link } from '@inertiajs/react';
 
@@ -73,9 +74,9 @@ export default function FavouritesIndex({ groups, total }: PageProps<{ groups: G
                                 </div>
                                 <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6">
                                     {g.photos.map((p) => (
-                                        <div key={p.id} className="aspect-square overflow-hidden rounded-md bg-neutral-100">
+                                        <div key={p.id} className="relative aspect-square overflow-hidden rounded-md bg-neutral-100">
                                             {p.thumb_url && (
-                                                <img src={p.thumb_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                                                <SkeletonImage src={p.thumb_url} alt="" loading="lazy" className="h-full w-full object-cover" />
                                             )}
                                         </div>
                                     ))}

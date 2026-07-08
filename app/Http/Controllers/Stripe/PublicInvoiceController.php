@@ -76,6 +76,7 @@ class PublicInvoiceController extends Controller
             ],
             'studio_name' => $studio?->name,
             'studio_logo' => $studio?->logoUrl(),
+            'studio_logo_size' => $studio?->logoSize(),
             'bill_to' => $invoice->contact ? [
                 'name' => $invoice->contact->name,
                 'email' => $invoice->contact->email,

@@ -5,6 +5,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Contact, PageProps, Paginated } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
+import Paginator from '@/Components/Paginator';
 
 interface Filters {
     search: string;
@@ -87,7 +88,7 @@ export default function Index({
             <Head title="Contacts" />
             <StudioManagerNav active="contacts" />
 
-            <div className="px-4 sm:px-8 py-8">
+            <div className="px-4 py-8 sm:px-8">
                 {/* Filters */}
                 <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
                     <div className="relative sm:w-64">
@@ -126,7 +127,7 @@ export default function Index({
                         )}
                     </div>
                 ) : (
-                    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                    <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-neutral-100 text-left text-xs font-medium text-neutral-400">
@@ -156,23 +157,7 @@ export default function Index({
                     </div>
                 )}
 
-                {contacts.last_page > 1 && (
-                    <div className="mt-8 flex items-center justify-center gap-2">
-                        {contacts.prev_page_url && (
-                            <button onClick={() => router.get(contacts.prev_page_url!)} className="btn-secondary px-3 py-1.5 text-xs">
-                                Previous
-                            </button>
-                        )}
-                        <span className="text-xs text-neutral-500">
-                            Page {contacts.current_page} of {contacts.last_page}
-                        </span>
-                        {contacts.next_page_url && (
-                            <button onClick={() => router.get(contacts.next_page_url!)} className="btn-secondary px-3 py-1.5 text-xs">
-                                Next
-                            </button>
-                        )}
-                    </div>
-                )}
+                <Paginator paginator={contacts} />
             </div>
 
             <AddContactModal show={showAdd} onClose={() => setShowAdd(false)} />

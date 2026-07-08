@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface Question {
     label: string;
@@ -55,8 +56,8 @@ export default function Index({ templates }: PageProps<{ templates: Template[] }
         else router.post(route('questionnaire-templates.store'), payload, opts);
     };
 
-    const del = (t: Template) => {
-        if (confirm(`Delete "${t.name}"?`)) router.delete(route('questionnaire-templates.destroy', t.id), { preserveScroll: true });
+    const del = async (t: Template) => {
+        if (await confirmDialog(`Delete "${t.name}"?`)) router.delete(route('questionnaire-templates.destroy', t.id), { preserveScroll: true });
     };
 
     return (
@@ -111,7 +112,7 @@ export default function Index({ templates }: PageProps<{ templates: Template[] }
                                     </div>
                                 ))}
                             </div>
-                            <button onClick={() => setEditing({ ...editing, questions: [...editing.questions, { label: '', type: 'text', options: [], required: false }] })} className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-800">+ Add question</button>
+                            <button onClick={() => setEditing({ ...editing, questions: [...editing.questions, { label: '', type: 'text', options: [], required: false }] })} className="mt-2 text-sm font-medium text-brand hover:text-brand-800">+ Add question</button>
                         </div>
                         <div className="flex justify-end gap-2">
                             <button onClick={() => setEditing(null)} className="btn-secondary">Cancel</button>

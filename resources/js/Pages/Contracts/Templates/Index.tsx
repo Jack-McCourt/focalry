@@ -2,6 +2,7 @@ import StudioManagerNav from '@/Components/StudioManagerNav';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface TemplateRow {
     id: number;
@@ -11,8 +12,8 @@ interface TemplateRow {
 }
 
 export default function Index({ templates }: PageProps<{ templates: TemplateRow[] }>) {
-    const destroy = (t: TemplateRow) => {
-        if (confirm(`Delete the “${t.name}” template? This won't affect contracts already created from it.`)) {
+    const destroy = async (t: TemplateRow) => {
+        if (await confirmDialog(`Delete the “${t.name}” template? This won't affect contracts already created from it.`)) {
             router.delete(route('contracts.templates.destroy', t.id), { preserveScroll: true });
         }
     };
@@ -38,7 +39,7 @@ export default function Index({ templates }: PageProps<{ templates: TemplateRow[
             <Head title="Contract templates" />
             <StudioManagerNav active="contracts" />
 
-            <div className="px-4 sm:px-8 py-8">
+            <div className="px-4 py-8 sm:px-8">
                 <p className="mb-6 max-w-2xl text-sm text-neutral-500">
                     Templates are reusable starting points for contracts. Pick one when creating a contract, then tailor it to the client. Editing a template here does not change contracts already created from it.
                 </p>
@@ -50,7 +51,7 @@ export default function Index({ templates }: PageProps<{ templates: TemplateRow[
                         <Link href={route('contracts.templates.create')} className="btn-primary mt-6">New template</Link>
                     </div>
                 ) : (
-                    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                    <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-neutral-100 text-left text-xs font-medium text-neutral-400">

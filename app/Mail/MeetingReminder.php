@@ -16,6 +16,8 @@ class MeetingReminder extends Mailable
     public function __construct(
         public Meeting $meeting,
         public string $studioName,
+        public ?string $logoUrl = null,
+        public ?int $logoHeight = null,
     ) {}
 
     public function envelope(): Envelope
@@ -32,6 +34,8 @@ class MeetingReminder extends Mailable
             with: [
                 'meeting' => $this->meeting,
                 'studioName' => $this->studioName,
+                'logoUrl' => $this->logoUrl,
+                'logoHeight' => $this->logoHeight,
                 'meetingName' => $this->meeting->meetingType?->name ?? 'Meeting',
             ],
         );

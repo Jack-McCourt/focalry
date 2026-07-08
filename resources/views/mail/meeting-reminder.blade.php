@@ -1,4 +1,4 @@
-@component('mail::message')
+<x-mail::message :studio-name="$studioName" :logo-url="$logoUrl" :logo-height="$logoHeight ?? null">
 # Your meeting is coming up
 
 Hi {{ \Illuminate\Support\Str::of($meeting->client_name)->before(' ') }},
@@ -21,4 +21,4 @@ Join the video call
 See you then!
 
 — {{ $studioName }}
-@endcomponent
+</x-mail::message>

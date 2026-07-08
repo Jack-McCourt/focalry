@@ -46,6 +46,8 @@ class DigitalProvider implements FulfilmentProvider
                 ctaLabel: 'Download your files',
                 ctaUrl: route('store.public.confirmation', $order->public_id),
                 details: $details,
+                logoUrl: $order->studio?->logoUrl(),
+                logoHeight: $order->studio?->emailLogoHeight(),
             ));
             $order->update(['digital_delivered_at' => now()]);
         } catch (\Throwable $e) {

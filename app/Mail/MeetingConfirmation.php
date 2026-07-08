@@ -22,6 +22,8 @@ class MeetingConfirmation extends Mailable
         public string $studioName,
         public string $timezone,
         public bool $forStudio = false,
+        public ?string $logoUrl = null,
+        public ?int $logoHeight = null,
     ) {}
 
     public function envelope(): Envelope
@@ -42,6 +44,8 @@ class MeetingConfirmation extends Mailable
             with: [
                 'meeting' => $this->meeting,
                 'studioName' => $this->studioName,
+                'logoUrl' => $this->logoUrl,
+                'logoHeight' => $this->logoHeight,
                 'timezone' => $this->timezone,
                 'forStudio' => $this->forStudio,
                 'meetingName' => $this->meeting->meetingType?->name ?? 'Meeting',

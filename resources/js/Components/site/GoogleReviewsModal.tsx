@@ -163,7 +163,7 @@ export default function GoogleReviewsModal({
                                         {loading ? 'Loading…' : 'Load reviews'}
                                     </button>
                                 </div>
-                                <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-blue-600 hover:underline">
+                                <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-brand hover:underline">
                                     Find your Place ID →
                                 </a>
                             </div>

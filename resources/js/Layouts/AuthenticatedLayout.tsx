@@ -1,3 +1,4 @@
+import Toaster from '@/Components/Toaster';
 import { Auth, Flash } from '@/types';
 import { Link, router, usePage } from '@inertiajs/react';
 import { PropsWithChildren, ReactNode, useEffect, useRef, useState } from 'react';
@@ -205,7 +206,7 @@ function SidebarLink({
                 </span>
             )}
             {!soon && !locked && !!badge && badge > 0 && (
-                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-blue-600 px-1.5 text-[11px] font-semibold text-white">
+                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-accent-600 px-1.5 text-[11px] font-semibold text-white">
                     {badge > 99 ? '99+' : badge}
                 </span>
             )}
@@ -314,8 +315,15 @@ function NotificationBell() {
         const onClick = (e: MouseEvent) => {
             if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
         };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setOpen(false);
+        };
         document.addEventListener('mousedown', onClick);
-        return () => document.removeEventListener('mousedown', onClick);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onClick);
+            document.removeEventListener('keydown', onKey);
+        };
     }, [open]);
 
     const openNotification = (n: NotificationItem) => {
@@ -349,7 +357,7 @@ function NotificationBell() {
             >
                 <IconBell className="h-5 w-5" />
                 {unread_notifications > 0 && (
-                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-semibold text-white">
+                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-accent-600 px-1 text-[10px] font-semibold text-white">
                         {unread_notifications > 9 ? '9+' : unread_notifications}
                     </span>
                 )}
@@ -360,7 +368,7 @@ function NotificationBell() {
                     <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-2.5">
                         <span className="text-sm font-semibold text-neutral-900">Notifications</span>
                         {unread_notifications > 0 && (
-                            <button onClick={markAll} className="text-xs font-medium text-blue-600 hover:text-blue-800">
+                            <button onClick={markAll} className="text-xs font-medium text-brand hover:text-brand-800">
                                 Mark all read
                             </button>
                         )}
@@ -373,10 +381,10 @@ function NotificationBell() {
                                 <button
                                     key={n.id}
                                     onClick={() => openNotification(n)}
-                                    className={`block w-full border-b border-neutral-50 px-4 py-3 text-left transition hover:bg-neutral-50 ${n.read ? '' : 'bg-blue-50/50'}`}
+                                    className={`block w-full border-b border-neutral-50 px-4 py-3 text-left transition hover:bg-neutral-50 ${n.read ? '' : 'bg-brand-50/50'}`}
                                 >
                                     <div className="flex items-start gap-2">
-                                        {!n.read && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-600" />}
+                                        {!n.read && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent-600" />}
                                         <div className="min-w-0">
                                             <p className="truncate text-sm font-medium text-neutral-900">
                                                 {n.title ?? `New reply from ${n.from_name ?? 'a client'}`}
@@ -392,41 +400,12 @@ function NotificationBell() {
                     <Link
                         href={route('notifications.index')}
                         onClick={() => setOpen(false)}
-                        className="block border-t border-neutral-100 px-4 py-2.5 text-center text-xs font-medium text-blue-600 hover:bg-neutral-50"
+                        className="block border-t border-neutral-100 px-4 py-2.5 text-center text-xs font-medium text-brand hover:bg-neutral-50"
                     >
                         View all notifications
                     </Link>
                 </div>
             )}
-        </div>
-    );
-}
-
-// ─── Flash banner ─────────────────────────────────────────────────────────────
-
-function FlashBanner() {
-    const { flash } = usePage<{ auth: Auth; flash: Flash }>().props;
-    const [dismissed, setDismissed] = useState(false);
-
-    if (dismissed || (!flash.success && !flash.error)) return null;
-
-    return (
-        <div
-            className={`flex items-center justify-between px-6 py-3 text-sm ${
-                flash.error
-                    ? 'bg-red-50 text-red-700'
-                    : 'bg-emerald-50 text-emerald-700'
-            }`}
-        >
-            <span>{flash.success ?? flash.error}</span>
-            <button
-                onClick={() => setDismissed(true)}
-                className="ml-4 shrink-0 opacity-60 hover:opacity-100"
-            >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
         </div>
     );
 }
@@ -455,8 +434,15 @@ function ProductSwitcher({ pillars, active, onNavigate }: { pillars: Pillar[]; a
         const onClick = (e: MouseEvent) => {
             if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
         };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setOpen(false);
+        };
         document.addEventListener('mousedown', onClick);
-        return () => document.removeEventListener('mousedown', onClick);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onClick);
+            document.removeEventListener('keydown', onKey);
+        };
     }, [open]);
 
     const ActiveIcon = active.icon;
@@ -567,8 +553,15 @@ export default function AuthenticatedLayout({
         const onDown = (e: MouseEvent) => {
             if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
         };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setProfileOpen(false);
+        };
         document.addEventListener('mousedown', onDown);
-        return () => document.removeEventListener('mousedown', onDown);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('keydown', onKey);
+        };
     }, [profileOpen]);
 
     // A nav item is "locked" when its product area isn't part of the studio's plan.
@@ -604,6 +597,7 @@ export default function AuthenticatedLayout({
                     items: [
                         { label: 'General', href: route('website.settings'), pattern: 'website.settings' },
                         { label: 'Leads', href: route('website.leads'), pattern: 'website.leads' },
+                        { label: 'Subscribers', href: route('website.subscribers'), pattern: 'website.subscribers' },
                         { label: 'Analytics', href: route('website.analytics'), pattern: 'website.analytics' },
                     ],
                 },
@@ -661,14 +655,13 @@ export default function AuthenticatedLayout({
             <aside
                 className={`fixed inset-y-0 left-0 z-40 flex w-56 shrink-0 flex-col transition-all duration-200 lg:static lg:translate-x-0 ${
                     sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-                } ${collapsed ? 'lg:w-14' : sidebar ? 'lg:w-80' : 'lg:w-56'}`}
-                style={{ background: '#141414' }}
+                } ${collapsed ? 'lg:w-14' : sidebar ? 'lg:w-80' : 'lg:w-56'} bg-sidebar`}
             >
                 {/* Collapsed strip — desktop only; click to expand. */}
                 {collapsed && (
                     <div className="hidden flex-col items-center gap-3 py-3 lg:flex">
-                        <Link href={route('dashboard')} className="flex h-7 w-7 items-center justify-center rounded-md bg-white" title={studio?.name ?? 'Studio'}>
-                            <svg className="h-4 w-4 text-neutral-900" fill="currentColor" viewBox="0 0 24 24"><path d="M12 9a3.75 3.75 0 100 7.5A3.75 3.75 0 0012 9z" /><path fillRule="evenodd" d="M9.344 3.071a49.52 49.52 0 015.312 0c.967.052 1.83.585 2.332 1.39l.821 1.317c.24.383.645.643 1.11.71.386.054.77.113 1.152.177 1.432.239 2.429 1.493 2.429 2.909V18a3 3 0 01-3 3h-15a3 3 0 01-3-3V9.574c0-1.416.997-2.67 2.429-2.909.382-.064.766-.123 1.151-.178a1.56 1.56 0 001.11-.71l.822-1.315a2.942 2.942 0 012.332-1.39zM6.75 12.75a5.25 5.25 0 1110.5 0 5.25 5.25 0 01-10.5 0zm12-1.5a.75.75 0 100-1.5.75.75 0 000 1.5z" clipRule="evenodd" /></svg>
+                        <Link href={route('dashboard')} className="flex h-7 w-7 items-center justify-center" title={studio?.name ?? 'Studio'}>
+                            <img src="/images/logo/focalry-icon-white.png" alt="" className="h-7 w-7" />
                         </Link>
                         <button type="button" onClick={toggleCollapsed} title="Expand sidebar" aria-label="Expand sidebar" className="rounded-md p-1.5 text-zinc-400 transition hover:bg-sidebar-hover hover:text-white">
                             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
@@ -681,12 +674,7 @@ export default function AuthenticatedLayout({
                 {/* Logo */}
                 <div className="flex h-14 items-center justify-between px-4">
                     <Link href={route('dashboard')} className="flex items-center gap-2" onClick={() => setSidebarOpen(false)}>
-                        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white">
-                            <svg className="h-4 w-4 text-neutral-900" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M12 9a3.75 3.75 0 100 7.5A3.75 3.75 0 0012 9z" />
-                                <path fillRule="evenodd" d="M9.344 3.071a49.52 49.52 0 015.312 0c.967.052 1.83.585 2.332 1.39l.821 1.317c.24.383.645.643 1.11.71.386.054.77.113 1.152.177 1.432.239 2.429 1.493 2.429 2.909V18a3 3 0 01-3 3h-15a3 3 0 01-3-3V9.574c0-1.416.997-2.67 2.429-2.909.382-.064.766-.123 1.151-.178a1.56 1.56 0 001.11-.71l.822-1.315a2.942 2.942 0 012.332-1.39zM6.75 12.75a5.25 5.25 0 1110.5 0 5.25 5.25 0 01-10.5 0zm12-1.5a.75.75 0 100-1.5.75.75 0 000 1.5z" clipRule="evenodd" />
-                            </svg>
-                        </div>
+                        <img src="/images/logo/focalry-icon-white.png" alt="" className="h-7 w-7" />
                         <span className="text-sm font-semibold tracking-wide text-white">
                             {studio?.name ?? 'Studio'}
                         </span>
@@ -837,7 +825,7 @@ export default function AuthenticatedLayout({
                     >
                         <IconMessages className="h-5 w-5" />
                         {unread_messages > 0 && (
-                            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-semibold text-white">
+                            <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-accent-600 px-1 text-[10px] font-semibold text-white">
                                 {unread_messages > 9 ? '9+' : unread_messages}
                             </span>
                         )}
@@ -852,14 +840,14 @@ export default function AuthenticatedLayout({
                     </div>
                 )}
 
-                {/* Flash */}
-                <FlashBanner />
-
                 {/* Content */}
                 <main className="flex-1 overflow-y-auto">
                     {children}
                 </main>
             </div>
+
+            {/* Flash messages surface as auto-dismissing toasts. */}
+            <Toaster />
         </div>
     );
 }

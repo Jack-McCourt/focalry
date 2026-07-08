@@ -1,18 +1,18 @@
 import ColorPicker from '@/Components/ColorPicker';
 import Modal from '@/Components/Modal';
 import SiteShell from '@/Components/site/SiteShell';
-import { addChildToGrid, blockLabel, cloneBlock, findBlock, makeBlock, moveBlockInTree, removeBlockFromTree, reorderTopLevel, updateBlockInTree } from '@/Components/site/blocks';
-import { BlockEditor, HeroDesignFields, ImageField, NavEditor } from '@/Components/site/editors';
+import { SectionPreset, addChildToGrid, blockLabel, cloneBlock, findBlock, makeBlock, moveBlockInTree, removeBlockFromTree, reorderTopLevel, updateBlockInTree } from '@/Components/site/blocks';
+import { BlockEditor, ImageField, NavEditor } from '@/Components/site/editors';
 import BlockPicker from '@/Components/site/BlockPicker';
-import PostHeader from '@/Components/site/PostHeader';
 import GoogleReviewsModal from '@/Components/site/GoogleReviewsModal';
 import PreviewFrame from '@/Components/site/PreviewFrame';
 import { SITE_FONTS } from '@/lib/siteFonts';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { BlockSettings, BlogPostCard, PackageCard, PageProps, SiteBlock, SiteBlockType, SiteCategory, SiteData, SiteNavItem, SitePageData, SiteTemplateMeta, SiteTheme } from '@/types';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 // Placeholder posts so the blog block shows something in the builder preview.
 const SAMPLE_POSTS: BlogPostCard[] = [
@@ -28,11 +28,30 @@ const SAMPLE_PACKAGES: PackageCard[] = [
     { slug: 'sample-3', name: 'Mini session', description: '30-minute portrait session.', image_url: null, price_cents: 15000, deposit_cents: null, currency: 'gbp', url: '#' },
 ];
 
+/**
+ * Guarantee every blog post opens with a `post_header` block. Existing posts
+ * (from before the header was a block) are seeded from the legacy shared design
+ * on the parent blog page, so they keep their look; it persists on next save.
+ */
+function ensurePostHeaders(pages: SitePageData[]): SitePageData[] {
+    const blog = pages.find((p) => p.is_blog && !p.is_post);
+    return pages.map((p) => {
+        if (!p.is_post) return p;
+        const blocks = p.blocks ?? [];
+        if (blocks.some((b) => b.type === 'post_header')) return p;
+        const header = makeBlock('post_header');
+        const legacy = (blog as unknown as { header?: Record<string, unknown> })?.header;
+        if (legacy) header.data = { ...header.data, ...legacy };
+        return { ...p, blocks: [header, ...blocks] };
+    });
+}
+
 export default function Builder({
     site,
     templates,
     leads_count,
-}: PageProps<{ site: SiteData; templates: SiteTemplateMeta[]; public_url: string; leads_count: number }>) {
+    has_draft,
+}: PageProps<{ site: SiteData; templates: SiteTemplateMeta[]; public_url: string; leads_count: number; has_draft: boolean }>) {
     const [name, setName] = useState(site.name);
     const [slug, setSlug] = useState(site.slug);
     const [contactEmail, setContactEmail] = useState(site.contact_email ?? '');
@@ -50,7 +69,7 @@ export default function Builder({
     const [cookieConsent, setCookieConsent] = useState(!!site.cookie_consent);
     const [cookieMessage, setCookieMessage] = useState(site.cookie_message ?? '');
     const [cookiePolicyUrl, setCookiePolicyUrl] = useState(site.cookie_policy_url ?? '');
-    const [pages, setPages] = useState<SitePageData[]>(site.pages);
+    const [pages, setPages] = useState<SitePageData[]>(() => ensurePostHeaders(site.pages));
     // Blog categories are managed over ajax (not part of the page save payload) so
     // adding/renaming/deleting one never clobbers unsaved page edits — like WP.
     const [categories, setCategories] = useState<SiteCategory[]>(site.categories ?? []);
@@ -94,6 +113,9 @@ export default function Builder({
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [showAddBlock, setShowAddBlock] = useState(false);
+    // Where the next added block goes: null = append (sidebar "+ Add block"),
+    // a number = insert at that top-level index (canvas "+" seams).
+    const [addBlockAt, setAddBlockAt] = useState<number | null>(null);
     const [configureBlockId, setConfigureBlockId] = useState<string | null>(null);
     const [device, setDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
     // The contextual editor (block editor / page settings) opens as an overlay over
@@ -108,7 +130,8 @@ export default function Builder({
     const page = pages[activePage];
     const selectedBlock = page ? findBlock(page.blocks, selectedBlockId ?? '') : null;
     const configureBlock = page && configureBlockId ? findBlock(page.blocks, configureBlockId) : null;
-    const publicUrl = `/site/${slug}`;
+    // Prefer the live custom domain; otherwise the slug route (tracks the in-progress slug edit).
+    const publicUrl = site.domain_live ? site.public_url : `/site/${slug}`;
 
     // ── Block mutations (immutable, recursive — blocks may be nested in grids) ──
     const writeBlocks = (blocks: SiteBlock[]) =>
@@ -123,11 +146,32 @@ export default function Builder({
     const toggleBlockHidden = (id: string) =>
         writeBlocks(updateBlockInTree(page.blocks, id, (b) => ({ ...b, hidden: !b.hidden })));
 
-    const addBlock = (type: SiteBlockType) => {
-        const block = makeBlock(type);
-        writeBlocks([...page.blocks, block]);
+    const insertAt = (block: SiteBlock) => {
+        const next = [...page.blocks];
+        next.splice(addBlockAt ?? next.length, 0, block);
+        writeBlocks(next);
         selectBlock(block.id);
         setShowAddBlock(false);
+        setAddBlockAt(null);
+    };
+
+    const addBlock = (type: SiteBlockType) => insertAt(makeBlock(type));
+
+    // Insert a pre-designed section (one or more styled blocks) at the insert
+    // point (or the end), selecting the first inserted block.
+    const insertPreset = (preset: SectionPreset) => {
+        const fresh = preset.build();
+        const next = [...page.blocks];
+        next.splice(addBlockAt ?? next.length, 0, ...fresh);
+        writeBlocks(next);
+        if (fresh[0]) selectBlock(fresh[0].id);
+        setShowAddBlock(false);
+        setAddBlockAt(null);
+    };
+
+    const openAddBlockAt = (index: number) => {
+        setAddBlockAt(index);
+        setShowAddBlock(true);
     };
 
     const addChild = (gridId: string, col: number, type: SiteBlockType) => {
@@ -165,10 +209,7 @@ export default function Builder({
     const insertSection = (sectionId: string) => {
         const section = savedSections.find((s) => s.id === sectionId);
         if (!section) return;
-        const block = cloneBlock(section.block);
-        writeBlocks([...page.blocks, block]);
-        selectBlock(block.id);
-        setShowAddBlock(false);
+        insertAt(cloneBlock(section.block));
     };
 
     const deleteSection = (sectionId: string) => setSavedSections((prev) => prev.filter((s) => s.id !== sectionId));
@@ -205,9 +246,9 @@ export default function Builder({
             published_at: new Date().toLocaleDateString('en-CA'),
             excerpt: '',
             cover_image: '',
-            // The post hero (cover image + title + date/categories) is rendered
-            // automatically by PostHeader, so a new post only needs body content.
-            blocks: [makeBlock('text')],
+            // Every post opens with a post-header block (its cover image + title
+            // + date/categories), then body content.
+            blocks: [makeBlock('post_header'), makeBlock('text')],
         };
         setPages([...pages, newPost]);
         setPostListPage(1);
@@ -263,9 +304,9 @@ export default function Builder({
             return value ? { ...p, is_404: false } : p; // only one 404 page
         }));
 
-    const setBlog = (index: number, value: boolean) => {
+    const setBlog = async (index: number, value: boolean) => {
         if (!value && pages.some((p) => p.is_post)) {
-            if (!window.confirm('Remove the blog designation? The posts under it will be deleted when you save.')) return;
+            if (!(await confirmDialog('Remove the blog designation? The posts under it will be deleted when you save.'))) return;
         }
         setPages((prev) => prev.map((p, i) => {
             if (i === index) return { ...p, is_blog: value };
@@ -274,17 +315,27 @@ export default function Builder({
     };
 
     // ── Persistence ──
-    // A stable snapshot of everything that gets saved — drives the
-    // "saved/unsaved" indicator. Saving is manual (no autosave).
+    // A stable snapshot of everything that gets saved — drives autosave + the
+    // "saved/unsaved" indicator. Saves land in a DRAFT on the server; nothing
+    // reaches the live site until Publish.
+    const [hasDraft, setHasDraft] = useState(has_draft);
     const snapshot = JSON.stringify({ name, slug, contactEmail, seoTitle, seoDescription, faviconUrl, ogImageUrl, redirects, savedSections, theme, headerNav, footerNav, headCode, bodyCode, cookieConsent, cookieMessage, cookiePolicyUrl, pages });
     const savedSnapshotRef = useRef(snapshot);
     const dirty = snapshot !== savedSnapshotRef.current;
 
-    // Set synchronously when our own save visit is in flight, so the unsaved-changes
-    // navigation guard below doesn't prompt on the save request itself.
+    // Set synchronously when our own save/discard visit is in flight, so the
+    // unsaved-changes navigation guard doesn't prompt on it.
     const savingRef = useRef(false);
 
-    const save = () => {
+    // Optimistic-lock token: echoed on every save so a stale tab can't clobber
+    // work saved elsewhere; refreshed from the response after each save/publish.
+    const versionRef = useRef<string | null>(site.version ?? null);
+    const refreshVersion = (page: { props: Record<string, unknown> }) => {
+        const v = (page.props.site as { version?: string } | undefined)?.version;
+        if (v) versionRef.current = v;
+    };
+
+    const save = (then?: () => void) => {
         const saving = snapshot;
         savingRef.current = true;
         setSaving(true);
@@ -292,6 +343,7 @@ export default function Builder({
         router.put(
             route('website.update'),
             {
+                version: versionRef.current,
                 name,
                 slug,
                 contact_email: contactEmail || null,
@@ -314,23 +366,34 @@ export default function Builder({
             {
                 preserveScroll: true,
                 preserveState: true,
-                onSuccess: () => { savedSnapshotRef.current = saving; },
+                onSuccess: (page) => { savedSnapshotRef.current = saving; setHasDraft(true); refreshVersion(page); then?.(); },
                 onError: (e) => setErrors(e as Record<string, string>),
                 onFinish: () => { setSaving(false); savingRef.current = false; },
             },
         );
     };
 
-    // Saving is manual (the Save button) so edits never go live until the user is
-    // ready. Warn before leaving with unsaved changes so work isn't lost.
+    // ── Autosave (debounced) — safe now that saves go to the draft, not live. ──
     useEffect(() => {
         if (!dirty) return;
-        const onBeforeUnload = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+        const t = setTimeout(() => save(), 2000);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [snapshot]);
+
+    // Warn before leaving in the brief window between an edit and its autosave.
+    useEffect(() => {
+        if (!dirty) return;
+        const onBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (savingRef.current) return;
+            e.preventDefault();
+            e.returnValue = '';
+        };
         window.addEventListener('beforeunload', onBeforeUnload);
         // In-app (Inertia) navigation — e.g. clicking Settings or another pillar —
         // doesn't fire beforeunload, so confirm before discarding edits.
         const off = router.on('before', (event) => {
-            // Don't prompt on our own save request (it preserves state, no visit).
+            // Don't prompt on our own save/discard request.
             if (savingRef.current) return;
             if (!window.confirm('You have unsaved changes. Leave without saving?')) {
                 event.preventDefault();
@@ -385,26 +448,55 @@ export default function Builder({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const togglePublish = () => {
-        const next = !isPublished;
-        router.post(route('website.publish'), { publish: next }, {
+    // Publish applies the saved draft to the live site. If there are edits not
+    // yet autosaved, save them first, then publish.
+    const [publishing, setPublishing] = useState(false);
+    const doPublish = () => {
+        if (publishing) return; // a double-click must not race two publishes
+        setPublishing(true);
+        router.post(route('website.publish'), { publish: true }, {
             preserveScroll: true,
             preserveState: true,
-            onSuccess: () => setIsPublished(next),
+            onSuccess: (page) => { setIsPublished(true); setHasDraft(false); refreshVersion(page); },
+            onFinish: () => setPublishing(false),
+        });
+    };
+    const publishSite = () => (dirty ? save(doPublish) : doPublish());
+
+    const unpublish = async () => {
+        if (!(await confirmDialog('Unpublish the website? Visitors will no longer be able to see it.'))) return;
+        router.post(route('website.publish'), { publish: false }, {
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => setIsPublished(false),
         });
     };
 
-    const applyTemplate = (key: string, replace = false) => {
+    // Throw away the draft and reload the builder from the live version.
+    const discardDraft = async () => {
+        if (!(await confirmDialog('Discard your draft changes and return to the live version?'))) return;
+        savingRef.current = true; // bypass the unsaved-changes guards (incl. the reload)
+        router.delete(route('website.draft.discard'), {
+            onSuccess: () => window.location.reload(),
+            onError: () => { savingRef.current = false; },
+        });
+    };
+
+    const applyTemplate = async (key: string, replace = false) => {
         const msg = replace
             ? 'Replace all pages and content with this template’s sample pages? This cannot be undone.'
             : 'Apply this template’s colours & fonts? Your pages and content are kept.';
-        if (!window.confirm(msg)) return;
+        if (!(await confirmDialog(msg))) return;
         router.post(route('website.template'), { template: key, replace }, { onSuccess: () => location.reload() });
     };
 
     const pageRefs = pages.filter((p) => !p.is_post).map((p) => ({ title: p.title, slug: p.slug, is_home: p.is_home }));
 
     const blogPage = pages.find((p) => p.is_blog && !p.is_post);
+
+    // Booking-block preview: the studio's public scheduling page.
+    const studioSlug = (usePage().props as any).auth?.studio?.slug as string | undefined;
+    const previewBookingUrl = studioSlug ? `/book/${studioSlug}` : null;
 
     // Real published posts for the blog grid preview (newest first), so the blog
     // page shows the studio's actual posts rather than placeholder samples. Falls
@@ -428,6 +520,23 @@ export default function Builder({
         : page?.is_home
             ? `/site/${slug}`
             : `/site/${slug}/${page?.slug ?? ''}`;
+
+    // SEO hint: count the H1s this page will render (hero, slider first slide,
+    // text blocks set to H1, plus the auto post header). More than one gets a
+    // gentle warning — search engines prefer a single H1 per page.
+    const countH1s = (blocks: SiteBlock[]): number =>
+        blocks.reduce((n, b) => {
+            if (b.hidden) return n;
+            const bd = b.data as Record<string, any>;
+            // Heroes can demote to h2 (heading_level) and render no heading tag
+            // at all when the heading is empty (image-only banners/slides).
+            if (b.type === 'hero') return n + (bd.heading_level !== 'h2' && String(bd.heading ?? '').trim() !== '' ? 1 : 0);
+            if (b.type === 'slider') return n + (Array.isArray(bd.slides) && String(bd.slides[0]?.heading ?? '').trim() !== '' ? 1 : 0);
+            if (b.type === 'text' && bd.heading_level === 'h1' && String(bd.heading ?? '').trim() !== '') return n + 1;
+            if (b.children) return n + b.children.reduce((m, col) => m + countH1s(col), 0);
+            return n;
+        }, 0);
+    const h1Count = (page ? countH1s(page.blocks) : 0) + (page?.is_post ? 1 : 0);
 
     // ── The builder's control panel, rendered inside the app's black sidebar
     // (passed via the `sidebar` slot). Pages + blocks list is dark-themed to sit
@@ -492,7 +601,7 @@ export default function Builder({
                                                 <button type="button" disabled={cur >= pageCount} onClick={() => setPostListPage(cur + 1)} className="font-medium enabled:hover:text-white disabled:opacity-30">Next ›</button>
                                             </div>
                                         )}
-                                        <button onClick={addPost} className="w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-blue-400 hover:bg-white/5">+ Add post</button>
+                                        <button onClick={addPost} className="w-full rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-accent-300 hover:bg-white/5">+ Add post</button>
                                     </div>
                                 );
                             })()}
@@ -516,7 +625,7 @@ export default function Builder({
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={() => dropBlock(i)}
                             onDragEnd={() => setDragIndex(null)}
-                            className={`group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm transition ${b.id === selectedBlockId ? 'bg-blue-500/20 text-blue-200' : 'text-zinc-300 hover:bg-white/5'} ${dragIndex === i ? 'opacity-40' : ''}`}
+                            className={`group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm transition ${b.id === selectedBlockId ? 'bg-white/10 text-white' : 'text-zinc-300 hover:bg-white/5'} ${dragIndex === i ? 'opacity-40' : ''}`}
                         >
                             <span className="cursor-grab text-zinc-600 group-hover:text-zinc-400" title="Drag to reorder">
                                 <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20"><path d="M7 4a1 1 0 110-2 1 1 0 010 2zM7 11a1 1 0 110-2 1 1 0 010 2zM7 18a1 1 0 110-2 1 1 0 010 2zM13 4a1 1 0 110-2 1 1 0 010 2zM13 11a1 1 0 110-2 1 1 0 010 2zM13 18a1 1 0 110-2 1 1 0 010 2z" /></svg>
@@ -577,6 +686,11 @@ export default function Builder({
                         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${isPublished ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-100 text-neutral-500'}`}>
                             {isPublished ? 'Published' : 'Draft'}
                         </span>
+                        {isPublished && (hasDraft || dirty) && (
+                            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                                Unpublished changes
+                            </span>
+                        )}
                     </div>
                     <div className="flex items-center gap-2">
                         <div className="mr-1 flex items-center gap-0.5">
@@ -587,15 +701,39 @@ export default function Builder({
                                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15 15l6-6m0 0l-6-6m6 6H9a6 6 0 000 12h3" /></svg>
                             </button>
                         </div>
-                        <span className="text-xs text-neutral-400">{saving ? 'Saving…' : dirty ? 'Unsaved' : 'Saved'}</span>
+                        {Object.keys(errors).length > 0 && !saving ? (
+                            errors.version ? (
+                                <button onClick={() => window.location.reload()} className="max-w-56 truncate text-xs font-medium text-red-600 underline-offset-2 hover:underline" title={errors.version}>
+                                    Changed elsewhere — reload
+                                </button>
+                            ) : (
+                                <span className="max-w-56 truncate text-xs font-medium text-red-600" title={Object.values(errors)[0]}>
+                                    Save failed: {Object.values(errors)[0]}
+                                </span>
+                            )
+                        ) : (
+                            <span className="text-xs text-neutral-400">{saving ? 'Saving…' : dirty ? 'Unsaved' : hasDraft ? 'Draft saved' : 'Saved'}</span>
+                        )}
+                        {hasDraft && !dirty && !saving && (
+                            <button onClick={discardDraft} className="text-xs text-neutral-400 underline-offset-2 hover:text-red-600 hover:underline" title="Throw away the draft and return to the live version">
+                                Discard
+                            </button>
+                        )}
                         <Link href={route('website.settings')} className="btn-secondary">Settings</Link>
                         {isPublished ? (
                             <a href={publicUrl} target="_blank" rel="noreferrer" className="btn-secondary">View site</a>
                         ) : (
                             <button className="btn-secondary opacity-50" title="Publish to view the live site" disabled>View site</button>
                         )}
-                        <button onClick={togglePublish} className="btn-secondary">{isPublished ? 'Unpublish' : 'Publish'}</button>
-                        <button onClick={save} disabled={saving} className="btn-primary">{saving ? 'Saving…' : 'Save'}</button>
+                        {isPublished && <button onClick={unpublish} className="btn-secondary">Unpublish</button>}
+                        <button
+                            onClick={publishSite}
+                            disabled={saving || publishing || (isPublished && !hasDraft && !dirty)}
+                            className="btn-primary"
+                            title={isPublished ? 'Apply your draft changes to the live site' : 'Make the website live'}
+                        >
+                            {publishing ? 'Publishing…' : isPublished ? 'Publish changes' : 'Publish'}
+                        </button>
                     </div>
                 </div>
             }
@@ -607,7 +745,17 @@ export default function Builder({
                 <div className="flex min-w-0 flex-1 flex-col bg-neutral-100">
                     <div className="flex shrink-0 items-center gap-2 border-b border-neutral-200 bg-white px-4 py-2">
                         <div className="flex gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-neutral-200" /><span className="h-2.5 w-2.5 rounded-full bg-neutral-200" /><span className="h-2.5 w-2.5 rounded-full bg-neutral-200" /></div>
-                        <div className="mx-auto truncate rounded-md bg-neutral-100 px-3 py-1 text-xs text-neutral-500">{previewPath}</div>
+                        <div className="mx-auto flex min-w-0 items-center gap-2">
+                            <div className="truncate rounded-md bg-neutral-100 px-3 py-1 text-xs text-neutral-500">{previewPath}</div>
+                            {h1Count > 1 && (
+                                <span
+                                    className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
+                                    title="Search engines prefer a single H1 per page. Heroes and sliders use H1; change extra text blocks to H2, or remove duplicate hero blocks."
+                                >
+                                    {h1Count} H1 headings
+                                </span>
+                            )}
+                        </div>
                         <div className="flex items-center gap-0.5 rounded-md bg-neutral-100 p-0.5">
                             {([['desktop', 'M2.25 12.75V6A2.25 2.25 0 014.5 3.75h15A2.25 2.25 0 0121.75 6v6.75m-19.5 0A2.25 2.25 0 004.5 15h15a2.25 2.25 0 002.25-2.25m-19.5 0h19.5M8.25 20.25h7.5'], ['tablet', 'M10.5 19.5h3M6.75 21.75h10.5a1.5 1.5 0 001.5-1.5V3.75a1.5 1.5 0 00-1.5-1.5H6.75a1.5 1.5 0 00-1.5 1.5v16.5a1.5 1.5 0 001.5 1.5z'], ['mobile', 'M10.5 18.75h3M8.25 21.75h7.5a1.5 1.5 0 001.5-1.5V3.75a1.5 1.5 0 00-1.5-1.5h-7.5a1.5 1.5 0 00-1.5 1.5v16.5a1.5 1.5 0 001.5 1.5z']] as const).map(([d, path]) => (
                                 <button key={d} onClick={() => setDevice(d)} title={d} aria-label={d} className={`rounded p-1.5 transition ${device === d ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-400 hover:text-neutral-700'}`}>
@@ -622,6 +770,7 @@ export default function Builder({
                                 <SiteShell
                                     siteName={name}
                                     siteSlug={slug}
+                                    studioLogo={site.logo_url}
                                     theme={theme}
                                     pages={pageRefs}
                                     headerNav={headerNav}
@@ -629,27 +778,25 @@ export default function Builder({
                                     blocks={page?.blocks ?? []}
                                     activeSlug={page?.slug ?? ''}
                                     interactive={false}
+                                    announcement={site.announcement}
+                                    social={site.social}
+                                    footerInfo={site.footer}
+                                    footerLogo={site.footer_logo}
+                                    bookingUrl={previewBookingUrl}
+                                    customFonts={site.custom_fonts}
                                     posts={previewPosts}
                                     categories={realPosts.length ? categories : undefined}
                                     packages={SAMPLE_PACKAGES}
-                                    postHeader={page?.is_post ? (
-                                        <PostHeader
-                                            theme={theme}
-                                            onEdit={() => { const bi = pages.findIndex((p) => p.is_blog && !p.is_post); if (bi >= 0) goToPage(bi); }}
-                                            post={{
-                                                title: page.title,
-                                                cover_image: page.cover_image || null,
-                                                cover_focal: page.cover_focal ?? null,
-                                                published_at: page.published_at || null,
-                                                // Formatting comes from the parent blog page (shared by all posts).
-                                                header: blogPage?.header ?? null,
-                                                categories: (page.category_ids ?? [])
-                                                    .map((id) => categories.find((c) => c.id === id))
-                                                    .filter((c): c is SiteCategory => !!c),
-                                            }}
-                                        />
-                                    ) : undefined}
-                                    editing={{ selectedId: selectedBlockId, onSelect: selectBlock, onDelete: removeBlock, onAddChild: addChild, onConfigure: setConfigureBlockId, onEditData: updateBlock }}
+                                    post={page?.is_post ? {
+                                        title: page.title,
+                                        cover_image: page.cover_image || null,
+                                        cover_focal: page.cover_focal ?? null,
+                                        published_at: page.published_at || null,
+                                        categories: (page.category_ids ?? [])
+                                            .map((id) => categories.find((c) => c.id === id))
+                                            .filter((c): c is SiteCategory => !!c),
+                                    } : null}
+                                    editing={{ selectedId: selectedBlockId, onSelect: selectBlock, onDelete: removeBlock, onAddChild: addChild, onConfigure: setConfigureBlockId, onEditData: updateBlock, onMove: moveBlock, onInsertAt: openAddBlockAt }}
                                 />
                             </PreviewFrame>
                         </div>
@@ -682,11 +829,13 @@ export default function Builder({
 
             <BlockPicker
                 open={showAddBlock}
-                onClose={() => setShowAddBlock(false)}
+                onClose={() => { setShowAddBlock(false); setAddBlockAt(null); }}
                 onAdd={addBlock}
+                onInsertPreset={insertPreset}
                 savedSections={savedSections}
                 onInsertSection={insertSection}
                 onDeleteSection={deleteSection}
+                isPost={!!page?.is_post}
             />
 
             {configureBlock?.type === 'reviews' && (
@@ -789,7 +938,7 @@ function CategoryMetabox({
                                             <button type="button" title="Rename" onClick={() => { setEditingId(cat.id); setEditName(cat.name); }} className="text-neutral-400 hover:text-neutral-700">
                                                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
                                             </button>
-                                            <button type="button" title="Delete" disabled={busy} onClick={() => { if (window.confirm(`Delete category “${cat.name}”? Posts keep their other categories; any sub-categories move up a level.`)) deleteCategory(cat.id); }} className="text-neutral-400 hover:text-red-500">
+                                            <button type="button" title="Delete" disabled={busy} onClick={async () => { if (await confirmDialog(`Delete category “${cat.name}”? Posts keep their other categories; any sub-categories move up a level.`)) deleteCategory(cat.id); }} className="text-neutral-400 hover:text-red-500">
                                                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                                             </button>
                                         </span>
@@ -818,7 +967,7 @@ function CategoryMetabox({
                     </div>
                 ) : (
                     <div className="flex items-center justify-between">
-                        <button type="button" onClick={() => setAdding(true)} className="text-xs font-medium text-blue-600 hover:text-blue-800">+ Add New Category</button>
+                        <button type="button" onClick={() => setAdding(true)} className="text-xs font-medium text-brand hover:text-brand-800">+ Add New Category</button>
                         {categories.length > 0 && (
                             <button type="button" onClick={() => { setManage((m) => !m); setEditingId(null); }} className="text-xs text-neutral-400 hover:text-neutral-700">{manage ? 'Done' : 'Manage'}</button>
                         )}
@@ -855,13 +1004,30 @@ function BlogCategoryVisibility({ categories, hidden, onChange }: { categories: 
     );
 }
 
-// ─── Page panel (right panel when a page is selected) ─────────────────────────
+// ─── Page panel (settings overlay when a page is selected) ────────────────────
 
-function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, set404, removePage, duplicatePage, categories, categoryBusy, createCategory, renameCategory, deleteCategory }: any) {
+interface PagePanelProps {
+    page: SitePageData | undefined;
+    activePage: number;
+    pages: SitePageData[];
+    updatePageMeta: (index: number, partial: Partial<SitePageData>) => void;
+    setHome: (index: number) => void;
+    setBlog: (index: number, value: boolean) => void;
+    set404: (index: number, value: boolean) => void;
+    removePage: (index: number) => void;
+    duplicatePage: (index: number) => void;
+    categories: SiteCategory[];
+    categoryBusy: boolean;
+    createCategory: (name: string, parentId: number | null) => Promise<SiteCategory | null>;
+    renameCategory: (id: number, name: string, parentId: number | null) => Promise<void>;
+    deleteCategory: (id: number) => Promise<void>;
+}
+
+function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, set404, removePage, duplicatePage, categories, categoryBusy, createCategory, renameCategory, deleteCategory }: PagePanelProps) {
     if (!page) return null;
 
     const isPost = !!page.is_post;
-    const topCount = pages.filter((p: SitePageData) => !p.is_post).length;
+    const topCount = pages.filter((p) => !p.is_post).length;
     const set = (partial: Partial<SitePageData>) => updatePageMeta(activePage, partial);
 
     return (
@@ -895,6 +1061,10 @@ function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, 
                             <span className="label mb-1.5 block">Excerpt</span>
                             <textarea className="input" rows={2} value={page.excerpt ?? ''} onChange={(e) => set({ excerpt: e.target.value })} placeholder="Short summary shown in post listings" />
                         </label>
+                        <label className="block">
+                            <span className="label mb-1.5 block">Author (optional)</span>
+                            <input className="input" value={page.author ?? ''} onChange={(e) => set({ author: e.target.value })} placeholder="Shown under the post title" />
+                        </label>
                         <div className="block">
                             <span className="label mb-1.5 block">Categories</span>
                             <CategoryMetabox
@@ -914,7 +1084,7 @@ function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, 
                             focal={{ x: page.cover_focal?.x ?? 50, y: page.cover_focal?.y ?? 50 }}
                             onFocalChange={(x, y) => set({ cover_focal: { x, y } })}
                         />
-                        <p className="text-xs text-neutral-500">The header layout/formatting is shared across all posts — edit it on the <strong>Blog page</strong> settings.</p>
+                        <p className="text-xs text-neutral-500">The post header (cover image + title) is a block on the post — click it in the preview to style it, or add it from the block picker if removed.</p>
                         <div className="flex gap-3 pt-1">
                             <button onClick={() => duplicatePage(activePage)} className="text-xs text-neutral-600 hover:underline">Duplicate post</button>
                             <button onClick={() => removePage(activePage)} className="text-xs text-red-600 hover:underline">Delete post</button>
@@ -935,13 +1105,6 @@ function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, 
                                 onChange={(ids: number[]) => set({ hidden_category_ids: ids })}
                             />
                         )}
-                        {page.is_blog && (
-                            <details className="rounded-lg border border-neutral-200 p-3">
-                                <summary className="cursor-pointer text-sm font-semibold text-neutral-900">Post header design</summary>
-                                <p className="mb-3 mt-1 text-xs text-neutral-500">Formats the header on every post (each post supplies its own cover image &amp; title). Same options as a hero block.</p>
-                                <HeroDesignFields data={page.header ?? {}} onChange={(partial) => set({ header: { ...(page.header ?? {}), ...partial } })} />
-                            </details>
-                        )}
                         <label className="flex items-center gap-2 text-sm text-neutral-700">
                             <input type="checkbox" checked={!!page.is_404} onChange={(e) => set404(activePage, e.target.checked)} /> 404 page <span className="text-xs text-neutral-400">(shown for missing URLs)</span>
                         </label>
@@ -956,6 +1119,8 @@ function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, 
             </div>
 
             <div className="mt-6 border-t border-neutral-100 pt-4">
+                <SeoFields page={page} set={set} />
+
                 <ImageField label="Social share image (this page)" value={page.og_image ?? ''} onChange={(v) => set({ og_image: v })} />
                 <p className="mt-1 text-xs text-neutral-400">Overrides the site default when this page is shared.</p>
             </div>
@@ -976,7 +1141,7 @@ function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, 
             </details>
 
             <div className="mt-6 border-t border-neutral-100 pt-4">
-                <Link href={route('website.settings')} className="text-xs font-medium text-blue-700 hover:underline">
+                <Link href={route('website.settings')} className="text-xs font-medium text-brand-700 hover:underline">
                     Site settings (menus, theme, domain) →
                 </Link>
             </div>
@@ -984,3 +1149,57 @@ function PagePanel({ page, activePage, pages, updatePageMeta, setHome, setBlog, 
     );
 }
 
+
+
+// ─── Per-page SEO fields (+ AI generation when the platform has a key) ────────
+
+function SeoFields({ page, set }: { page: SitePageData; set: (partial: Partial<SitePageData>) => void }) {
+    const aiAvailable = !!(usePage().props as any).ai_available;
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    // Flatten the page's text content as context for the generator.
+    const pageText = () => {
+        const parts: string[] = [page.title];
+        const walk = (blocks: SiteBlock[]) => blocks.forEach((b) => {
+            const d = b.data as Record<string, any>;
+            ['heading', 'subheading', 'body', 'caption'].forEach((k) => {
+                if (typeof d[k] === 'string') parts.push(d[k].replace(/<[^>]+>/g, ' '));
+            });
+            (b.children ?? []).forEach((col) => walk(col));
+        });
+        walk(page.blocks);
+        return parts.join('\n').slice(0, 7000);
+    };
+
+    const generate = async () => {
+        setBusy(true);
+        setError(null);
+        try {
+            const res = await (window as any).axios.post(route('website.ai.seo'), { title: page.title, content: pageText() });
+            set({ seo_title: res.data.title, seo_description: res.data.description });
+        } catch (e: any) {
+            setError(e?.response?.data?.message ?? 'Could not generate — try again.');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return (
+        <div className="mt-6 border-t border-neutral-100 pt-4">
+            <div className="mb-1.5 flex items-center justify-between">
+                <span className="label">SEO (this page)</span>
+                {aiAvailable && (
+                    <button type="button" onClick={generate} disabled={busy} className="text-xs font-medium text-brand-700 hover:underline disabled:opacity-50">
+                        {busy ? 'Writing…' : '✨ Generate from content'}
+                    </button>
+                )}
+            </div>
+            <div className="space-y-2">
+                <input className="input" placeholder="Meta title (overrides the site default)" value={page.seo_title ?? ''} onChange={(e) => set({ seo_title: e.target.value })} />
+                <textarea className="input" rows={2} placeholder="Meta description" value={page.seo_description ?? ''} onChange={(e) => set({ seo_description: e.target.value })} />
+            </div>
+            {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+        </div>
+    );
+}

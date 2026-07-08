@@ -1,0 +1,12 @@
+# Focalry: allow the web/queue user to trigger custom-domain provisioning as
+# root, restricted to exactly the argument-less wrapper. The wrapper hard-codes
+# the app dir and runs the full idempotent batch, so www-data cannot pass a
+# rogue domain or path through it.
+#
+# Install to /etc/sudoers.d/focalry, mode 0440, validate with: visudo -c
+#
+# Whoever runs ProvisionDomainJob needs this grant. The web request (verify)
+# runs as www-data; the Horizon queue worker that actually shells out to the
+# wrapper runs as kriegar — so both are granted.
+www-data ALL=(root) NOPASSWD: /usr/local/sbin/focalry-provision
+kriegar  ALL=(root) NOPASSWD: /usr/local/sbin/focalry-provision

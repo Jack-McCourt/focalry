@@ -136,15 +136,17 @@ export default function ClientPortal({
     client_name,
     studio_name,
     studio_logo,
+    studio_logo_size,
     projects,
 }: PageProps<{
     client_name: string;
     studio_name: string | null;
     studio_logo: string | null;
+    studio_logo_size: string | null;
     projects: PortalProject[];
 }>) {
     return (
-        <PublicShell brand={{ name: studio_name, logo: studio_logo }} maxWidth="xl">
+        <PublicShell brand={{ name: studio_name, logo: studio_logo, size: studio_logo_size }} maxWidth="xl">
             <Head title="Your portal" />
 
             <div className="mb-8 text-center">

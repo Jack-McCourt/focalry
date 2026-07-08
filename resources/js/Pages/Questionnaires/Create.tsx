@@ -115,7 +115,7 @@ export default function Create({
                             </label>
                         </div>
                     ))}
-                    <button type="button" onClick={() => form.setData('questions', [...form.data.questions, { label: '', type: 'text', options: [], required: false }])} className="text-sm font-medium text-blue-600 hover:text-blue-800">
+                    <button type="button" onClick={() => form.setData('questions', [...form.data.questions, { label: '', type: 'text', options: [], required: false }])} className="text-sm font-medium text-brand hover:text-brand-800">
                         + Add question
                     </button>
                 </div>

@@ -45,6 +45,26 @@ return [
         ],
     ],
 
+    // AI assists in the website builder (alt text, SEO copy, headlines).
+    'anthropic' => [
+        'key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('ANTHROPIC_MODEL', 'claude-haiku-4-5-20251001'),
+    ],
+
+    // Cloudflare Turnstile (optional contact-form captcha).
+    'turnstile' => [
+        'site_key' => env('TURNSTILE_SITE_KEY'),
+        'secret_key' => env('TURNSTILE_SECRET_KEY'),
+    ],
+
+    // Instagram feed block (Instagram API with Instagram Login — business/creator
+    // accounts). Register an app at developers.facebook.com, add the redirect URI
+    // {APP_URL}/website/instagram/callback, then set these:
+    'instagram' => [
+        'client_id' => env('INSTAGRAM_CLIENT_ID'),
+        'client_secret' => env('INSTAGRAM_CLIENT_SECRET'),
+    ],
+
     'google' => [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_secret' => env('GOOGLE_CLIENT_SECRET'),

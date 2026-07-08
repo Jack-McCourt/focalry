@@ -6,6 +6,7 @@ import { centsToInput, formatMoney, toCents } from '@/lib/money';
 import { PageProps } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface Option {
     id?: number;
@@ -96,7 +97,7 @@ export default function Products({
                 <aside>
                     <div className="mb-2 flex items-center justify-between">
                         <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Price sheets</h2>
-                        <button onClick={() => setCreatingSheet(true)} className="text-xs font-medium text-blue-600 hover:underline">+ New</button>
+                        <button onClick={() => setCreatingSheet(true)} className="text-xs font-medium text-brand hover:underline">+ New</button>
                     </div>
                     <div className="space-y-1">
                         {price_sheets.map((s) => (
@@ -250,7 +251,7 @@ function LabProductModal({ onClose, categories, currency, product }: { onClose: 
     const [options, setOptions] = useState(product.options.map((o) => ({ id: o.id!, name: o.name, sku: o.lab_sku ?? '', cogs: o.cogs_cents ?? 0, price: centsToInput(o.price_cents), active: o.active !== false })));
     const [processing, setProcessing] = useState(false);
 
-    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900';
+    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500';
     const setOpt = (i: number, key: 'price' | 'active', val: string | boolean) =>
         setOptions((opts) => opts.map((o, idx) => (idx === i ? { ...o, [key]: val } : o)));
 
@@ -263,8 +264,8 @@ function LabProductModal({ onClose, categories, currency, product }: { onClose: 
             options: options.map((o) => ({ id: o.id, price_cents: toCents(o.price), active: o.active ? 1 : 0 })),
         }, { preserveScroll: true, onSuccess: onClose, onFinish: () => setProcessing(false) });
     };
-    const del = () => {
-        if (confirm('Remove this lab product from the price sheet?')) router.delete(route('store.products.destroy', product.id), { onSuccess: onClose });
+    const del = async () => {
+        if (await confirmDialog('Remove this lab product from the price sheet?')) router.delete(route('store.products.destroy', product.id), { onSuccess: onClose });
     };
 
     return (
@@ -328,8 +329,8 @@ function CategoryHeader({ cat }: { cat: Category | null }) {
         const name = prompt('Rename category', cat.name);
         if (name) router.patch(route('store.product-categories.update', cat.id), { name }, { preserveScroll: true });
     };
-    const del = () => {
-        if (confirm('Delete this category? Its products become uncategorised.')) {
+    const del = async () => {
+        if (await confirmDialog('Delete this category? Its products become uncategorised.')) {
             router.delete(route('store.product-categories.destroy', cat.id), { preserveScroll: true });
         }
     };
@@ -350,7 +351,7 @@ function SheetModal({ onClose, sheet, defaultCurrency }: { onClose: () => void; 
         currency: sheet?.currency ?? defaultCurrency,
         is_default: sheet?.is_default ?? false,
     });
-    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900';
+    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500';
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -358,8 +359,8 @@ function SheetModal({ onClose, sheet, defaultCurrency }: { onClose: () => void; 
         if (isEdit) router.patch(route('store.price-sheets.update', sheet!.id), payload, { onSuccess: onClose });
         else router.post(route('store.price-sheets.store'), payload, { onSuccess: onClose });
     };
-    const del = () => {
-        if (confirm('Delete this price sheet and all its products?')) {
+    const del = async () => {
+        if (await confirmDialog('Delete this price sheet and all its products?')) {
             router.delete(route('store.price-sheets.destroy', sheet!.id), { onSuccess: onClose });
         }
     };
@@ -424,7 +425,7 @@ function ProductModal({
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [processing, setProcessing] = useState(false);
 
-    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900';
+    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500';
 
     const setOpt = (i: number, key: 'name' | 'price' | 'cogs', val: string) =>
         setOptions((opts) => opts.map((o, idx) => (idx === i ? { ...o, [key]: val } : o)));
@@ -460,8 +461,8 @@ function ProductModal({
         });
     };
 
-    const del = () => {
-        if (confirm('Delete this product?')) router.delete(route('store.products.destroy', product!.id), { onSuccess: onClose });
+    const del = async () => {
+        if (await confirmDialog('Delete this product?')) router.delete(route('store.products.destroy', product!.id), { onSuccess: onClose });
     };
 
     return (
@@ -511,7 +512,7 @@ function ProductModal({
                 <div>
                     <div className="flex items-center justify-between">
                         <span className="label">Options &amp; pricing</span>
-                        <button type="button" onClick={addOpt} className="text-xs font-medium text-blue-600 hover:underline">+ Add option</button>
+                        <button type="button" onClick={addOpt} className="text-xs font-medium text-brand hover:underline">+ Add option</button>
                     </div>
                     <div className="mt-1 space-y-2">
                         <div className="grid grid-cols-[1fr_90px_90px_24px] gap-2 text-[11px] text-neutral-400">

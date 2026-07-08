@@ -1,5 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, Link, router } from '@inertiajs/react';
+import Paginator from '@/Components/Paginator';
 
 interface NotificationRow {
     id: string;
@@ -32,7 +33,7 @@ const TYPE_STYLES: Record<string, { dot: string; label: string }> = {
     meeting_booked: { dot: 'bg-amber-500', label: 'Meeting' },
     package_booked: { dot: 'bg-fuchsia-500', label: 'Booking' },
     store_order: { dot: 'bg-cyan-500', label: 'Store' },
-    lead: { dot: 'bg-blue-500', label: 'Lead' },
+    lead: { dot: 'bg-brand-500', label: 'Lead' },
     message: { dot: 'bg-neutral-400', label: 'Message' },
 };
 
@@ -110,7 +111,7 @@ export default function Notifications({ notifications, filter, unread_total }: P
                                 <button
                                     key={n.id}
                                     onClick={() => open(n)}
-                                    className={`flex w-full items-start gap-3 px-5 py-4 text-left transition hover:bg-neutral-50 ${n.read ? '' : 'bg-blue-50/40'}`}
+                                    className={`flex w-full items-start gap-3 px-5 py-4 text-left transition hover:bg-neutral-50 ${n.read ? '' : 'bg-brand-50/40'}`}
                                 >
                                     <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.read ? 'bg-neutral-200' : style.dot}`} />
                                     <div className="min-w-0 flex-1">
@@ -127,23 +128,7 @@ export default function Notifications({ notifications, filter, unread_total }: P
                     )}
                 </div>
 
-                {notifications.last_page > 1 && (
-                    <div className="mt-8 flex items-center justify-center gap-2">
-                        {notifications.prev_page_url && (
-                            <button onClick={() => router.get(notifications.prev_page_url!)} className="btn-secondary px-3 py-1.5 text-xs">
-                                Previous
-                            </button>
-                        )}
-                        <span className="text-xs text-neutral-500">
-                            Page {notifications.current_page} of {notifications.last_page}
-                        </span>
-                        {notifications.next_page_url && (
-                            <button onClick={() => router.get(notifications.next_page_url!)} className="btn-secondary px-3 py-1.5 text-xs">
-                                Next
-                            </button>
-                        )}
-                    </div>
-                )}
+                <Paginator paginator={notifications} />
             </div>
         </AuthenticatedLayout>
     );

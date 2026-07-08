@@ -3,35 +3,36 @@
 namespace App\Http\Controllers\StudioManager;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\ImportSiteImage;
-use App\Models\Collection;
-use App\Models\GalleryRecentPick;
-use App\Models\Photo;
+use App\Http\Controllers\StudioManager\Concerns\ResolvesSite;
 use App\Models\Site;
 use App\Models\SiteCategory;
 use App\Models\SitePage;
+use App\Models\SiteSnapshot;
 use App\Models\SiteVisit;
 use App\Models\Studio;
-use App\Support\GooglePlaces;
-use App\Support\Images;
-use App\Support\PublicAsset;
+use App\Support\Ai;
+use App\Support\InstagramApi;
+use App\Support\LinkedGalleries;
 use App\Support\SiteTemplates;
-use App\Support\StudioPaths;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * The website builder itself: builder/settings screens, draft saves, publish,
+ * templates, page sync, analytics and leads. Domain, media, category and
+ * Google-review endpoints live in their own Site*Controllers (all sharing
+ * the ResolvesSite concern).
+ */
 class SiteController extends Controller
 {
-    /** Cache-Control for uploaded assets — filenames are unique, so cache forever. */
-    private const ASSET_CACHE_CONTROL = 'public, max-age=31536000, immutable';
+    use ResolvesSite;
 
     /** The website builder. Creates a starter site on first visit. */
     public function edit(): Response
@@ -39,25 +40,88 @@ class SiteController extends Controller
         $site = $this->resolveSite();
 
         return Inertia::render('Website/Builder', [
-            'site' => $this->serialize($site),
+            // The builder edits the draft when one exists; the live site keeps
+            // serving the published copy until Publish applies it.
+            'site' => $this->serialize($site, withDraft: true),
             'templates' => SiteTemplates::all(),
-            'public_url' => route('sites.public.show', $site->slug),
+            'public_url' => $site->publicUrl(),
             'leads_count' => $site->leads()->count(),
+            'has_draft' => is_array($site->draft),
+            'ai_available' => Ai::configured(),
         ]);
     }
 
+    /**
+     * Builder saves (incl. autosave) land in the site's draft. Nothing changes
+     * on the live site until the studio clicks Publish.
+     */
     public function update(Request $request): RedirectResponse
     {
         $site = $this->resolveSite();
+
+        // Optimistic concurrency: the builder echoes the version it loaded
+        // (draft_saved_at ?? updated_at). A stale token means another tab (or
+        // person) saved since — reject rather than silently clobber their work.
+        $clientVersion = (string) $request->input('version', '');
+        if ($clientVersion !== '' && $clientVersion !== $this->siteVersion($site)) {
+            return back()->withErrors([
+                'version' => 'This site was changed in another tab or by someone else. Reload the builder to pick up the latest version before saving.',
+            ]);
+        }
+
         $data = $this->validateSite($request, $site);
 
-        DB::transaction(function () use ($site, $data) {
-            $this->applySiteSettings($site, $data);
-            $site->update(['saved_sections' => array_values($data['saved_sections'] ?? [])]);
-            $this->syncPages($site, $data['pages'] ?? []);
-        });
+        $site->update(['draft' => $data, 'draft_saved_at' => now()]);
 
-        return back()->with('success', 'Website saved.');
+        return back()->with('success', 'Draft saved.');
+    }
+
+    /**
+     * The builder's optimistic-lock token. A content hash rather than a
+     * timestamp: the timestamp columns are second-precision, so two rapid
+     * saves (e.g. autosaves from two tabs) would be indistinguishable.
+     */
+    private function siteVersion(Site $site): string
+    {
+        return md5(json_encode([$site->draft, (string) $site->draft_saved_at, (string) $site->updated_at]));
+    }
+
+    /** Throw away the draft, returning the builder to the live version. */
+    public function discardDraft(): RedirectResponse
+    {
+        $site = $this->resolveSite();
+        $site->update(['draft' => null, 'draft_saved_at' => null]);
+
+        return back()->with('success', 'Draft discarded.');
+    }
+
+    /** Load a published snapshot into the draft (nothing goes live until Publish). */
+    public function restoreSnapshot(SiteSnapshot $snapshot): RedirectResponse
+    {
+        $site = $this->resolveSite();
+        abort_unless($snapshot->site_id === $site->id, 404);
+
+        $site->update(['draft' => $snapshot->payload, 'draft_saved_at' => now()]);
+
+        return redirect()->route('website.edit')
+            ->with('success', 'Version from '.$snapshot->created_at->format('j M, H:i').' restored as a draft — review it and press Publish to put it live.');
+    }
+
+    /** Create (or rotate) the shareable draft-preview link. */
+    public function createPreviewLink(): RedirectResponse
+    {
+        $site = $this->resolveSite();
+        $site->update(['preview_token' => Str::random(48)]);
+
+        return back()->with('success', 'Preview link created.');
+    }
+
+    /** Revoke the shareable preview link. */
+    public function revokePreviewLink(): RedirectResponse
+    {
+        $this->resolveSite()->update(['preview_token' => null]);
+
+        return back()->with('success', 'Preview link revoked.');
     }
 
     /** The site settings page (separate from the builder). */
@@ -67,10 +131,17 @@ class SiteController extends Controller
 
         return Inertia::render('Website/Settings', [
             'site' => $this->serialize($site),
+            'snapshots' => $site->snapshots()->limit(10)->get()->map(fn (SiteSnapshot $sn) => [
+                'id' => $sn->id,
+                'published_at' => $sn->created_at->toIso8601String(),
+                'pages' => count($sn->payload['pages'] ?? []),
+                'name' => $sn->payload['name'] ?? $site->name,
+            ]),
             'templates' => SiteTemplates::all(),
-            'public_url' => route('sites.public.show', $site->slug),
+            'public_url' => $site->publicUrl(),
             'domain_config' => config('services.custom_domains'),
             'studio_logo' => $site->studio?->logoUrl(),
+            'site_logo' => $site->logoUrl(),
         ]);
     }
 
@@ -85,87 +156,46 @@ class SiteController extends Controller
         return back()->with('success', 'Settings saved.');
     }
 
-    /** Set (or change) the site's custom domain — resets verification. */
-    public function updateDomain(Request $request): RedirectResponse
-    {
-        $site = $this->resolveSite();
-        $data = $request->validate([
-            'custom_domain' => ['required', 'string', 'max:255', 'regex:/^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i'],
-        ]);
-
-        $domain = Site::normalizeDomain($data['custom_domain']);
-
-        // Don't let a studio claim the platform's own domain.
-        $appHost = Site::normalizeDomain((string) parse_url((string) config('app.url'), PHP_URL_HOST));
-        if ($domain === $appHost) {
-            return back()->withErrors(['custom_domain' => 'That domain isn’t available.']);
-        }
-
-        $taken = Site::withoutGlobalScopes()
-            ->where('custom_domain', $domain)
-            ->where('id', '!=', $site->id)
-            ->exists();
-        if ($taken) {
-            return back()->withErrors(['custom_domain' => 'That domain is already connected to another site.']);
-        }
-
-        $site->update([
-            'custom_domain' => $domain,
-            'domain_token' => 'focalry-verify='.Str::random(32),
-            'domain_verified_at' => null,
-            'domain_provisioned_at' => null,
-        ]);
-
-        return back()->with('success', 'Domain saved. Add the DNS records below, then verify.');
-    }
-
-    /** Verify ownership by looking up the DNS TXT token. */
-    public function verifyDomain(): RedirectResponse
-    {
-        $site = $this->resolveSite();
-        if (! $site->custom_domain || ! $site->domain_token) {
-            return back()->withErrors(['custom_domain' => 'Add a domain first.']);
-        }
-
-        $records = @dns_get_record('_focalry-verify.'.$site->custom_domain, DNS_TXT) ?: [];
-        $found = collect($records)->contains(fn ($r) => trim($r['txt'] ?? '') === $site->domain_token);
-
-        if (! $found) {
-            return back()->withErrors(['custom_domain' => 'Verification TXT record not found yet. DNS can take a few minutes to propagate.']);
-        }
-
-        $site->update(['domain_verified_at' => now()]);
-
-        return back()->with('success', 'Domain verified. It will go live once the certificate is issued (usually within a few minutes).');
-    }
-
-    /** Disconnect the custom domain. */
-    public function removeDomain(): RedirectResponse
-    {
-        $site = $this->resolveSite();
-        $site->update([
-            'custom_domain' => null,
-            'domain_token' => null,
-            'domain_verified_at' => null,
-            'domain_provisioned_at' => null,
-        ]);
-
-        return back()->with('success', 'Custom domain disconnected.');
-    }
-
-    /** Write the site-wide settings fields (everything except pages/sections). */
+    /**
+     * Write the site-wide settings fields (everything except pages/sections).
+     * Fields absent from the payload keep their current value — the builder and
+     * the settings page each submit only the fields they manage, so one saving
+     * must never wipe what the other set (e.g. custom_css, auto_create_project).
+     */
     private function applySiteSettings(Site $site, array $data): void
     {
-        $site->update([
+        // Present-but-null clears a field; absent keeps the current value.
+        $keep = fn (string $key) => array_key_exists($key, $data) ? $data[$key] : $site->{$key};
+
+        // Turnstile: the (public) site key round-trips through the form, so an
+        // empty value clears the pair. The secret is write-only — it's never
+        // sent back to the browser, so only overwrite when a new one is typed.
+        $turnstile = [];
+        if (array_key_exists('turnstile_site_key', $data)) {
+            $siteKey = trim((string) ($data['turnstile_site_key'] ?? ''));
+            $turnstile['turnstile_site_key'] = $siteKey !== '' ? $siteKey : null;
+            if ($siteKey === '') {
+                $turnstile['turnstile_secret_key'] = null;
+            }
+        }
+        if (trim((string) ($data['turnstile_secret_key'] ?? '')) !== '') {
+            $turnstile['turnstile_secret_key'] = trim((string) $data['turnstile_secret_key']);
+        }
+
+        $site->update($turnstile + [
             'name' => $data['name'],
             'slug' => $data['slug'],
-            'contact_email' => $data['contact_email'] ?? null,
-            'auto_create_project' => $data['auto_create_project'] ?? true,
-            'seo_title' => $data['seo_title'] ?? null,
-            'seo_description' => $data['seo_description'] ?? null,
-            'favicon_url' => $data['favicon_url'] ?? null,
-            'og_image_url' => $data['og_image_url'] ?? null,
-            'redirects' => $this->cleanRedirects($data['redirects'] ?? []),
+            'contact_email' => $keep('contact_email'),
+            'auto_create_project' => array_key_exists('auto_create_project', $data)
+                ? (bool) $data['auto_create_project']
+                : (bool) ($site->auto_create_project ?? true),
+            'seo_title' => $keep('seo_title'),
+            'seo_description' => $keep('seo_description'),
+            'favicon_url' => $keep('favicon_url'),
+            'og_image_url' => $keep('og_image_url'),
+            'redirects' => array_key_exists('redirects', $data)
+                ? $this->cleanRedirects($data['redirects'] ?? [])
+                : ($site->redirects ?? []),
             'theme' => [
                 'primary_color' => $data['theme']['primary_color'] ?? '#171717',
                 'font' => $data['theme']['font'] ?? 'sans',
@@ -179,31 +209,75 @@ class SiteController extends Controller
                 'text_color' => $data['theme']['text_color'] ?? '',
                 'nav_size' => $data['theme']['nav_size'] ?? ($site->theme['nav_size'] ?? 'sm'),
                 'logo_size' => $data['theme']['logo_size'] ?? ($site->theme['logo_size'] ?? 'sm'),
+                'header_logo_size' => $data['theme']['header_logo_size'] ?? ($site->theme['header_logo_size'] ?? 'medium'),
                 'style' => $data['theme']['style'] ?? ($site->theme['style'] ?? 'classic'),
+                'header_style' => $data['theme']['header_style'] ?? ($site->theme['header_style'] ?? 'solid'),
                 'width' => $data['theme']['width'] ?? ($site->theme['width'] ?? 'normal'),
             ],
-            'header_nav' => $this->cleanNav($data['header_nav'] ?? []),
-            'footer_nav' => $this->cleanNav($data['footer_nav'] ?? []),
-            'head_code' => $data['head_code'] ?? null,
-            'body_code' => $data['body_code'] ?? null,
-            'custom_css' => $data['custom_css'] ?? null,
-            'cookie_consent' => $data['cookie_consent'] ?? false,
-            'cookie_message' => $data['cookie_message'] ?? null,
-            'cookie_policy_url' => $data['cookie_policy_url'] ?? null,
+            'announcement' => array_key_exists('announcement', $data) ? ($data['announcement'] ?? []) : ($site->announcement ?? []),
+            'social' => array_key_exists('social', $data) ? ($data['social'] ?? []) : ($site->social ?? []),
+            'footer' => array_key_exists('footer', $data) ? ($data['footer'] ?? []) : ($site->footer ?? []),
+            'coming_soon' => array_key_exists('coming_soon', $data) ? (bool) $data['coming_soon'] : (bool) $site->coming_soon,
+            'custom_fonts' => array_key_exists('custom_fonts', $data) ? array_values($data['custom_fonts'] ?? []) : ($site->custom_fonts ?? []),
+            'header_nav' => array_key_exists('header_nav', $data) ? $this->cleanNav($data['header_nav'] ?? []) : ($site->header_nav ?? []),
+            'footer_nav' => array_key_exists('footer_nav', $data) ? $this->cleanNav($data['footer_nav'] ?? []) : ($site->footer_nav ?? []),
+            'head_code' => $keep('head_code'),
+            'body_code' => $keep('body_code'),
+            'custom_css' => $keep('custom_css'),
+            'cookie_consent' => array_key_exists('cookie_consent', $data) ? (bool) $data['cookie_consent'] : (bool) $site->cookie_consent,
+            'cookie_message' => $keep('cookie_message'),
+            'cookie_policy_url' => $keep('cookie_policy_url'),
         ]);
     }
 
+    /**
+     * Publish applies the pending draft (settings + pages) to the live site and
+     * flips it public. Unpublish just hides the site — the draft (and the live
+     * content) are kept.
+     */
     public function publish(Request $request): RedirectResponse
     {
         $site = $this->resolveSite();
-        $publish = $request->boolean('publish');
 
-        $site->update([
-            'is_published' => $publish,
-            'published_at' => $publish ? ($site->published_at ?? now()) : $site->published_at,
-        ]);
+        if (! $request->boolean('publish')) {
+            $site->update(['is_published' => false]);
 
-        return back()->with('success', $publish ? 'Website published.' : 'Website unpublished.');
+            return back()->with('success', 'Website unpublished.');
+        }
+
+        DB::transaction(function () use ($site) {
+            // Serialize concurrent publishes (e.g. a double-click sends two
+            // POSTs): the second waits here, then re-reads — by which time the
+            // first has cleared the draft, so it skips the delete/recreate
+            // instead of racing it into duplicate-slug violations.
+            $site = Site::whereKey($site->id)->lockForUpdate()->firstOrFail();
+
+            if (is_array($site->draft)) {
+                $draft = $site->draft;
+                $this->applySiteSettings($site, $draft);
+                $site->update(['saved_sections' => array_values($draft['saved_sections'] ?? [])]);
+                $this->syncPages($site, $draft['pages'] ?? []);
+
+                // Version history: keep the payload that just went live (last 10),
+                // restorable into the draft for one-click rollback.
+                $site->snapshots()->create(['studio_id' => $site->studio_id, 'payload' => $draft]);
+                $site->snapshots()->orderByDesc('id')->skip(10)->take(100)->pluck('id')
+                    ->whenNotEmpty(fn ($ids) => SiteSnapshot::withoutGlobalScopes()->whereIn('id', $ids)->delete());
+            }
+
+            $site->update([
+                'is_published' => true,
+                'published_at' => $site->published_at ?? now(),
+                'draft' => null,
+                'draft_saved_at' => null,
+            ]);
+        });
+
+        // Refresh linked gallery blocks so a publish always reflects the
+        // current client-gallery contents (the nightly sync covers the rest).
+        LinkedGalleries::syncSiteBlocks($site->refresh());
+
+        return back()->with('success', 'Website published.');
     }
 
     /** Replace the site's pages from a starter template (destructive). */
@@ -220,10 +294,20 @@ class SiteController extends Controller
         // Default: restyle only — apply the template's colours/fonts and keep all
         // the studio's pages, content and menus so switching loses no progress.
         if (! $request->boolean('replace')) {
-            $site->update([
+            $update = [
                 'template' => $template,
                 'theme' => SiteTemplates::theme($template),
-            ]);
+            ];
+
+            // Keep a pending draft in step, or its stale theme would mask the
+            // new style in the builder (which edits the draft when one exists).
+            if (is_array($site->draft)) {
+                $draft = $site->draft;
+                $draft['theme'] = SiteTemplates::theme($template);
+                $update['draft'] = $draft;
+            }
+
+            $site->update($update);
 
             return back()->with('success', 'Template style applied — your content was kept.');
         }
@@ -232,232 +316,23 @@ class SiteController extends Controller
         $studio = Studio::find($site->studio_id);
 
         DB::transaction(function () use ($site, $studio, $template) {
+            // Same double-click guard as publish() — delete+reseed must not race.
+            $site = Site::whereKey($site->id)->lockForUpdate()->firstOrFail();
+
             $site->update([
                 'template' => $template,
                 'theme' => SiteTemplates::theme($template),
                 'header_nav' => SiteTemplates::headerNav($template),
                 'footer_nav' => SiteTemplates::footerNav($template),
+                // A fresh start supersedes any pending draft.
+                'draft' => null,
+                'draft_saved_at' => null,
             ]);
-            $site->pages()->delete();
+            SitePage::withoutGlobalScopes()->where('site_id', $site->id)->delete();
             $this->seedPages($site, $template, $studio?->name ?? $site->name);
         });
 
         return back()->with('success', 'Template applied.');
-    }
-
-    /**
-     * Async image upload for block image fields. Converts to size-capped WebP
-     * for fast delivery (animated GIFs are kept as-is). Returns JSON {url, path}.
-     */
-    public function uploadImage(Request $request): JsonResponse
-    {
-        $request->validate([
-            'image' => 'required|image|mimes:png,jpg,jpeg,webp,gif|max:8192',
-        ]);
-
-        $studioId = app('current.studio.id');
-        $file = $request->file('image');
-        $disk = Storage::disk('wasabi');
-
-        // High-megapixel originals (big camera/phone files) can blow the default
-        // time/memory limits while GD decodes + resizes them — a fatal error that
-        // the try/catch below can't trap, so the user just sees "upload failed".
-        // Give the resize room to breathe.
-        @ini_set('memory_limit', '512M');
-        @set_time_limit(120);
-
-        // Everything lives in Wasabi (stateless — no local disk). Site images are
-        // public assets on the live site, so they're stored public-read and served
-        // via the bucket/CDN's permanent URL.
-        // Filenames are unique (uuid) so the bytes never change — let browsers/CDN
-        // cache them forever (fixes "Use efficient cache lifetimes").
-        $opts = ['visibility' => 'public', 'CacheControl' => self::ASSET_CACHE_CONTROL];
-
-        if ($file->getClientOriginalExtension() === 'gif') {
-            // Keep animated GIFs untouched.
-            $path = StudioPaths::asset($studioId, 'site/'.Str::uuid().'.gif');
-            $disk->put($path, file_get_contents($file->getRealPath()), $opts);
-        } else {
-            $path = StudioPaths::asset($studioId, 'site/'.Str::uuid().'.webp');
-            try {
-                // Cap at 1920px wide (Full HD) — large enough for full-bleed hero
-                // banners (a 16:9 source becomes 1920×1080) without shipping huge files.
-                $disk->put($path, Images::webp($file->getRealPath(), 1920), $opts);
-            } catch (\Throwable $e) {
-                report($e);
-                $path = StudioPaths::asset($studioId, 'site/'.Str::uuid().'.'.$file->getClientOriginalExtension());
-                $disk->put($path, file_get_contents($file->getRealPath()), $opts);
-            }
-        }
-
-        return response()->json([
-            'url' => PublicAsset::url($path),
-            'path' => $path,
-        ]);
-    }
-
-    /** Collections + their ready photos (signed thumbnails) for the gallery picker. */
-    public function galleryImages(): JsonResponse
-    {
-        $collections = Collection::with(['photos' => fn ($q) => $q->where('status', 'ready')->orderBy('position')])
-            ->orderByDesc('event_date')
-            ->orderBy('title')
-            ->get(['id', 'title', 'event_date']);
-
-        return response()->json([
-            'recent' => $this->recentlyUsedPhotos(),
-            'collections' => $collections->map(fn (Collection $c) => [
-                'id' => $c->id,
-                'title' => $c->title,
-                'photos' => $c->photos
-                    ->map(fn (Photo $p) => $this->pickerPhoto($p))
-                    ->filter(fn ($p) => $p['thumb'])
-                    ->values(),
-            ])->filter(fn ($c) => count($c['photos']) > 0)->values(),
-        ]);
-    }
-
-    /** The studio's most-recently-used gallery photos, newest first. */
-    private function recentlyUsedPhotos(int $limit = 40): array
-    {
-        $ids = GalleryRecentPick::orderByDesc('used_at')->limit($limit)->pluck('photo_id');
-        if ($ids->isEmpty()) {
-            return [];
-        }
-
-        $photos = Photo::whereIn('id', $ids)->where('status', 'ready')->get()->keyBy('id');
-
-        // Preserve the recency order (whereIn doesn't), and drop any since deleted.
-        return $ids
-            ->map(fn ($id) => $photos->get($id))
-            ->filter()
-            ->map(fn (Photo $p) => $this->pickerPhoto($p))
-            ->filter(fn ($p) => $p['thumb'])
-            ->values()
-            ->all();
-    }
-
-    /** @return array{id: int, thumb: string|null} */
-    private function pickerPhoto(Photo $p): array
-    {
-        return ['id' => $p->id, 'thumb' => $p->firstSignedUrl(['thumb', 'web'], 180)];
-    }
-
-    /**
-     * Import chosen gallery photos into the site. Gallery URLs are signed/short-
-     * lived, so a permanent public copy is made — but resizing a full-size
-     * original is slow, so the conversion is queued (ImportSiteImage) and the
-     * permanent URLs are returned instantly; the images fill in when the worker
-     * finishes, just like main gallery uploads. Returns JSON {urls}.
-     */
-    public function importGalleryImages(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'photo_ids' => 'required|array|max:60',
-            'photo_ids.*' => 'integer',
-        ]);
-
-        $studioId = app('current.studio.id');
-        $urls = [];
-
-        foreach ($validated['photo_ids'] as $id) {
-            // Studio-scoped via the global scope, so cross-tenant ids are ignored.
-            $photo = Photo::find($id);
-            // Prefer the original so site/hero images can be Full HD (1920px); the
-            // 1200px web derivative is only a fallback when there's no original.
-            $key = $photo?->wasabi_key_original
-                ?: ($photo?->derivativeKey('web') ?? $photo?->derivativeKey('preview') ?? $photo?->derivativeKey('thumb'));
-            if (! $key) {
-                continue;
-            }
-
-            // Queue the (slow) original→1920 WebP conversion to Wasabi; the public
-            // URL is live the moment the worker writes the object.
-            $dest = StudioPaths::asset($studioId, "site/gallery/{$photo->id}-".Str::random(6).'.webp');
-            ImportSiteImage::dispatch($key, $dest, 1920);
-            $urls[] = PublicAsset::url($dest);
-
-            // Track for the picker's "Recently used" tab.
-            GalleryRecentPick::touchPhoto($photo->id);
-        }
-
-        return response()->json(['urls' => $urls]);
-    }
-
-    /** Search Google for a business so the user can pick their listing. */
-    public function googleReviewsSearch(Request $request, GooglePlaces $places): JsonResponse
-    {
-        $validated = $request->validate([
-            'query' => 'required|string|max:255',
-        ]);
-
-        if (! GooglePlaces::configured()) {
-            return response()->json(['message' => 'Google reviews are not set up on this platform yet.'], 422);
-        }
-
-        try {
-            return response()->json(['results' => $places->searchText($validated['query'])]);
-        } catch (\Throwable $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-    }
-
-    /** Pull a place's summary + reviews from Google for the reviews block. */
-    public function googleReviews(Request $request, GooglePlaces $places): JsonResponse
-    {
-        $validated = $request->validate([
-            'place_id' => 'required|string|max:255',
-        ]);
-
-        if (! GooglePlaces::configured()) {
-            return response()->json(['message' => 'Google reviews are not set up on this platform yet.'], 422);
-        }
-
-        try {
-            $details = $places->placeDetails($validated['place_id']);
-            $details['reviews'] = $this->mirrorReviewAvatars($details['reviews'] ?? []);
-
-            return response()->json($details);
-        } catch (\Throwable $e) {
-            return response()->json(['message' => $e->getMessage()], 422);
-        }
-    }
-
-    /**
-     * Copy reviewer avatars off Google (lh3.googleusercontent.com) into our own
-     * Wasabi bucket and rewrite each `avatar` URL to the hosted copy. Serving them
-     * first-party avoids the third-party cookies Google's image host sets (a
-     * Lighthouse "best practices" flag). Failures fall back to the original URL.
-     *
-     * @param  list<array<string, mixed>>  $reviews
-     * @return list<array<string, mixed>>
-     */
-    private function mirrorReviewAvatars(array $reviews): array
-    {
-        $studioId = app('current.studio.id');
-        $disk = Storage::disk('wasabi');
-
-        foreach ($reviews as &$review) {
-            $url = $review['avatar'] ?? null;
-            if (! $url || ! str_contains((string) $url, 'googleusercontent.com')) {
-                continue; // nothing to mirror (already hosted or no photo)
-            }
-
-            try {
-                $response = Http::timeout(8)->get($url);
-                if ($response->failed()) {
-                    continue;
-                }
-
-                $path = StudioPaths::asset($studioId, 'site/reviews/'.md5((string) $url).'.jpg');
-                $disk->put($path, $response->body(), ['visibility' => 'public', 'CacheControl' => self::ASSET_CACHE_CONTROL]);
-                $review['avatar'] = PublicAsset::url($path);
-            } catch (\Throwable $e) {
-                report($e); // keep the original Google URL on failure
-            }
-        }
-
-        return $reviews;
     }
 
     /** Built-in traffic analytics for the last 30 days. */
@@ -481,10 +356,19 @@ class SiteController extends Controller
         })->values();
 
         $totalViews = (int) $perDay->sum();
+        $uniques = (int) (clone $base)->distinct('visitor_hash')->count('visitor_hash');
+        $devices = (clone $base)->whereNotNull('device')
+            ->selectRaw('device, COUNT(*) as c')->groupBy('device')->pluck('c', 'device');
         $leads = $site->leads()->where('created_at', '>=', $since)->count();
 
         return Inertia::render('Website/Analytics', [
-            'public_url' => route('sites.public.show', $site->slug),
+            'public_url' => $site->publicUrl(),
+            // Instagram connection state for the feed block's editor.
+            'instagram' => [
+                'available' => InstagramApi::configured(),
+                'connected' => (bool) $site->instagram_token,
+                'username' => $site->instagram_username,
+            ],
             'is_published' => $site->is_published,
             'range_days' => $days,
             'series' => $series,
@@ -493,6 +377,9 @@ class SiteController extends Controller
             'conversion' => $totalViews > 0 ? round($leads / $totalViews * 100, 1) : 0,
             'top_pages' => (clone $base)->selectRaw('path, COUNT(*) as c')->groupBy('path')->orderByDesc('c')->limit(8)->get(),
             'top_referrers' => (clone $base)->whereNotNull('referrer_host')->selectRaw('referrer_host, COUNT(*) as c')->groupBy('referrer_host')->orderByDesc('c')->limit(8)->get(),
+            'unique_visitors' => $uniques,
+            'devices' => $devices,
+            'top_sources' => (clone $base)->whereNotNull('utm_source')->selectRaw('utm_source, COUNT(*) as c')->groupBy('utm_source')->orderByDesc('c')->limit(8)->get(),
         ]);
     }
 
@@ -503,83 +390,59 @@ class SiteController extends Controller
         $leads = $site->leads()
             ->with(['contact:id,first_name,last_name,company', 'project:id,name'])
             ->latest()
-            ->paginate(30);
+            ->paginate(30)
+            // Attachments are stored privately; expose a short-lived signed URL
+            // in the payload (older leads carry a legacy public attachment_url).
+            ->through(function ($lead) {
+                $payload = $lead->payload ?? [];
+                if (! empty($payload['attachment_path'])) {
+                    try {
+                        $payload['attachment_url'] = Storage::disk('wasabi')
+                            ->temporaryUrl($payload['attachment_path'], now()->addMinutes(30));
+                    } catch (\Throwable $e) {
+                        report($e);
+                    }
+                }
+                $lead->setAttribute('payload', $payload);
+
+                return $lead;
+            });
 
         return Inertia::render('Website/Leads', [
             'leads' => $leads,
-            'public_url' => route('sites.public.show', $site->slug),
+            'public_url' => $site->publicUrl(),
         ]);
     }
 
+    /** Newsletter subscribers captured by the site's newsletter block. */
+    public function subscribers(Request $request): Response
+    {
+        $site = $this->resolveSite();
+
+        return Inertia::render('Website/Subscribers', [
+            'subscribers' => $site->subscribers()->latest()->paginate(50),
+            'total' => $site->subscribers()->count(),
+        ]);
+    }
+
+    /** CSV export — the hand-off to Mailchimp/Flodesk/any email tool. */
+    public function exportSubscribers(): StreamedResponse
+    {
+        $site = $this->resolveSite();
+
+        return response()->streamDownload(function () use ($site) {
+            $out = fopen('php://output', 'w');
+            fputcsv($out, ['email', 'name', 'source', 'subscribed_at']);
+            $site->subscribers()->latest()->chunk(500, function ($rows) use ($out) {
+                foreach ($rows as $s) {
+                    fputcsv($out, [$s->email, $s->name, $s->source, $s->created_at?->toDateTimeString()]);
+                }
+            });
+            fclose($out);
+        }, 'subscribers.csv', ['Content-Type' => 'text/csv']);
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
-
-    /** Get the studio's site, seeding a starter site the first time. */
-    private function resolveSite(): Site
-    {
-        $studio = Studio::findOrFail(app('current.studio.id'));
-
-        $site = Site::where('studio_id', $studio->id)->first();
-        if ($site) {
-            return $site->load('pages');
-        }
-
-        return DB::transaction(function () use ($studio) {
-            $site = Site::create([
-                'studio_id' => $studio->id,
-                'name' => $studio->name ?: 'My Studio',
-                'slug' => $this->uniqueSlug($studio->slug ?: $studio->name ?: 'studio'),
-                'template' => SiteTemplates::DEFAULT,
-                'theme' => SiteTemplates::theme(SiteTemplates::DEFAULT),
-                'header_nav' => SiteTemplates::headerNav(SiteTemplates::DEFAULT),
-                'footer_nav' => SiteTemplates::footerNav(SiteTemplates::DEFAULT),
-                'contact_email' => $studio->email,
-                'is_published' => false,
-            ]);
-
-            $this->seedPages($site, SiteTemplates::DEFAULT, $studio->name ?: 'My Studio');
-
-            return $site->load('pages');
-        });
-    }
-
-    private function seedPages(Site $site, string $template, string $studioName): void
-    {
-        $blogPageId = null;
-
-        foreach (SiteTemplates::pages($template, $studioName) as $i => $page) {
-            $created = $site->pages()->create([
-                'studio_id' => $site->studio_id,
-                'title' => $page['title'],
-                'slug' => $page['slug'],
-                'is_home' => $page['is_home'] ?? false,
-                'is_blog' => $page['is_blog'] ?? false,
-                'position' => $i,
-                'blocks' => $page['blocks'],
-            ]);
-
-            if ($created->is_blog) {
-                $blogPageId = $created->id;
-            }
-        }
-
-        // Seed example posts as child pages of the blog page.
-        if ($blogPageId) {
-            foreach (SiteTemplates::posts($template) as $i => $post) {
-                $site->pages()->create([
-                    'studio_id' => $site->studio_id,
-                    'parent_id' => $blogPageId,
-                    'title' => $post['title'],
-                    'slug' => $post['slug'],
-                    'position' => $i,
-                    'blocks' => $post['blocks'],
-                    'status' => $post['status'] ?? 'published',
-                    'published_at' => isset($post['days_ago']) ? now()->subDays($post['days_ago']) : now(),
-                    'excerpt' => $post['excerpt'] ?? null,
-                    'cover_image' => $post['cover_image'] ?? null,
-                ]);
-            }
-        }
-    }
 
     /**
      * Persist the page tree. Top-level pages first (tracking the home + blog page),
@@ -590,7 +453,9 @@ class SiteController extends Controller
      */
     private function syncPages(Site $site, array $pages): void
     {
-        $site->pages()->delete();
+        // Without the studio scope: every row of THIS site must go, even if a
+        // legacy import ever left one with a stray studio_id.
+        SitePage::withoutGlobalScopes()->where('site_id', $site->id)->delete();
         $pages = array_values($pages);
 
         // Categories live in their own table (not wiped here); only keep references
@@ -680,6 +545,7 @@ class SiteController extends Controller
                     'status' => $status,
                     'published_at' => $publishedAt,
                     'excerpt' => $page['excerpt'] ?? null,
+                    'author' => $page['author'] ?? null,
                     'category_ids' => array_values(array_intersect(
                         array_map('intval', $page['category_ids'] ?? []),
                         $validCategoryIds,
@@ -695,116 +561,6 @@ class SiteController extends Controller
                 ]);
             }
         }
-    }
-
-    // ── Blog categories (WordPress-style hierarchical taxonomy) ──
-    // Managed over ajax so the builder can add/rename/delete categories without a
-    // full save that would clobber unsaved page edits. Each call returns the whole
-    // (flat) list so the client just replaces its categories state.
-
-    public function storeCategory(Request $request): JsonResponse
-    {
-        $site = $this->resolveSite();
-        $data = $request->validate([
-            'name' => 'required|string|max:80',
-            'parent_id' => ['nullable', 'integer', Rule::exists('site_categories', 'id')->where('site_id', $site->id)],
-        ]);
-
-        $site->categories()->create([
-            'studio_id' => $site->studio_id,
-            'parent_id' => $data['parent_id'] ?? null,
-            'name' => trim($data['name']),
-            'slug' => $this->uniqueCategorySlug($site, $data['name']),
-            'position' => (int) $site->categories()->max('position') + 1,
-        ]);
-
-        return response()->json(['categories' => $this->categoriesPayload($site)]);
-    }
-
-    public function updateCategory(Request $request, SiteCategory $category): JsonResponse
-    {
-        $site = $this->resolveSite();
-        abort_unless($category->site_id === $site->id, 404);
-
-        $data = $request->validate([
-            'name' => 'required|string|max:80',
-            'parent_id' => ['nullable', 'integer', Rule::exists('site_categories', 'id')->where('site_id', $site->id)],
-        ]);
-
-        // A category can't be its own ancestor — block self/descendant parents.
-        $parentId = $data['parent_id'] ?? null;
-        if ($parentId !== null && ($parentId === $category->id || in_array($parentId, $this->descendantIds($site, $category->id), true))) {
-            $parentId = $category->parent_id;
-        }
-
-        $category->update([
-            'name' => trim($data['name']),
-            'parent_id' => $parentId,
-        ]);
-
-        return response()->json(['categories' => $this->categoriesPayload($site)]);
-    }
-
-    public function destroyCategory(SiteCategory $category): JsonResponse
-    {
-        $site = $this->resolveSite();
-        abort_unless($category->site_id === $site->id, 404);
-
-        DB::transaction(function () use ($site, $category) {
-            // WordPress behaviour: children move up to the deleted category's parent.
-            $site->categories()->where('parent_id', $category->id)->update(['parent_id' => $category->parent_id]);
-
-            // Detach the category from every post that referenced it.
-            foreach ($site->pages()->whereNotNull('category_ids')->get() as $post) {
-                $ids = array_values(array_filter($post->category_ids ?? [], fn ($id) => (int) $id !== $category->id));
-                if (count($ids) !== count($post->category_ids ?? [])) {
-                    $post->update(['category_ids' => $ids]);
-                }
-            }
-
-            $category->delete();
-        });
-
-        return response()->json(['categories' => $this->categoriesPayload($site)]);
-    }
-
-    /** @return list<array{id:int,name:string,slug:string,parent_id:int|null}> */
-    private function categoriesPayload(Site $site): array
-    {
-        return $site->categories()->get()->map(fn (SiteCategory $c) => [
-            'id' => $c->id,
-            'name' => $c->name,
-            'slug' => $c->slug,
-            'parent_id' => $c->parent_id,
-        ])->values()->all();
-    }
-
-    /** All descendant category ids of $id within the site (for cycle prevention). */
-    private function descendantIds(Site $site, int $id): array
-    {
-        $all = $site->categories()->get(['id', 'parent_id']);
-        $out = [];
-        $walk = function (int $parent) use (&$walk, $all, &$out): void {
-            foreach ($all->where('parent_id', $parent) as $child) {
-                $out[] = $child->id;
-                $walk($child->id);
-            }
-        };
-        $walk($id);
-
-        return $out;
-    }
-
-    private function uniqueCategorySlug(Site $site, string $name): string
-    {
-        $base = Str::slug($name) ?: 'category';
-        $slug = $base;
-        $n = 1;
-        while ($site->categories()->where('slug', $slug)->exists()) {
-            $slug = $base.'-'.(++$n);
-        }
-
-        return $slug;
     }
 
     private function blankToNull(mixed $value): mixed
@@ -863,10 +619,49 @@ class SiteController extends Controller
             'theme.logo_color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'theme.nav_color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'theme.text_color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'theme.header_style' => ['nullable', Rule::in(['solid', 'transparent'])],
+            // Sizing controls. Without an explicit rule, Laravel's validator strips
+            // these sub-keys out of the validated array (nested rules on siblings
+            // make it whitelist-only), so the Settings save would silently drop them.
+            'theme.nav_size' => ['nullable', 'string', 'max:10'],
+            'theme.logo_size' => ['nullable', 'string', 'max:10'],
+            'theme.header_logo_size' => ['nullable', Rule::in(['small', 'medium', 'large', 'xlarge'])],
+            // Announcement bar / social links / footer info (site-wide chrome).
+            'announcement' => 'array',
+            'announcement.enabled' => 'boolean',
+            'announcement.text' => 'nullable|string|max:200',
+            'announcement.link' => 'nullable|string|max:500',
+            'announcement.background' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'social' => 'array',
+            'social.instagram' => 'nullable|string|max:300',
+            'social.facebook' => 'nullable|string|max:300',
+            'social.pinterest' => 'nullable|string|max:300',
+            'social.tiktok' => 'nullable|string|max:300',
+            'social.youtube' => 'nullable|string|max:300',
+            'footer' => 'array',
+            'footer.tagline' => 'nullable|string|max:300',
+            'footer.email' => 'nullable|email|max:255',
+            'footer.phone' => 'nullable|string|max:50',
+            'footer.show_social' => 'boolean',
+            'footer.logo_size' => ['nullable', Rule::in(['small', 'medium', 'large', 'xlarge'])],
+            'coming_soon' => 'boolean',
+            'custom_fonts' => 'array|max:4',
+            'custom_fonts.*.name' => 'required|string|max:40',
+            'custom_fonts.*.url' => 'required|string|max:2048',
+            // Studio's own Turnstile widget keys (optional; overrides platform).
+            'turnstile_site_key' => 'nullable|string|max:100',
+            'turnstile_secret_key' => 'nullable|string|max:100',
             'header_nav' => 'array',
             'header_nav.*.label' => 'required|string|max:60',
             'header_nav.*.kind' => ['required', Rule::in(['page', 'url'])],
             'header_nav.*.target' => 'nullable|string|max:300',
+            'header_nav.*.style' => ['nullable', Rule::in(['link', 'button'])],
+            // One level of dropdown links (header only — the footer stays flat,
+            // its validation has no children rules so validate() strips them).
+            'header_nav.*.children' => 'array',
+            'header_nav.*.children.*.label' => 'required|string|max:60',
+            'header_nav.*.children.*.kind' => ['required', Rule::in(['page', 'url'])],
+            'header_nav.*.children.*.target' => 'nullable|string|max:300',
             'footer_nav' => 'array',
             'footer_nav.*.label' => 'required|string|max:60',
             'footer_nav.*.kind' => ['required', Rule::in(['page', 'url'])],
@@ -902,6 +697,7 @@ class SiteController extends Controller
             'pages.*.category_ids.*' => 'integer',
             'pages.*.hidden_category_ids' => 'array',
             'pages.*.hidden_category_ids.*' => 'integer',
+            'pages.*.author' => 'nullable|string|max:120',
             'pages.*.cover_image' => 'nullable|string|max:2048',
             'pages.*.cover_focal' => 'nullable|array',
             'pages.*.cover_focal.x' => 'nullable|numeric',
@@ -926,14 +722,29 @@ class SiteController extends Controller
      * @param  array<int, array<string, mixed>>  $nav
      * @return list<array{label: string, kind: string, target: string}>
      */
-    private function cleanNav(array $nav): array
+    private function cleanNav(array $nav, bool $allowChildren = true): array
     {
         return collect($nav)
-            ->map(fn ($item) => [
-                'label' => trim((string) ($item['label'] ?? '')),
-                'kind' => ($item['kind'] ?? 'page') === 'url' ? 'url' : 'page',
-                'target' => trim((string) ($item['target'] ?? '')),
-            ])
+            ->map(function ($item) use ($allowChildren) {
+                $clean = [
+                    'label' => trim((string) ($item['label'] ?? '')),
+                    'kind' => ($item['kind'] ?? 'page') === 'url' ? 'url' : 'page',
+                    'target' => trim((string) ($item['target'] ?? '')),
+                ];
+
+                // Header extras: a CTA-button style and one level of dropdown links.
+                if (($item['style'] ?? null) === 'button') {
+                    $clean['style'] = 'button';
+                }
+                if ($allowChildren && is_array($item['children'] ?? null)) {
+                    $children = $this->cleanNav($item['children'], false);
+                    if ($children !== []) {
+                        $clean['children'] = $children;
+                    }
+                }
+
+                return $clean;
+            })
             ->filter(fn ($item) => $item['label'] !== '')
             ->values()
             ->all();
@@ -957,31 +768,22 @@ class SiteController extends Controller
             ->all();
     }
 
-    private function uniqueSlug(string $base): string
-    {
-        $slug = Str::slug($base) ?: 'studio';
-        $candidate = $slug;
-        $n = 1;
-        while (Site::where('slug', $candidate)->exists()) {
-            $candidate = $slug.'-'.(++$n);
-        }
-
-        return $candidate;
-    }
-
     /**
      * @return array<string, mixed>
      */
-    private function serialize(Site $site): array
+    private function serialize(Site $site, bool $withDraft = false): array
     {
-        return [
+        $out = [
             'id' => $site->id,
+            // Optimistic-lock token echoed back by builder saves (see update()).
+            'version' => $this->siteVersion($site),
             'name' => $site->name,
             'slug' => $site->slug,
             'custom_domain' => $site->custom_domain,
             'domain_token' => $site->domain_token,
             'domain_verified' => $site->domainVerified(),
             'domain_live' => $site->domainLive(),
+            'public_url' => $site->publicUrl(),
             'template' => $site->template,
             'theme' => $site->themeSettings(),
             'header_nav' => $site->header_nav ?? [],
@@ -998,8 +800,27 @@ class SiteController extends Controller
             'seo_description' => $site->seo_description,
             'favicon_url' => $site->favicon_url,
             'og_image_url' => $site->og_image_url,
+            'announcement' => $site->announcement ?? [],
+            'social' => $site->social ?? [],
+            'footer' => $site->footer ?? [],
+            // The header logo shown in the builder preview: the site's own logo,
+            // else the studio-wide fallback (mirrors the live site's studio_logo prop).
+            'logo_url' => $site->headerLogoUrl(),
+            'footer_logo' => $site->footerLogoUrl(),
+            'coming_soon' => (bool) $site->coming_soon,
+            'custom_fonts' => $site->custom_fonts ?? [],
+            // The secret never leaves the server — the UI only needs to know it exists.
+            'turnstile_site_key' => $site->turnstile_site_key,
+            'turnstile_secret_set' => (bool) $site->turnstile_secret_key,
+            'preview_url' => $site->preview_token ? route('sites.public.preview', $site->preview_token) : null,
             'redirects' => $site->redirects ?? [],
             'saved_sections' => $site->saved_sections ?? [],
+            // Instagram connection state for the feed block's editor.
+            'instagram' => [
+                'available' => InstagramApi::configured(),
+                'connected' => (bool) $site->instagram_token,
+                'username' => $site->instagram_username,
+            ],
             'is_published' => $site->is_published,
             'published_at' => $site->published_at?->toIso8601String(),
             'categories' => $site->categories->map(fn (SiteCategory $c) => [
@@ -1020,6 +841,7 @@ class SiteController extends Controller
                 'status' => $p->status,
                 'published_at' => $p->published_at?->format('Y-m-d'),
                 'excerpt' => $p->excerpt,
+                'author' => $p->author,
                 'category_ids' => array_map('intval', $p->category_ids ?? []),
                 'hidden_category_ids' => array_map('intval', $p->hidden_category_ids ?? []),
                 'cover_image' => $p->cover_image,
@@ -1033,5 +855,29 @@ class SiteController extends Controller
                 'og_image' => $p->og_image,
             ])->values(),
         ];
+
+        // Overlay the pending draft so the builder resumes work-in-progress.
+        // The draft is the validated builder payload, so its shape matches what
+        // the builder sent (and expects back). Live-only fields (id, domain,
+        // publish state, categories) stay from the live record.
+        if ($withDraft && is_array($site->draft)) {
+            $draft = $site->draft;
+            $overlay = [
+                'name', 'slug', 'contact_email', 'seo_title', 'seo_description',
+                'favicon_url', 'og_image_url', 'redirects', 'saved_sections',
+                'theme', 'header_nav', 'footer_nav', 'head_code', 'body_code',
+                'cookie_consent', 'cookie_message', 'cookie_policy_url',
+            ];
+            foreach ($overlay as $key) {
+                if (array_key_exists($key, $draft)) {
+                    $out[$key] = $draft[$key];
+                }
+            }
+            if (array_key_exists('pages', $draft)) {
+                $out['pages'] = array_values($draft['pages']);
+            }
+        }
+
+        return $out;
     }
 }

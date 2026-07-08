@@ -17,7 +17,7 @@ use Symfony\Component\Process\Process;
  */
 class ProvisionCustomDomains extends Command
 {
-    protected $signature = 'domains:provision {--apply : Write nginx config, run certbot and reload (requires root)} {--site= : Only this site id}';
+    protected $signature = 'domains:provision {--apply : Write nginx config, run certbot and reload (requires root)} {--site= : Only this site id} {--force : Re-provision domains that are already provisioned (refreshes the nginx vhost after a template change)}';
 
     protected $description = 'Provision nginx + TLS for verified custom domains';
 
@@ -27,7 +27,7 @@ class ProvisionCustomDomains extends Command
 
         $sites = Site::withoutGlobalScopes()
             ->whereNotNull('domain_verified_at')
-            ->whereNull('domain_provisioned_at')
+            ->when(! $this->option('force'), fn ($q) => $q->whereNull('domain_provisioned_at'))
             ->where('is_published', true)
             ->when($this->option('site'), fn ($q) => $q->whereKey($this->option('site')))
             ->get();
@@ -104,6 +104,15 @@ class ProvisionCustomDomains extends Command
             server_name {$domain};
             root {$root};
             index index.php;
+
+            # Content-hashed Vite build assets are immutable — cache them for a
+            # year so repeat visits skip re-downloading JS/CSS. (Streamed /assets
+            # images set their own long cache headers in PublicAssetController.)
+            location /build/ {
+                expires 1y;
+                add_header Cache-Control "public, immutable";
+                try_files \$uri =404;
+            }
 
             location / {
                 try_files \$uri \$uri/ /index.php?\$args;

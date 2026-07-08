@@ -11,23 +11,52 @@
     body {
         @apply bg-neutral-50 text-neutral-900;
     }
+
+    /* Keyboard focus must always be visible. The coral accent reads on both
+       light content areas and the dark sidebar. Form fields are excluded —
+       they show a brand border/ring on focus instead (below), and stacking
+       the outline on top reads as a double line. */
+    a:focus-visible,
+    button:focus-visible,
+    [role='button']:focus-visible,
+    [tabindex]:focus-visible,
+    summary:focus-visible {
+        outline: 2px solid theme('colors.accent.DEFAULT');
+        outline-offset: 2px;
+    }
+
+    /* Default focus for form fields: a single brand line. The forms plugin's
+       stock blue ring is retinted; per-field focus utilities still win. */
+    input:focus,
+    select:focus,
+    textarea:focus {
+        --tw-ring-color: theme('colors.brand.500');
+        border-color: theme('colors.brand.500');
+    }
+
+    /* The forms plugin hardcodes blue-600 for checked checkboxes/radios;
+       retint to brand. Explicit text-* utilities on a control still win. */
+    [type='checkbox'],
+    [type='radio'] {
+        color: theme('colors.brand.DEFAULT');
+    }
 }
 
 @layer components {
     .btn-primary {
-        @apply inline-flex items-center justify-center gap-2 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+        @apply inline-flex items-center justify-center gap-2 rounded-md bg-brand px-4 py-2 text-sm font-medium text-white transition hover:bg-brand-700 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50;
     }
 
     .btn-secondary {
-        @apply inline-flex items-center justify-center gap-2 rounded-md border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 focus:outline-none focus:ring-2 focus:ring-neutral-200 focus:ring-offset-2 disabled:opacity-50;
+        @apply inline-flex items-center justify-center gap-2 rounded-md border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50;
     }
 
     .btn-ghost {
-        @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900 focus:outline-none;
+        @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent;
     }
 
     .input {
-        @apply block w-full rounded-md border-neutral-200 bg-white text-sm text-neutral-900 shadow-none placeholder:text-neutral-400 focus:border-neutral-400 focus:ring-0;
+        @apply block w-full rounded-md border-neutral-200 bg-white text-sm text-neutral-900 shadow-none placeholder:text-neutral-400 focus:border-brand-500 focus:ring-1 focus:ring-brand-500;
     }
 
     .label {
@@ -37,6 +66,22 @@
     .card {
         @apply rounded-xl bg-white shadow-sm ring-1 ring-neutral-950/5;
     }
+}
+
+/* Toast enter animation (Toaster.tsx). */
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.toast-in {
+    animation: toast-in 0.18s ease-out;
 }
 
 /* ── Per-block style settings (website builder) ──
@@ -51,10 +96,17 @@
 .blk-text h2,
 .blk-text h3,
 .blk-text h4,
+.blk-text h5,
+.blk-text h6,
 .blk-text p,
 .blk-text a,
 .blk-text li,
-.blk-text span {
+.blk-text span,
+.blk-text blockquote,
+.blk-text figcaption,
+/* Builder click-to-edit fields render as <div>s carrying their own neutral
+   text utility — include them so the editor matches the live site. */
+.blk-text .inline-editable {
     color: inherit;
 }
 
@@ -142,3 +194,18 @@
 .inline-editable * {
     cursor: text;
 }
+
+/* Per-block responsive visibility (live site only — see BlockView). */
+@media (max-width: 767px) {
+    .blk-hide-mobile { display: none; }
+}
+@media (min-width: 768px) {
+    .blk-hide-desktop { display: none; }
+}
+
+/* Scroll-in animations: the pre-state only applies once JS tags the element
+   (`blk-anim`), so no-JS visitors and crawlers always see content. */
+.blk-anim { transition: opacity 0.7s ease, transform 0.7s ease; }
+.blk-anim-fade { opacity: 0; }
+.blk-anim-slide-up { opacity: 0; transform: translateY(28px); }
+.blk-anim-in { opacity: 1; transform: none; }

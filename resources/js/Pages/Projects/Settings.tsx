@@ -5,6 +5,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps, ProjectFieldDefinition, ProjectStatus, ProjectType } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 const opts = { preserveScroll: true };
 
@@ -85,7 +86,7 @@ export default function Settings({
                         {calendar.connected ? (
                             <button
                                 type="button"
-                                onClick={() => confirm('Disconnect Google Calendar? It will disconnect everywhere.') && router.delete(route('google-calendar.disconnect'))}
+                                onClick={async () => (await confirmDialog('Disconnect Google Calendar? It will disconnect everywhere.')) && router.delete(route('google-calendar.disconnect'))}
                                 className="btn-secondary px-3 py-1.5 text-xs"
                             >
                                 Disconnect
@@ -102,7 +103,7 @@ export default function Settings({
                         addLabel="New status"
                         onAdd={(label, color) => router.post(route('project-statuses.store'), { label, color }, opts)}
                         onUpdate={(id, label, color) => router.patch(route('project-statuses.update', id), { label, color }, opts)}
-                        onDelete={(id) => { if (confirm('Delete this status? Projects in it will become unassigned.')) router.delete(route('project-statuses.destroy', id), opts); }}
+                        onDelete={async (id) => { if (await confirmDialog('Delete this status? Projects in it will become unassigned.')) router.delete(route('project-statuses.destroy', id), opts); }}
                         onReorder={(ordered_ids) => router.post(route('project-statuses.reorder'), { ordered_ids }, opts)}
                     />
                 </Section>
@@ -113,7 +114,7 @@ export default function Settings({
                         addLabel="New type"
                         onAdd={(label, color) => router.post(route('project-types.store'), { label, color }, opts)}
                         onUpdate={(id, label, color) => router.patch(route('project-types.update', id), { label, color }, opts)}
-                        onDelete={(id) => { if (confirm('Delete this type? Projects using it will lose their type.')) router.delete(route('project-types.destroy', id), opts); }}
+                        onDelete={async (id) => { if (await confirmDialog('Delete this type? Projects using it will lose their type.')) router.delete(route('project-types.destroy', id), opts); }}
                         onReorder={(ordered_ids) => router.post(route('project-types.reorder'), { ordered_ids }, opts)}
                     />
                 </Section>
@@ -138,7 +139,7 @@ export default function Settings({
                                     className="input flex-1"
                                 />
                                 <span className="w-24 shrink-0 text-xs capitalize text-neutral-400">{f.type.replace('_', ' ')}</span>
-                                <button type="button" onClick={() => { if (confirm(`Delete the "${f.label}" field? Existing values are hidden but not removed.`)) router.delete(route('project-fields.destroy', f.id), opts); }} className="text-neutral-300 transition hover:text-red-500" title="Delete">
+                                <button type="button" onClick={async () => { if (await confirmDialog(`Delete the "${f.label}" field? Existing values are hidden but not removed.`)) router.delete(route('project-fields.destroy', f.id), opts); }} className="text-neutral-300 transition hover:text-red-500" title="Delete">
                                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                                 </button>
                             </div>

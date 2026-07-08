@@ -5,7 +5,7 @@
         default => $offsetDays.' day'.($offsetDays === 1 ? '' : 's').' ago',
     };
 @endphp
-<x-mail::message>
+<x-mail::message :studio-name="$studioName" :logo-url="$logoUrl" :logo-height="$logoHeight ?? null">
 # Payment reminder
 
 @if ($invoice->contact)

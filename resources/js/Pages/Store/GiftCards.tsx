@@ -33,7 +33,7 @@ export default function GiftCards({
             <Head title="Store · Gift cards" />
             <StoreNav active="gift-cards" />
 
-            <div className="px-4 py-6 sm:px-8">
+            <div className="px-4 py-8 sm:px-8">
                 <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-sm font-semibold text-neutral-900">Gift cards &amp; print credits</h2>
                     <button onClick={() => setCreating(true)} className="btn-primary">Issue gift card</button>
@@ -90,7 +90,7 @@ function GiftCardModal({ onClose, defaultCurrency }: { onClose: () => void; defa
         note: d.note || null,
         expires_at: d.expires_at || null,
     }));
-    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900';
+    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500';
 
     const submit = (e: React.FormEvent) => {
         e.preventDefault();

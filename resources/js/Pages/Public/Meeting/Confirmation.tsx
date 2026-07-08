@@ -50,7 +50,7 @@ export default function Confirmation({ studio, meeting }: { studio: StudioRef; m
                     <p className="text-neutral-700">{t(start)} – {t(end)}</p>
                     {meeting.location && <p className="mt-1 text-neutral-500">{meeting.location}</p>}
                     {meeting.meeting_url && (
-                        <a href={meeting.meeting_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-blue-600 hover:underline">Join video call</a>
+                        <a href={meeting.meeting_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-brand hover:underline">Join video call</a>
                     )}
                 </div>
 

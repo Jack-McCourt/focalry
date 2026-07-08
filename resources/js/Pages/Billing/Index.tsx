@@ -104,7 +104,7 @@ export default function BillingIndex({ tiers, featureLabels, currency, currentPl
                     {usedPct !== null && (
                         <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-neutral-100">
                             <div
-                                className={`h-full rounded-full ${usedPct >= 90 ? 'bg-red-500' : 'bg-blue-600'}`}
+                                className={`h-full rounded-full ${usedPct >= 90 ? 'bg-red-500' : 'bg-brand'}`}
                                 style={{ width: `${usedPct}%` }}
                             />
                         </div>
@@ -131,7 +131,7 @@ export default function BillingIndex({ tiers, featureLabels, currency, currentPl
                     <button
                         type="button"
                         onClick={() => setInterval((i) => (i === 'monthly' ? 'yearly' : 'monthly'))}
-                        className={`relative h-6 w-11 rounded-full transition ${interval === 'yearly' ? 'bg-blue-600' : 'bg-neutral-300'}`}
+                        className={`relative h-6 w-11 rounded-full transition ${interval === 'yearly' ? 'bg-brand' : 'bg-neutral-300'}`}
                         aria-label="Toggle billing interval"
                     >
                         <span
@@ -160,13 +160,13 @@ export default function BillingIndex({ tiers, featureLabels, currency, currentPl
                             <div
                                 key={tier.key}
                                 className={`flex flex-col rounded-2xl border bg-white p-5 ${
-                                    isCurrent ? 'border-blue-600 ring-1 ring-blue-600' : 'border-neutral-200'
+                                    isCurrent ? 'border-brand ring-1 ring-brand' : 'border-neutral-200'
                                 }`}
                             >
                                 <div className="flex items-center justify-between">
                                     <h3 className="text-lg font-semibold text-neutral-900">{tier.name}</h3>
                                     {isCurrent && (
-                                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                                        <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-semibold text-brand-700">
                                             Current
                                         </span>
                                     )}
@@ -220,7 +220,7 @@ export default function BillingIndex({ tiers, featureLabels, currency, currentPl
                                               ? 'cursor-not-allowed bg-neutral-100 text-neutral-400'
                                               : isDowngrade || isFree
                                                 ? 'border border-neutral-300 text-neutral-700 hover:bg-neutral-50'
-                                                : 'bg-blue-600 text-white hover:bg-blue-700'
+                                                : 'bg-brand text-white hover:bg-brand-700'
                                     }`}
                                 >
                                     {unavailable ? 'Coming soon' : busy === tier.key ? 'Working…' : cta}

@@ -29,7 +29,7 @@ export default function InvoiceNumberField({
                         setEditing(false);
                     }
                 }}
-                className="w-40 rounded-md border border-neutral-300 px-2 py-0.5 font-mono text-sm font-semibold text-neutral-900 focus:border-neutral-900 focus:ring-neutral-900"
+                className="w-40 rounded-md border border-neutral-300 px-2 py-0.5 font-mono text-sm font-semibold text-neutral-900 focus:border-brand-500 focus:ring-brand-500"
             />
         );
     }

@@ -4,6 +4,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface Option {
     id: number;
@@ -90,8 +91,8 @@ export default function Index({
     const toggle = (t: TaskRow) =>
         router.post(route('tasks.toggle', t.id), {}, { preserveScroll: true, preserveState: true });
 
-    const remove = (t: TaskRow) => {
-        if (confirm('Delete this task?')) router.delete(route('tasks.destroy', t.id), { preserveScroll: true });
+    const remove = async (t: TaskRow) => {
+        if (await confirmDialog('Delete this task?')) router.delete(route('tasks.destroy', t.id), { preserveScroll: true });
     };
 
     const tabs = [
@@ -113,7 +114,7 @@ export default function Index({
             <Head title="Tasks" />
             <StudioManagerNav active="tasks" />
 
-            <div className="px-4 sm:px-8 py-8">
+            <div className="px-4 py-8 sm:px-8">
                 {/* Quick add */}
                 <form onSubmit={submitAdd} className="mb-6 rounded-xl border border-neutral-200 bg-white p-3">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -272,8 +273,8 @@ function ChecklistsModal({ open, onClose, templates }: { open: boolean; onClose:
         else router.post(route('task-templates.store'), payload, opts);
     };
 
-    const del = (t: Template) => {
-        if (confirm(`Delete "${t.name}"?`)) router.delete(route('task-templates.destroy', t.id), { preserveScroll: true });
+    const del = async (t: Template) => {
+        if (await confirmDialog(`Delete "${t.name}"?`)) router.delete(route('task-templates.destroy', t.id), { preserveScroll: true });
     };
 
     return (
@@ -314,7 +315,7 @@ function ChecklistsModal({ open, onClose, templates }: { open: boolean; onClose:
                                     </div>
                                 ))}
                             </div>
-                            <button onClick={() => setEditing({ ...editing, items: [...editing.items, { title: '', offset_days: 0 }] })} className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-800">+ Add task</button>
+                            <button onClick={() => setEditing({ ...editing, items: [...editing.items, { title: '', offset_days: 0 }] })} className="mt-2 text-sm font-medium text-brand hover:text-brand-800">+ Add task</button>
                         </div>
                         <div className="flex justify-end gap-2">
                             <button onClick={() => setEditing(null)} className="btn-secondary">Cancel</button>

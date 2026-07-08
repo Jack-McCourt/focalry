@@ -17,9 +17,9 @@ class SiteTemplates
 {
     /** @var array<string, array{name: string, description: string}> */
     public const META = [
-        'portfolio' => [
-            'name' => 'Portfolio',
-            'description' => 'A multi-page site: home, about, a blog and a contact page — with sensible blocks on each.',
+        'heirloom' => [
+            'name' => 'Heirloom',
+            'description' => 'A light, timeless wedding template — soft greys, elegant uppercase serif type and a split masthead — with home, about, experience, services, testimonials, portfolio galleries, blog and contact.',
         ],
         'editorial' => [
             'name' => 'Editorial',
@@ -32,6 +32,22 @@ class SiteTemplates
         'documentary' => [
             'name' => 'Documentary',
             'description' => 'A minimal, photo-led documentary wedding template — black on white, clean sans-serif type — with home, portfolio, pricing, FAQ, journal and contact pages.',
+        ],
+        'noir' => [
+            'name' => 'Noir',
+            'description' => 'A dark, moody wedding template — gold accents on near-black, dramatic serif headings — home, portfolio, investment, journal and contact.',
+        ],
+        'coastal' => [
+            'name' => 'Coastal',
+            'description' => 'A light, airy template with soft blue accents and generous whitespace — perfect for family, lifestyle and destination work.',
+        ],
+        'atelier' => [
+            'name' => 'Atelier',
+            'description' => 'A fine-art, editorial template in warm blush tones with elegant serif type — for boudoir, portrait and fine-art studios.',
+        ],
+        'portfolio' => [
+            'name' => 'Portfolio',
+            'description' => 'A multi-page site: home, about, a blog and a contact page — with sensible blocks on each.',
         ],
     ];
 
@@ -49,13 +65,23 @@ class SiteTemplates
 
     private const LOREM_BULLETS = "• Lorem ipsum dolor sit amet\n• Consectetur adipiscing elit\n• Sed do eiusmod tempor incididunt\n• Ut labore et dolore magna";
 
-    /** @return list<array{key: string, name: string, description: string}> */
+    /** @return list<array{key: string, name: string, description: string, thumbnail: string}> */
     public static function all(): array
     {
         return collect(self::META)
-            ->map(fn ($meta, $key) => ['key' => $key] + $meta)
+            ->map(fn ($meta, $key) => ['key' => $key, 'thumbnail' => "/images/templates/thumbs/{$key}.jpg"] + $meta)
             ->values()
             ->all();
+    }
+
+    /**
+     * A bundled stock photo (public/images/templates/stock/*.webp — curated
+     * Unsplash-licensed images) so starter templates ship looking designed
+     * instead of full of grey placeholders. Studios replace them with their own.
+     */
+    private static function img(string $name): string
+    {
+        return "/images/templates/stock/{$name}.webp";
     }
 
     public static function exists(string $key): bool
@@ -77,6 +103,16 @@ class SiteTemplates
             // Matches mccourtphotography.co.uk: Raleway for titles + body. Permanent
             // Marker (its logo font) is available in the picker but not defaulted.
             'documentary' => ['primary_color' => '#171717', 'font' => 'sans', 'heading_font' => 'raleway', 'body_font' => 'raleway', 'logo_font' => '', 'nav_size' => 'base', 'logo_size' => 'xl', 'width' => 'wide'],
+            // Dark and moody: gold on near-black, dramatic Cormorant display serif.
+            'noir' => ['primary_color' => '#c9a962', 'font' => 'serif', 'heading_font' => 'cormorant', 'body_font' => 'raleway', 'logo_font' => 'cormorant', 'nav_size' => 'sm', 'logo_size' => 'lg', 'style' => 'studio'],
+            // Light and airy: soft coastal blue, Playfair headings, Poppins body.
+            'coastal' => ['primary_color' => '#5e8ca7', 'font' => 'serif', 'heading_font' => 'playfair', 'body_font' => 'poppins', 'logo_font' => 'playfair', 'nav_size' => 'sm', 'logo_size' => 'md'],
+            // Fine-art blush: Cormorant + Lora with the editorial style preset.
+            'atelier' => ['primary_color' => '#a8756f', 'font' => 'serif', 'heading_font' => 'cormorant', 'body_font' => 'lora', 'logo_font' => 'cormorant', 'nav_size' => 'sm', 'logo_size' => 'xl', 'style' => 'editorial'],
+            // Timeless wedding classic (Pixieset "Jennifer"-like): soft greys,
+            // light uppercase Cormorant display, EB Garamond (Caslon-like) body,
+            // and the "heirloom" preset (split masthead + square tracked buttons).
+            'heirloom' => ['primary_color' => '#7d7d7d', 'font' => 'serif', 'heading_font' => 'cormorant', 'body_font' => 'eb_garamond', 'logo_font' => 'cormorant', 'heading_weight' => 400, 'text_color' => '#6a6a6a', 'nav_size' => 'sm', 'logo_size' => 'lg', 'style' => 'heirloom'],
             default => ['primary_color' => '#171717', 'font' => 'sans', 'heading_font' => 'sans', 'body_font' => 'sans', 'logo_font' => ''],
         };
     }
@@ -107,6 +143,45 @@ class SiteTemplates
                 ['label' => 'Blog', 'kind' => 'page', 'target' => 'blog'],
                 ['label' => 'Contact', 'kind' => 'page', 'target' => 'contact'],
             ],
+            'noir' => [
+                ['label' => 'Home', 'kind' => 'page', 'target' => 'home'],
+                ['label' => 'Portfolio', 'kind' => 'page', 'target' => 'portfolio'],
+                ['label' => 'Investment', 'kind' => 'page', 'target' => 'investment'],
+                ['label' => 'Journal', 'kind' => 'page', 'target' => 'journal'],
+                ['label' => 'Contact', 'kind' => 'page', 'target' => 'contact'],
+            ],
+            'coastal' => [
+                ['label' => 'Home', 'kind' => 'page', 'target' => 'home'],
+                ['label' => 'About', 'kind' => 'page', 'target' => 'about'],
+                ['label' => 'Galleries', 'kind' => 'page', 'target' => 'galleries'],
+                ['label' => 'Journal', 'kind' => 'page', 'target' => 'journal'],
+                ['label' => 'Contact', 'kind' => 'page', 'target' => 'contact'],
+            ],
+            'atelier' => [
+                ['label' => 'Home', 'kind' => 'page', 'target' => 'home'],
+                ['label' => 'Portfolio', 'kind' => 'page', 'target' => 'portfolio'],
+                ['label' => 'Investment', 'kind' => 'page', 'target' => 'investment'],
+                ['label' => 'Journal', 'kind' => 'page', 'target' => 'journal'],
+                ['label' => 'Contact', 'kind' => 'page', 'target' => 'contact'],
+            ],
+            // Six top-level items so the split masthead balances 3 + 3 around the
+            // wordmark; Info and Portfolio carry dropdown children.
+            'heirloom' => [
+                ['label' => 'Home', 'kind' => 'page', 'target' => 'home'],
+                ['label' => 'About', 'kind' => 'page', 'target' => 'about'],
+                ['label' => 'Info', 'kind' => 'url', 'target' => '#', 'children' => [
+                    ['label' => 'Experience', 'kind' => 'page', 'target' => 'experience'],
+                    ['label' => 'Services', 'kind' => 'page', 'target' => 'services'],
+                    ['label' => 'Testimonials', 'kind' => 'page', 'target' => 'testimonials'],
+                ]],
+                ['label' => 'Blog', 'kind' => 'page', 'target' => 'blog'],
+                ['label' => 'Portfolio', 'kind' => 'page', 'target' => 'portfolio', 'children' => [
+                    ['label' => 'Weddings', 'kind' => 'page', 'target' => 'weddings'],
+                    ['label' => 'Couples', 'kind' => 'page', 'target' => 'couples'],
+                    ['label' => 'Engagements', 'kind' => 'page', 'target' => 'engagements'],
+                ]],
+                ['label' => 'Contact', 'kind' => 'page', 'target' => 'contact'],
+            ],
             default => [
                 ['label' => 'Home', 'kind' => 'page', 'target' => 'home'],
                 ['label' => 'About', 'kind' => 'page', 'target' => 'about'],
@@ -135,6 +210,10 @@ class SiteTemplates
             'editorial' => self::editorialPages($studioName),
             'studio' => self::studioPages($studioName),
             'documentary' => self::documentaryPages($studioName),
+            'noir' => self::noirPages($studioName),
+            'coastal' => self::coastalPages($studioName),
+            'atelier' => self::atelierPages($studioName),
+            'heirloom' => self::heirloomPages($studioName),
             default => self::portfolioPages($studioName),
         };
     }
@@ -152,7 +231,7 @@ class SiteTemplates
                     self::block('hero', [
                         'heading' => $studioName,
                         'subheading' => self::LOREM_LEAD,
-                        'image_url' => '',
+                        'image_url' => self::img('autumn-couple'),
                         'cta_label' => 'Enquire now',
                         'cta_link' => '/contact',
                         'overlay' => 35,
@@ -169,7 +248,10 @@ class SiteTemplates
                     self::block('gallery', [
                         'heading' => 'Recent work',
                         'columns' => 3,
-                        'images' => [],
+                        'images' => [
+                            self::img('confetti'), self::img('aisle-gold'), self::img('bride-bouquet'),
+                            self::img('portrait-red'), self::img('reception-candid'), self::img('table-florals'),
+                        ],
                     ]),
                     self::block('blog', [
                         'heading' => 'From the journal',
@@ -188,7 +270,7 @@ class SiteTemplates
                     self::block('hero', [
                         'heading' => 'About',
                         'subheading' => self::LOREM_LEAD,
-                        'image_url' => '',
+                        'image_url' => self::img('table-florals'),
                         'cta_label' => '',
                         'cta_link' => '',
                         'overlay' => 30,
@@ -197,7 +279,7 @@ class SiteTemplates
                     self::block('about', [
                         'heading' => "Hi, I'm a photographer",
                         'body' => self::LOREM,
-                        'image_url' => '',
+                        'image_url' => self::img('portrait-outdoor'),
                         'image_side' => 'left',
                     ]),
                     self::block('services', [
@@ -273,7 +355,7 @@ class SiteTemplates
                     self::block('hero', [
                         'heading' => $studioName,
                         'subheading' => self::LOREM_LEAD,
-                        'image_url' => '',
+                        'image_url' => self::img('veil-field'),
                         'cta_label' => 'Enquire',
                         'cta_link' => '/contact',
                         'overlay' => 35,
@@ -282,7 +364,7 @@ class SiteTemplates
                     self::block('about', [
                         'heading' => 'A storyteller at heart',
                         'body' => self::LOREM,
-                        'image_url' => '',
+                        'image_url' => self::img('portrait-warm'),
                         'image_side' => 'right',
                     ]),
                     self::block('gallery', [
@@ -290,7 +372,11 @@ class SiteTemplates
                         'columns' => 2,
                         'layout' => 'portrait',
                         'lightbox' => true,
-                        'images' => [],
+                        'images' => [
+                            self::img('arch-flowers'), self::img('bride-bouquet'),
+                            self::img('rings-hands'), self::img('roses-candles'),
+                            self::img('place-settings'), self::img('autumn-couple'),
+                        ],
                     ]),
                     self::block('services', [
                         'heading' => 'The experience',
@@ -331,7 +417,12 @@ class SiteTemplates
                         'columns' => 2,
                         'layout' => 'masonry',
                         'lightbox' => true,
-                        'images' => [],
+                        'images' => [
+                            self::img('veil-field'), self::img('rings-hands'),
+                            self::img('arch-flowers'), self::img('autumn-couple'),
+                            self::img('roses-candles'), self::img('bride-bouquet'),
+                            self::img('table-florals'), self::img('aisle-gold'),
+                        ],
                     ]),
                 ],
             ],
@@ -345,7 +436,7 @@ class SiteTemplates
                     self::block('hero', [
                         'heading' => 'About',
                         'subheading' => self::LOREM_LEAD,
-                        'image_url' => '',
+                        'image_url' => self::img('arch-flowers'),
                         'cta_label' => '',
                         'cta_link' => '',
                         'overlay' => 30,
@@ -354,7 +445,7 @@ class SiteTemplates
                     self::block('about', [
                         'heading' => "Hello, I'm so glad you're here",
                         'body' => self::LOREM,
-                        'image_url' => '',
+                        'image_url' => self::img('portrait-wall'),
                         'image_side' => 'left',
                     ]),
                     self::block('services', [
@@ -456,7 +547,7 @@ class SiteTemplates
                     self::block('hero', [
                         'heading' => $studioName,
                         'subheading' => self::LOREM_LEAD,
-                        'image_url' => '',
+                        'image_url' => self::img('confetti'),
                         'cta_label' => 'Book a call',
                         'cta_link' => '/contact',
                         'overlay' => 40,
@@ -475,12 +566,15 @@ class SiteTemplates
                         'columns' => 3,
                         'layout' => 'square',
                         'lightbox' => true,
-                        'images' => [],
+                        'images' => [
+                            self::img('brick-venue'), self::img('concert'), self::img('reception-candid'),
+                            self::img('portrait-red'), self::img('portrait-male'), self::img('marquee'),
+                        ],
                     ]),
                     self::block('about', [
                         'heading' => 'A little about me',
                         'body' => self::LOREM,
-                        'image_url' => '',
+                        'image_url' => self::img('portrait-male'),
                         'image_side' => 'left',
                     ]),
                     self::block('packages', [
@@ -519,7 +613,10 @@ class SiteTemplates
                         'columns' => 3,
                         'layout' => 'square',
                         'lightbox' => true,
-                        'images' => [],
+                        'images' => [
+                            self::img('concert'), self::img('brick-venue'), self::img('confetti'),
+                            self::img('reception-candid'), self::img('marquee'), self::img('portrait-red'),
+                        ],
                     ]),
                 ],
             ],
@@ -585,7 +682,7 @@ class SiteTemplates
                     self::block('hero', [
                         'heading' => $studioName,
                         'subheading' => self::LOREM_LEAD,
-                        'image_url' => '',
+                        'image_url' => self::img('palm-night'),
                         'cta_label' => 'Enquire',
                         'cta_link' => '/contact',
                         'overlay' => 40,
@@ -594,7 +691,7 @@ class SiteTemplates
                     self::block('about', [
                         'heading' => 'Candid moments, beautifully told',
                         'body' => self::LOREM,
-                        'image_url' => '',
+                        'image_url' => self::img('confetti'),
                         'image_side' => 'left',
                     ]),
                     self::block('gallery', [
@@ -602,7 +699,10 @@ class SiteTemplates
                         'columns' => 3,
                         'layout' => 'square',
                         'lightbox' => true,
-                        'images' => [],
+                        'images' => [
+                            self::img('confetti'), self::img('palm-night'), self::img('reception-candid'),
+                            self::img('bw-headwrap'), self::img('brick-venue'), self::img('field-walk'),
+                        ],
                     ]),
                     self::block('text', [
                         'heading' => 'Your dream wedding, captured',
@@ -613,13 +713,13 @@ class SiteTemplates
                     self::block('about', [
                         'heading' => 'Behind the camera',
                         'body' => self::LOREM,
-                        'image_url' => '',
+                        'image_url' => self::img('field-walk'),
                         'image_side' => 'right',
                     ]),
                     self::block('about', [
                         'heading' => 'Our approach',
                         'body' => self::LOREM,
-                        'image_url' => '',
+                        'image_url' => self::img('dark-hands'),
                         'image_side' => 'left',
                     ]),
                     self::block('cta', [
@@ -648,7 +748,11 @@ class SiteTemplates
                         'columns' => 3,
                         'layout' => 'masonry',
                         'lightbox' => true,
-                        'images' => [],
+                        'images' => [
+                            self::img('confetti'), self::img('field-walk'), self::img('palm-night'),
+                            self::img('bw-headwrap'), self::img('reception-candid'), self::img('dark-hands'),
+                            self::img('brick-venue'), self::img('bride-bouquet'), self::img('veil-field'),
+                        ],
                     ]),
                 ],
             ],
@@ -670,26 +774,26 @@ class SiteTemplates
                     self::block('about', [
                         'heading' => 'The Wee One — £800',
                         'body' => self::LOREM_BULLETS,
-                        'image_url' => '',
+                        'image_url' => self::img('bride-bouquet'),
                         'image_side' => 'left',
                     ]),
                     self::block('about', [
                         'heading' => 'The Big One — £1,150',
                         'body' => self::LOREM_BULLETS,
-                        'image_url' => '',
+                        'image_url' => self::img('dark-hands'),
                         'image_side' => 'right',
                     ]),
                     self::block('about', [
                         'heading' => 'Both of Us — £1,450',
                         'body' => self::LOREM_BULLETS,
-                        'image_url' => '',
+                        'image_url' => self::img('veil-field'),
                         'image_side' => 'left',
                     ]),
                     // The premium tier is featured with a soft background.
                     self::block('about', [
                         'heading' => 'All the Bells and Whistles — £1,850',
                         'body' => self::LOREM_BULLETS,
-                        'image_url' => '',
+                        'image_url' => self::img('table-florals'),
                         'image_side' => 'right',
                     ], ['background' => '#f5f5f4', 'padding' => 'lg']),
                     self::block('cta', [
@@ -774,6 +878,504 @@ class SiteTemplates
      *
      * @return list<array{title: string, slug: string, excerpt: string, cover_image: string, status: string, days_ago: int, blocks: array}>
      */
+    /** @return list<array{title: string, slug: string, is_home: bool, blocks: array}> */
+    private static function noirPages(string $studioName): array
+    {
+        $dark = ['background' => '#121212', 'text_color' => '#f5f0e8'];
+
+        return [
+            [
+                'title' => 'Home', 'slug' => 'home', 'is_home' => true,
+                'blocks' => [
+                    self::block('hero', [
+                        'heading' => $studioName, 'subheading' => self::LOREM_LEAD, 'image_url' => self::img('moody-bride'),
+                        'cta_label' => 'Enquire', 'cta_link' => '/contact', 'overlay' => 55,
+                        'height' => 'full', 'title_size' => 'xl', 'text_shadow' => 'soft',
+                        'content_y' => 'bottom', 'content_x' => 'left', 'text_align' => 'left',
+                        'text_bg' => 'gradient', 'text_bg_color' => '#000000', 'text_bg_opacity' => 70, 'text_bg_extent' => 55,
+                    ]),
+                    self::block('text', ['heading' => 'After dark, everything glows', 'heading_level' => 'h2', 'body' => self::LOREM, 'align' => 'center'], $dark + ['padding' => 'xl']),
+                    self::block('gallery', ['heading' => '', 'columns' => 3, 'layout' => 'masonry', 'lightbox' => true, 'images' => [
+                        self::img('bw-beach-couple'), self::img('dark-toast'), self::img('dark-hands'),
+                        self::img('dark-dinner'), self::img('palm-night'), self::img('bw-headwrap'),
+                    ], 'full_width' => true], $dark),
+                    self::block('testimonials', ['heading' => 'Kind words', 'items' => [
+                        ['quote' => self::LOREM_SENTENCE, 'author' => 'E & J', 'role' => 'Married 2026'],
+                        ['quote' => self::LOREM_SENTENCE, 'author' => 'A & S', 'role' => 'Married 2025'],
+                        ['quote' => self::LOREM_SENTENCE, 'author' => 'M & T', 'role' => 'Married 2025'],
+                    ]], $dark),
+                    self::block('cta', ['heading' => 'Dates for next season are open', 'subheading' => self::LOREM_LEAD, 'button_label' => 'Check availability', 'button_link' => '/contact']),
+                ],
+            ],
+            [
+                'title' => 'Portfolio', 'slug' => 'portfolio', 'is_home' => false,
+                'blocks' => [
+                    self::block('text', ['heading' => 'Portfolio', 'heading_level' => 'h1', 'body' => self::LOREM_LEAD, 'align' => 'center'], $dark),
+                    self::block('gallery', ['heading' => '', 'columns' => 3, 'layout' => 'masonry', 'lightbox' => true, 'images' => [
+                        self::img('moody-bride'), self::img('bw-beach-couple'), self::img('dark-dinner'),
+                        self::img('bw-headwrap'), self::img('dark-hands'), self::img('dark-toast'),
+                        self::img('palm-night'), self::img('field-walk'), self::img('concert'),
+                    ], 'full_width' => true], $dark),
+                ],
+            ],
+            [
+                'title' => 'Investment', 'slug' => 'investment', 'is_home' => false,
+                'blocks' => [
+                    self::block('text', ['heading' => 'Investment', 'heading_level' => 'h1', 'body' => self::LOREM, 'align' => 'center']),
+                    self::block('pricing', ['heading' => '', 'plans' => [
+                        ['name' => 'Intimate', 'price' => '$2,400', 'period' => '', 'features' => self::LOREM_FEATURES, 'button_label' => 'Enquire', 'button_link' => '/contact', 'featured' => false],
+                        ['name' => 'Signature', 'price' => '$3,800', 'period' => '', 'features' => self::LOREM_FEATURES, 'button_label' => 'Enquire', 'button_link' => '/contact', 'featured' => true],
+                        ['name' => 'Legacy', 'price' => '$5,200', 'period' => '', 'features' => self::LOREM_FEATURES, 'button_label' => 'Enquire', 'button_link' => '/contact', 'featured' => false],
+                    ]]),
+                    self::block('faq', ['heading' => 'Questions, answered', 'items' => [
+                        ['q' => 'Lorem ipsum dolor sit amet?', 'a' => self::LOREM_SENTENCE],
+                        ['q' => 'Consectetur adipiscing elit?', 'a' => self::LOREM_SENTENCE],
+                        ['q' => 'Sed do eiusmod tempor?', 'a' => self::LOREM_SENTENCE],
+                    ]]),
+                ],
+            ],
+            [
+                'title' => 'Journal', 'slug' => 'journal', 'is_home' => false, 'is_blog' => true,
+                'blocks' => [
+                    self::block('text', ['heading' => 'Journal', 'heading_level' => 'h1', 'body' => self::LOREM_LEAD, 'align' => 'center']),
+                    self::block('blog', ['heading' => '', 'columns' => 3, 'limit' => 0, 'per_page' => 9, 'show_categories' => true]),
+                ],
+            ],
+            [
+                'title' => 'Contact', 'slug' => 'contact', 'is_home' => false,
+                'blocks' => [
+                    self::block('text', ['heading' => 'Get in touch', 'heading_level' => 'h1', 'body' => self::LOREM_LEAD, 'align' => 'center'], $dark),
+                    self::block('contact', ['heading' => "Let's talk", 'subheading' => self::LOREM_SENTENCE, 'submit_label' => 'Send enquiry', 'show_phone' => true, 'show_event_date' => true, 'show_event_type' => true]),
+                ],
+            ],
+        ];
+    }
+
+    /** @return list<array{title: string, slug: string, is_home: bool, blocks: array}> */
+    private static function coastalPages(string $studioName): array
+    {
+        $wash = ['background' => '#f2f7fa'];
+
+        return [
+            [
+                'title' => 'Home', 'slug' => 'home', 'is_home' => true,
+                'blocks' => [
+                    self::block('hero', [
+                        'heading' => $studioName, 'subheading' => self::LOREM_LEAD, 'image_url' => self::img('beach-sunrise'),
+                        'cta_label' => 'Say hello', 'cta_link' => '/contact', 'overlay' => 20,
+                        'title_size' => 'lg', 'text_bg' => 'panel', 'text_bg_color' => '#ffffff', 'text_bg_opacity' => 65,
+                    ]),
+                    self::block('about', ['heading' => 'Hello, and welcome', 'body' => self::LOREM, 'image_url' => self::img('family-fence'), 'image_side' => 'right']),
+                    self::block('gallery', ['heading' => 'Recent sessions', 'columns' => 3, 'layout' => 'landscape', 'lightbox' => true, 'images' => [
+                        self::img('kids-forest'), self::img('newborn'), self::img('family-couch'),
+                        self::img('ocean-aerial'), self::img('family-fence'), self::img('beach-veil'),
+                    ]], $wash),
+                    self::block('services', ['heading' => 'Sessions', 'items' => [
+                        ['title' => 'Family', 'description' => self::LOREM_SENTENCE, 'price' => 'From $450'],
+                        ['title' => 'Motherhood', 'description' => self::LOREM_SENTENCE, 'price' => 'From $400'],
+                        ['title' => 'Couples', 'description' => self::LOREM_SENTENCE, 'price' => 'From $380'],
+                    ]]),
+                    self::block('newsletter', ['heading' => 'Join the newsletter', 'subheading' => self::LOREM_SENTENCE, 'placeholder' => 'Your email address', 'button_label' => 'Subscribe', 'success_message' => "You're on the list — thank you!", 'show_name' => false], $wash),
+                ],
+            ],
+            [
+                'title' => 'About', 'slug' => 'about', 'is_home' => false,
+                'blocks' => [
+                    self::block('text', ['heading' => 'About', 'heading_level' => 'h1', 'body' => self::LOREM, 'align' => 'center']),
+                    self::block('about', ['heading' => 'The person behind the camera', 'body' => self::LOREM, 'image_url' => self::img('portrait-outdoor'), 'image_side' => 'left']),
+                ],
+            ],
+            [
+                'title' => 'Galleries', 'slug' => 'galleries', 'is_home' => false,
+                'blocks' => [
+                    self::block('text', ['heading' => 'Galleries', 'heading_level' => 'h1', 'body' => self::LOREM_LEAD, 'align' => 'center']),
+                    self::block('gallery', ['heading' => '', 'columns' => 3, 'layout' => 'landscape', 'lightbox' => true, 'images' => [
+                        self::img('beach-sunrise'), self::img('family-couch'), self::img('kids-forest'),
+                        self::img('newborn'), self::img('beach-veil'), self::img('ocean-aerial'),
+                    ]]),
+                ],
+            ],
+            [
+                'title' => 'Journal', 'slug' => 'journal', 'is_home' => false, 'is_blog' => true,
+                'blocks' => [
+                    self::block('text', ['heading' => 'Journal', 'heading_level' => 'h1', 'body' => self::LOREM_LEAD, 'align' => 'center']),
+                    self::block('blog', ['heading' => '', 'columns' => 3, 'limit' => 0, 'per_page' => 9, 'show_categories' => true]),
+                ],
+            ],
+            [
+                'title' => 'Contact', 'slug' => 'contact', 'is_home' => false,
+                'blocks' => [
+                    self::block('text', ['heading' => 'Contact', 'heading_level' => 'h1', 'body' => self::LOREM_LEAD, 'align' => 'center']),
+                    self::block('contact', ['heading' => "Let's plan your session", 'subheading' => self::LOREM_SENTENCE, 'submit_label' => 'Send enquiry', 'show_phone' => true, 'show_event_date' => true, 'show_event_type' => true]),
+                ],
+            ],
+        ];
+    }
+
+    /** @return list<array{title: string, slug: string, is_home: bool, blocks: array}> */
+    private static function atelierPages(string $studioName): array
+    {
+        $blush = ['background' => '#f8f1ee'];
+
+        return [
+            [
+                'title' => 'Home', 'slug' => 'home', 'is_home' => true,
+                'blocks' => [
+                    self::block('hero', [
+                        'heading' => $studioName, 'subheading' => self::LOREM_LEAD, 'image_url' => self::img('portrait-sheer'),
+                        'cta_label' => 'Book a session', 'cta_link' => '/contact', 'overlay' => 30,
+                        'height' => 'full', 'title_size' => 'xl', 'text_shadow' => 'soft',
+                    ]),
+                    self::block('text', ['heading' => 'Portraiture as fine art', 'heading_level' => 'h2', 'body' => self::LOREM, 'align' => 'center'], $blush + ['padding' => 'xl']),
+                    self::block('gallery', ['heading' => '', 'columns' => 3, 'layout' => 'portrait', 'lightbox' => true, 'images' => [
+                        self::img('portrait-blush'), self::img('portrait-beauty'), self::img('portrait-warm'),
+                        self::img('white-dress'), self::img('boudoir'), self::img('portrait-wall'),
+                    ]]),
+                    self::block('testimonials', ['heading' => 'From my clients', 'items' => [
+                        ['quote' => self::LOREM_SENTENCE, 'author' => 'C. M.', 'role' => 'Portrait session'],
+                        ['quote' => self::LOREM_SENTENCE, 'author' => 'R. L.', 'role' => 'Boudoir session'],
+                        ['quote' => self::LOREM_SENTENCE, 'author' => 'H. B.', 'role' => 'Motherhood session'],
+                    ]], $blush),
+                    self::block('cta', ['heading' => 'You belong in front of the lens', 'subheading' => self::LOREM_LEAD, 'button_label' => 'Begin here', 'button_link' => '/contact']),
+                ],
+            ],
+            [
+                'title' => 'Portfolio', 'slug' => 'portfolio', 'is_home' => false,
+                'blocks' => [
+                    self::block('text', ['heading' => 'Portfolio', 'heading_level' => 'h1', 'body' => self::LOREM_LEAD, 'align' => 'center']),
+                    self::block('gallery', ['heading' => '', 'columns' => 3, 'layout' => 'portrait', 'lightbox' => true, 'images' => [
+                        self::img('portrait-sheer'), self::img('white-dress'), self::img('portrait-blush'),
+                        self::img('boudoir'), self::img('portrait-warm'), self::img('portrait-beauty'),
+                        self::img('rose-still'), self::img('portrait-wall'), self::img('bw-headwrap'),
+                    ]]),
+                ],
+            ],
+            [
+                'title' => 'Investment', 'slug' => 'investment', 'is_home' => false,
+                'blocks' => [
+                    self::block('text', ['heading' => 'Investment', 'heading_level' => 'h1', 'body' => self::LOREM, 'align' => 'center']),
+                    self::block('about', ['heading' => 'The Collection', 'body' => self::LOREM."\n\n".self::LOREM_BULLETS, 'image_url' => self::img('rose-still'), 'image_side' => 'left'], $blush),
+                    self::block('about', ['heading' => 'The Heirloom', 'body' => self::LOREM."\n\n".self::LOREM_BULLETS, 'image_url' => self::img('white-dress'), 'image_side' => 'right']),
+                    self::block('newsletter', ['heading' => 'Session dates & offers', 'subheading' => self::LOREM_SENTENCE, 'placeholder' => 'Your email address', 'button_label' => 'Keep me posted', 'success_message' => "You're on the list — thank you!", 'show_name' => false], $blush),
+                ],
+            ],
+            [
+                'title' => 'Journal', 'slug' => 'journal', 'is_home' => false, 'is_blog' => true,
+                'blocks' => [
+                    self::block('text', ['heading' => 'Journal', 'heading_level' => 'h1', 'body' => self::LOREM_LEAD, 'align' => 'center']),
+                    self::block('blog', ['heading' => '', 'columns' => 3, 'limit' => 0, 'per_page' => 9, 'show_categories' => true]),
+                ],
+            ],
+            [
+                'title' => 'Contact', 'slug' => 'contact', 'is_home' => false,
+                'blocks' => [
+                    self::block('text', ['heading' => 'Enquire', 'heading_level' => 'h1', 'body' => self::LOREM_LEAD, 'align' => 'center']),
+                    self::block('contact', ['heading' => 'Tell me about your session', 'subheading' => self::LOREM_SENTENCE, 'submit_label' => 'Send enquiry', 'show_phone' => true, 'show_event_date' => true, 'show_event_type' => true]),
+                ],
+            ],
+        ];
+    }
+
+    /**
+     * Heirloom — a light, timeless wedding template modelled on the classic
+     * Pixieset look: slider hero, centred serif intros, soft grey bands, a
+     * three-gallery portfolio and info pages (experience/services/testimonials).
+     *
+     * @return list<array{title: string, slug: string, is_home: bool, blocks: array}>
+     */
+    private static function heirloomPages(string $studioName): array
+    {
+        $band = ['background' => '#f5f4f2'];
+
+        // The recurring "Ready to connect? / Get in touch" band that closes most
+        // pages: a centred heading + an outline button on one soft-grey strip.
+        $ctaBand = fn (): array => [
+            self::block('text', [
+                'heading' => 'Get in touch',
+                'heading_level' => 'h2',
+                'body' => 'Ready to connect?',
+                'align' => 'center',
+            ], $band + ['pad_top' => 'xl', 'pad_bottom' => 'none']),
+            self::block('button', [
+                'label' => 'Contact me',
+                'link' => '/contact',
+                'align' => 'center',
+                'style' => 'outline',
+            ], $band + ['pad_top' => 'sm', 'pad_bottom' => 'xl']),
+        ];
+
+        // A "Title / tagline / View more" teaser column (used in the 3-up rows
+        // that cross-link the portfolio, testimonials and services pages).
+        $teaser = fn (string $title, string $tagline, string $link): array => [
+            self::block('text', [
+                'heading' => $title,
+                'heading_level' => 'h3',
+                'body' => $tagline,
+                'align' => 'center',
+            ], ['pad_bottom' => 'none']),
+            self::block('button', [
+                'label' => 'View more',
+                'link' => $link,
+                'align' => 'center',
+                'style' => 'outline',
+            ], ['pad_top' => 'sm']),
+        ];
+
+        // A gallery page (Weddings / Couples / Engagements): title + masonry.
+        $galleryPage = fn (string $title, string $slug, array $images): array => [
+            'title' => $title,
+            'slug' => $slug,
+            'is_home' => false,
+            'blocks' => [
+                self::block('text', [
+                    'heading' => $title,
+                    'heading_level' => 'h1',
+                    'body' => 'Scroll for more',
+                    'align' => 'center',
+                ], ['pad_bottom' => 'sm']),
+                self::block('gallery', ['heading' => '', 'columns' => 3, 'layout' => 'masonry', 'lightbox' => true, 'images' => $images]),
+            ],
+        ];
+
+        return [
+            // ── Home ──
+            [
+                'title' => 'Home', 'slug' => 'home', 'is_home' => true,
+                'blocks' => [
+                    // Full-width photo carousel with no copy — the images speak.
+                    self::block('slider', [
+                        'slides' => [
+                            ['image_url' => self::img('bride-bouquet'), 'heading' => '', 'subheading' => '', 'cta_label' => '', 'cta_link' => '', 'focal_x' => 50, 'focal_y' => 50, 'alt' => '', 'title' => ''],
+                            ['image_url' => self::img('arch-flowers'), 'heading' => '', 'subheading' => '', 'cta_label' => '', 'cta_link' => '', 'focal_x' => 50, 'focal_y' => 50, 'alt' => '', 'title' => ''],
+                            ['image_url' => self::img('table-florals'), 'heading' => '', 'subheading' => '', 'cta_label' => '', 'cta_link' => '', 'focal_x' => 50, 'focal_y' => 50, 'alt' => '', 'title' => ''],
+                        ],
+                        'autoplay' => true, 'speed' => 5, 'transition' => 'slide',
+                        'show_arrows' => true, 'show_dots' => false,
+                        'overlay' => 0, 'text_shadow' => 'none', 'title_size' => 'md',
+                        'height' => 'custom', 'height_value' => '560px',
+                    ]),
+                    // Centred serif intro: kicker, big uppercase headline, tagline.
+                    self::block('text', [
+                        'heading' => '',
+                        'body' => 'Fine-art wedding photography, available worldwide',
+                        'align' => 'center',
+                    ], ['pad_top' => 'lg', 'pad_bottom' => 'none']),
+                    self::block('text', [
+                        'heading' => 'Authentic, heartfelt wedding photography',
+                        'heading_level' => 'h1',
+                        'body' => 'Capturing moments since 2005',
+                        'align' => 'center',
+                    ], ['pad_top' => 'sm', 'pad_bottom' => 'none']),
+                    self::block('button', [
+                        'label' => 'More about me',
+                        'link' => '/about',
+                        'align' => 'center',
+                        'style' => 'outline',
+                    ], ['pad_top' => 'sm', 'pad_bottom' => 'lg']),
+                    self::block('gallery', ['heading' => '', 'columns' => 2, 'layout' => 'portrait', 'lightbox' => true, 'images' => [
+                        self::img('aisle-gold'), self::img('rings-hands'),
+                    ]]),
+                    // 3-up teasers cross-linking the info pages.
+                    self::block('grid', ['columns' => 3, 'gap' => 'md'], ['pad_top' => 'md', 'pad_bottom' => 'md'], [
+                        $teaser('Portfolio', 'See my latest work', '/portfolio'),
+                        $teaser('Testimonials', 'Read client reviews', '/testimonials'),
+                        $teaser('Services', 'View offerings', '/services'),
+                    ]),
+                    ...$ctaBand(),
+                ],
+            ],
+
+            // ── About ──
+            [
+                'title' => 'About', 'slug' => 'about', 'is_home' => false,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => "Hello, I'm so glad you're here",
+                        'heading_level' => 'h1',
+                        'body' => '',
+                        'align' => 'center',
+                    ], ['pad_bottom' => 'none']),
+                    self::block('about', [
+                        'heading' => '',
+                        'body' => self::LOREM,
+                        'image_url' => self::img('portrait-outdoor'),
+                        'image_side' => 'left',
+                    ]),
+                    self::block('about', [
+                        'heading' => 'My approach',
+                        'body' => self::LOREM,
+                        'image_url' => self::img('table-florals'),
+                        'image_side' => 'right',
+                    ]),
+                    self::block('logos', ['heading' => 'Vendors and partners', 'images' => []], $band),
+                    self::block('testimonials', ['heading' => 'Kind words', 'items' => [
+                        ['quote' => self::LOREM_SENTENCE, 'author' => 'K. S.', 'role' => 'Married 2026'],
+                        ['quote' => self::LOREM_SENTENCE, 'author' => 'A & M', 'role' => 'Married 2025'],
+                    ]]),
+                    ...$ctaBand(),
+                ],
+            ],
+
+            // ── Experience ──
+            [
+                'title' => 'Experience', 'slug' => 'experience', 'is_home' => false,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => 'Experience',
+                        'heading_level' => 'h1',
+                        'body' => 'Working with '.$studioName,
+                        'align' => 'center',
+                    ]),
+                    self::block('text', [
+                        'heading' => '',
+                        'body' => self::LOREM."\n\n".self::LOREM,
+                        'align' => 'center',
+                    ], $band + ['padding' => 'lg']),
+                    self::block('gallery', ['heading' => 'Portfolio highlights', 'columns' => 2, 'layout' => 'landscape', 'lightbox' => true, 'images' => [
+                        self::img('autumn-couple'), self::img('veil-field'),
+                    ]]),
+                    self::block('button', [
+                        'label' => 'View my work',
+                        'link' => '/portfolio',
+                        'align' => 'center',
+                        'style' => 'outline',
+                    ], ['pad_top' => 'none', 'pad_bottom' => 'lg']),
+                    self::block('faq', ['heading' => 'FAQ', 'items' => [
+                        ['q' => '01. How do we book you for the wedding?', 'a' => self::LOREM],
+                        ['q' => '02. Do you travel for destination weddings?', 'a' => self::LOREM],
+                        ['q' => '03. How do you handle family photos on the day?', 'a' => self::LOREM],
+                        ['q' => '04. Do you offer engagement sessions?', 'a' => self::LOREM],
+                    ]], $band),
+                    ...$ctaBand(),
+                ],
+            ],
+
+            // ── Services ──
+            [
+                'title' => 'Services', 'slug' => 'services', 'is_home' => false,
+                'blocks' => [
+                    self::block('hero', [
+                        'heading' => 'My service & offerings',
+                        'subheading' => self::LOREM_LEAD,
+                        'image_url' => self::img('lawn-ceremony'),
+                        'cta_label' => '', 'cta_link' => '',
+                        'overlay' => 25, 'title_size' => 'md', 'text_shadow' => 'soft',
+                        'height' => 'custom', 'height_value' => '480px',
+                    ]),
+                    // A big centred pull-quote between the hero and the packages.
+                    self::block('text', [
+                        'heading' => self::LOREM_SENTENCE,
+                        'heading_level' => 'h2',
+                        'body' => '',
+                        'align' => 'center',
+                    ], ['pad_top' => 'xl', 'pad_bottom' => 'sm']),
+                    self::block('pricing', ['heading' => 'Packages & offerings', 'plans' => [
+                        ['name' => 'Wedding — half day', 'price' => '$1,500', 'period' => '', 'features' => self::LOREM_FEATURES, 'button_label' => 'Inquire today', 'button_link' => '/contact', 'featured' => false],
+                        ['name' => 'Wedding — full day', 'price' => '$2,500', 'period' => '', 'features' => self::LOREM_FEATURES, 'button_label' => 'Inquire today', 'button_link' => '/contact', 'featured' => true],
+                        ['name' => 'Wedding — full pack', 'price' => '$3,500', 'period' => '', 'features' => self::LOREM_FEATURES, 'button_label' => 'Inquire today', 'button_link' => '/contact', 'featured' => false],
+                    ]]),
+                    self::block('testimonials', ['heading' => 'Testimonials', 'items' => [
+                        ['quote' => self::LOREM_SENTENCE, 'author' => 'J & S', 'role' => 'Married 2026'],
+                    ]], $band),
+                    ...$ctaBand(),
+                ],
+            ],
+
+            // ── Testimonials ──
+            [
+                'title' => 'Testimonials', 'slug' => 'testimonials', 'is_home' => false,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => 'Testimonials',
+                        'heading_level' => 'h1',
+                        'body' => 'Love letters and kind words from my wonderful clients.',
+                        'align' => 'center',
+                    ], $band + ['padding' => 'lg']),
+                    self::block('about', ['heading' => 'Kind words from K & E', 'body' => self::LOREM, 'image_url' => self::img('autumn-couple'), 'image_side' => 'left']),
+                    self::block('about', ['heading' => 'Kind words from A & M', 'body' => self::LOREM, 'image_url' => self::img('veil-field'), 'image_side' => 'right']),
+                    self::block('about', ['heading' => 'Kind words from J & S', 'body' => self::LOREM, 'image_url' => self::img('beach-fire'), 'image_side' => 'left']),
+                    ...$ctaBand(),
+                ],
+            ],
+
+            // ── Portfolio (three stacked gallery banners) ──
+            [
+                'title' => 'Portfolio', 'slug' => 'portfolio', 'is_home' => false,
+                'blocks' => [
+                    self::block('hero', [
+                        'heading' => 'Weddings', 'subheading' => '', 'image_url' => self::img('bride-bouquet'),
+                        'cta_label' => 'View gallery', 'cta_link' => '/weddings',
+                        'overlay' => 20, 'title_size' => 'lg', 'text_shadow' => 'soft',
+                        'height' => 'custom', 'height_value' => '380px',
+                    ]),
+                    self::block('hero', [
+                        'heading' => 'Couples', 'heading_level' => 'h2', 'subheading' => '', 'image_url' => self::img('couple-sunset'),
+                        'cta_label' => 'View gallery', 'cta_link' => '/couples',
+                        'overlay' => 20, 'title_size' => 'lg', 'text_shadow' => 'soft',
+                        'height' => 'custom', 'height_value' => '380px',
+                    ]),
+                    self::block('hero', [
+                        'heading' => 'Engagements', 'heading_level' => 'h2', 'subheading' => '', 'image_url' => self::img('rings-hands'),
+                        'cta_label' => 'View gallery', 'cta_link' => '/engagements',
+                        'overlay' => 20, 'title_size' => 'lg', 'text_shadow' => 'soft',
+                        'height' => 'custom', 'height_value' => '380px',
+                    ]),
+                ],
+            ],
+
+            $galleryPage('Weddings', 'weddings', [
+                self::img('beach-veil'), self::img('veil-field'), self::img('bride-bouquet'),
+                self::img('arch-flowers'), self::img('confetti'), self::img('aisle-gold'),
+            ]),
+            $galleryPage('Couples', 'couples', [
+                self::img('couple-sunset'), self::img('beach-fire'), self::img('bikes-sunset'),
+                self::img('autumn-couple'), self::img('field-walk'), self::img('palm-night'),
+            ]),
+            $galleryPage('Engagements', 'engagements', [
+                self::img('rings-hands'), self::img('rings-roses'), self::img('roses-candles'),
+                self::img('place-settings'), self::img('lawn-ceremony'), self::img('table-florals'),
+            ]),
+
+            // ── Blog ──
+            [
+                'title' => 'Blog', 'slug' => 'blog', 'is_home' => false, 'is_blog' => true,
+                'blocks' => [
+                    self::block('text', [
+                        'heading' => 'Blog',
+                        'heading_level' => 'h1',
+                        'body' => self::LOREM_LEAD,
+                        'align' => 'center',
+                    ], ['pad_bottom' => 'none']),
+                    self::block('blog', ['heading' => '', 'columns' => 2, 'limit' => 0, 'per_page' => 6, 'show_categories' => true]),
+                ],
+            ],
+
+            // ── Contact ──
+            [
+                'title' => 'Contact', 'slug' => 'contact', 'is_home' => false,
+                'blocks' => [
+                    self::block('gallery', ['heading' => '', 'columns' => 4, 'layout' => 'square', 'lightbox' => false, 'images' => [
+                        self::img('roses-candles'), self::img('white-dress'), self::img('rings-roses'), self::img('portrait-warm'),
+                    ]], ['pad_bottom' => 'none']),
+                    self::block('text', [
+                        'heading' => "Let's connect",
+                        'heading_level' => 'h1',
+                        'body' => self::LOREM_LEAD,
+                        'align' => 'center',
+                    ], ['pad_bottom' => 'none']),
+                    self::block('contact', [
+                        'heading' => '',
+                        'subheading' => '',
+                        'submit_label' => 'Send message',
+                        'show_phone' => true,
+                        'show_event_date' => true,
+                        'show_event_type' => true,
+                    ]),
+                ],
+            ],
+        ];
+    }
+
     public static function posts(string $key): array
     {
         return [
@@ -781,14 +1383,14 @@ class SiteTemplates
                 'title' => 'A spring wedding by the sea',
                 'slug' => 'a-spring-wedding-by-the-sea',
                 'excerpt' => self::LOREM_SENTENCE,
-                'cover_image' => '',
+                'cover_image' => self::img('beach-veil'),
                 'status' => 'published',
                 'days_ago' => 4,
                 'blocks' => [
                     self::block('hero', [
                         'heading' => 'A spring wedding by the sea',
                         'subheading' => self::LOREM_LEAD,
-                        'image_url' => '',
+                        'image_url' => self::img('beach-veil'),
                         'cta_label' => '',
                         'cta_link' => '',
                         'overlay' => 30,
@@ -799,21 +1401,23 @@ class SiteTemplates
                         'body' => self::LOREM,
                         'align' => 'left',
                     ]),
-                    self::block('gallery', ['heading' => 'A few favourites', 'columns' => 3, 'images' => []]),
+                    self::block('gallery', ['heading' => 'A few favourites', 'columns' => 3, 'images' => [
+                        self::img('veil-field'), self::img('rings-hands'), self::img('table-florals'),
+                    ]]),
                 ],
             ],
             [
                 'title' => 'Why I love golden hour portraits',
                 'slug' => 'why-i-love-golden-hour-portraits',
                 'excerpt' => self::LOREM_SENTENCE,
-                'cover_image' => '',
+                'cover_image' => self::img('autumn-couple'),
                 'status' => 'published',
                 'days_ago' => 12,
                 'blocks' => [
                     self::block('hero', [
                         'heading' => 'Why I love golden hour portraits',
                         'subheading' => self::LOREM_LEAD,
-                        'image_url' => '',
+                        'image_url' => self::img('autumn-couple'),
                         'cta_label' => '',
                         'cta_link' => '',
                         'overlay' => 30,
@@ -832,8 +1436,9 @@ class SiteTemplates
     /**
      * @param  array<string, mixed>  $data
      * @param  array<string, mixed>  $settings  Optional block style (background, text_color, padding…)
+     * @param  list<list<array>>  $children  For grid blocks: one list of child blocks per column.
      */
-    private static function block(string $type, array $data, array $settings = []): array
+    private static function block(string $type, array $data, array $settings = [], array $children = []): array
     {
         $block = [
             'id' => (string) Str::uuid(),
@@ -843,6 +1448,10 @@ class SiteTemplates
 
         if ($settings !== []) {
             $block['settings'] = $settings;
+        }
+
+        if ($children !== []) {
+            $block['children'] = $children;
         }
 
         return $block;

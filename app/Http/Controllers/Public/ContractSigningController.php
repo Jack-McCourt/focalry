@@ -42,6 +42,7 @@ class ContractSigningController extends Controller
             ],
             'studio_name' => $studio?->name,
             'studio_logo' => $studio?->logoUrl(),
+            'studio_logo_size' => $studio?->logoSize(),
             'studio_signature' => $studioSig ? [
                 'signer_name' => $studioSig->signer_name,
                 'signature_type' => $studioSig->signature_type,

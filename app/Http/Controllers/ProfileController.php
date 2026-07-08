@@ -46,6 +46,7 @@ class ProfileController extends Controller
                 'email_signature' => $studio->email_signature,
                 'stripe_connect_status' => $studio->stripe_connect_status,
                 'logo_url' => $studio->logoUrl(),
+                'email_logo_size' => $studio->logoSize(),
             ] : null,
             'stripe_key' => config('services.stripe.key'),
             'notificationTypes' => collect(NotificationType::TYPES)

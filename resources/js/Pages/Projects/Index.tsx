@@ -11,6 +11,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps, Project, ProjectFieldDefinition, ProjectStatus, ProjectType } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface Filters {
     search: string;
@@ -203,8 +204,8 @@ export default function Index({ projects, statuses, types, fields, contacts, fil
         router.patch(route('projects.update', id), { [field]: value }, { preserveScroll: true, preserveState: true });
     };
 
-    const remove = (id: number) => {
-        if (confirm('Delete this project?')) {
+    const remove = async (id: number) => {
+        if (await confirmDialog('Delete this project?')) {
             router.delete(route('projects.destroy', id), { preserveScroll: true });
         }
     };
@@ -223,8 +224,8 @@ export default function Index({ projects, statuses, types, fields, contacts, fil
         router.patch(route('projects.update', id), { custom_fields: next } as never, { preserveScroll: true, preserveState: true });
     };
 
-    const deleteField = (field: ProjectFieldDefinition) => {
-        if (confirm(`Delete the "${field.label}" field? Existing values are hidden but not removed.`)) {
+    const deleteField = async (field: ProjectFieldDefinition) => {
+        if (await confirmDialog(`Delete the "${field.label}" field? Existing values are hidden but not removed.`)) {
             router.delete(route('project-fields.destroy', field.id), { preserveScroll: true });
         }
     };
@@ -264,7 +265,7 @@ export default function Index({ projects, statuses, types, fields, contacts, fil
             <Head title="Projects" />
             <StudioManagerNav active="projects" />
 
-            <div className="px-4 sm:px-8 py-6">
+            <div className="px-4 py-8 sm:px-8">
                 {/* View switcher + filters */}
                 <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5">

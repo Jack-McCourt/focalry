@@ -2,6 +2,7 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import { Paginated } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
+import Paginator from '@/Components/Paginator';
 
 interface UserRow {
     id: number;
@@ -40,12 +41,12 @@ export default function UsersIndex({ users, filters }: Props) {
                         placeholder="Search by name or email…"
                         className="w-full max-w-sm rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-rose-500 focus:ring-rose-500"
                     />
-                    <button className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700">
+                    <button className="rounded-lg bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">
                         Search
                     </button>
                 </form>
 
-                <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-neutral-100 text-left text-xs uppercase tracking-wide text-neutral-400">
@@ -103,29 +104,7 @@ export default function UsersIndex({ users, filters }: Props) {
                     </table>
                 </div>
 
-                {(users.prev_page_url || users.next_page_url) && (
-                    <div className="mt-4 flex items-center justify-between text-sm">
-                        <span className="text-neutral-400">
-                            Page {users.current_page} of {users.last_page} · {users.total} total
-                        </span>
-                        <div className="flex gap-2">
-                            <Link
-                                href={users.prev_page_url ?? '#'}
-                                preserveState
-                                className={`rounded-lg border px-3 py-1.5 ${users.prev_page_url ? 'border-neutral-300 hover:bg-neutral-50' : 'pointer-events-none border-neutral-100 text-neutral-300'}`}
-                            >
-                                Previous
-                            </Link>
-                            <Link
-                                href={users.next_page_url ?? '#'}
-                                preserveState
-                                className={`rounded-lg border px-3 py-1.5 ${users.next_page_url ? 'border-neutral-300 hover:bg-neutral-50' : 'pointer-events-none border-neutral-100 text-neutral-300'}`}
-                            >
-                                Next
-                            </Link>
-                        </div>
-                    </div>
-                )}
+                <Paginator paginator={users} />
             </div>
         </AdminLayout>
     );

@@ -1,4 +1,4 @@
-@component('mail::message')
+<x-mail::message :studio-name="$forStudio ? config('app.name') : $studioName" :logo-url="$forStudio ? null : $logoUrl" :logo-height="$forStudio ? null : ($logoHeight ?? null)">
 @if ($forStudio)
 # New booking confirmed
 
@@ -43,4 +43,4 @@ See you then!
 
 — {{ $studioName }}
 @endif
-@endcomponent
+</x-mail::message>

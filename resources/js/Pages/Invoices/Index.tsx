@@ -4,6 +4,7 @@ import { formatMoney } from '@/lib/money';
 import { Invoice, PageProps, Paginated } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
+import Paginator from '@/Components/Paginator';
 
 interface Filters {
     search: string;
@@ -22,7 +23,7 @@ interface Summary {
 
 const STATUS_STYLES: Record<Invoice['status'], string> = {
     draft: 'bg-neutral-100 text-neutral-500',
-    sent: 'bg-blue-50 text-blue-700',
+    sent: 'bg-brand-50 text-brand-700',
     partial: 'bg-amber-50 text-amber-700',
     paid: 'bg-emerald-50 text-emerald-700',
     void: 'bg-neutral-100 text-neutral-400 line-through',
@@ -146,7 +147,7 @@ export default function Index({
             <Head title="Invoices" />
             <StudioManagerNav active="invoices" />
 
-            <div className="px-4 sm:px-8 py-8">
+            <div className="px-4 py-8 sm:px-8">
                 {/* Summary cards */}
                 <div className="mb-6 grid gap-4 sm:grid-cols-3">
                     <div className="rounded-xl border border-neutral-200 bg-white p-4">
@@ -208,7 +209,7 @@ export default function Index({
                         )}
                     </div>
                 ) : (
-                    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                    <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-neutral-100 text-left text-xs font-medium text-neutral-400">
@@ -244,17 +245,7 @@ export default function Index({
                     </div>
                 )}
 
-                {invoices.last_page > 1 && (
-                    <div className="mt-8 flex items-center justify-center gap-2">
-                        {invoices.prev_page_url && (
-                            <button onClick={() => router.get(invoices.prev_page_url!)} className="btn-secondary px-3 py-1.5 text-xs">Previous</button>
-                        )}
-                        <span className="text-xs text-neutral-500">Page {invoices.current_page} of {invoices.last_page}</span>
-                        {invoices.next_page_url && (
-                            <button onClick={() => router.get(invoices.next_page_url!)} className="btn-secondary px-3 py-1.5 text-xs">Next</button>
-                        )}
-                    </div>
-                )}
+                <Paginator paginator={invoices} />
             </div>
         </AuthenticatedLayout>
     );

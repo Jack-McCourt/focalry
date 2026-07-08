@@ -6,10 +6,11 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Contract, EmailDefaults, PageProps } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 const STATUS_STYLES: Record<Contract['status'], string> = {
     draft: 'bg-neutral-100 text-neutral-500',
-    sent: 'bg-blue-50 text-blue-700',
+    sent: 'bg-brand-50 text-brand-700',
     signed: 'bg-emerald-50 text-emerald-700',
     declined: 'bg-red-50 text-red-700',
     void: 'bg-neutral-100 text-neutral-400 line-through',
@@ -64,15 +65,14 @@ export default function Show({ contract, sign_url, invoice_html, email_defaults,
         return `<span class="rounded bg-amber-50 px-1 text-amber-700">[${label}]</span>`;
     });
 
-    const destroy = () => {
-        if (confirm('Delete this contract? This cannot be undone.')) {
+    const destroy = async () => {
+        if (await confirmDialog('Delete this contract? This cannot be undone.')) {
             router.delete(route('contracts.destroy', contract.id));
         }
     };
 
-    const send = () => router.post(route('contracts.send', contract.id), {}, { preserveScroll: true });
-    const voidContract = () => {
-        if (confirm('Void this contract? It can no longer be signed.')) {
+    const voidContract = async () => {
+        if (await confirmDialog('Void this contract? It can no longer be signed.')) {
             router.post(route('contracts.void', contract.id), {}, { preserveScroll: true });
         }
     };
@@ -112,7 +112,6 @@ export default function Show({ contract, sign_url, invoice_html, email_defaults,
                         <span className="truncate font-semibold text-neutral-900">{contract.title}</span>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                        <button onClick={() => setEmailOpen(true)} className="btn-secondary">Email client</button>
                         <a href={route('contracts.pdf', contract.id)} className="btn-secondary">PDF</a>
                         {isOpen && <Link href={route('contracts.edit', contract.id)} className="btn-secondary">Edit</Link>}
                         {contract.status === 'draft' && (
@@ -138,9 +137,7 @@ export default function Show({ contract, sign_url, invoice_html, email_defaults,
                 {/* Action bar */}
                 <div className="mb-6 rounded-xl border border-neutral-200 bg-white p-5">
                     <div className="flex flex-wrap items-center gap-3">
-                        {contract.status === 'draft' && (
-                            <button onClick={send} className="btn-primary">Mark as sent</button>
-                        )}
+                        <button onClick={() => setEmailOpen(true)} className="btn-primary">Email client</button>
                         <button onClick={() => setSignOpen(true)} className="btn-secondary" disabled={!isOpen && contract.status !== 'signed'}>
                             {studioSig ? 'Update your signature' : 'Sign as photographer'}
                         </button>

@@ -57,6 +57,8 @@ class ManualLabProvider implements FulfilmentProvider
                 ctaLabel: 'View order',
                 ctaUrl: route('store.orders.show', $order->id),
                 details: $details,
+                logoUrl: $studio?->logoUrl(),
+                logoHeight: $studio?->emailLogoHeight(),
             ));
         } catch (\Throwable $e) {
             report($e);

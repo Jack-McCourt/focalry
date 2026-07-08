@@ -4,6 +4,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { pillStyle } from '@/lib/projectColors';
 import { Contact, PageProps } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface LinkedCollection {
     id: number;
@@ -47,8 +48,8 @@ export default function Show({
         patch(route('contacts.update', contact.id), { preserveScroll: true });
     };
 
-    const destroy = () => {
-        if (confirm('Delete this contact? This cannot be undone.')) {
+    const destroy = async () => {
+        if (await confirmDialog('Delete this contact? This cannot be undone.')) {
             router.delete(route('contacts.destroy', contact.id));
         }
     };

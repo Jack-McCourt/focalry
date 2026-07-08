@@ -41,7 +41,7 @@ function fmtDate(d: string | null) {
 
 const STATUS_STYLES: Record<PublicInvoice['status'], string> = {
     draft: 'bg-neutral-100 text-neutral-500',
-    sent: 'bg-blue-50 text-blue-700',
+    sent: 'bg-brand-50 text-brand-700',
     partial: 'bg-amber-50 text-amber-700',
     paid: 'bg-emerald-50 text-emerald-700',
     void: 'bg-neutral-100 text-neutral-400',
@@ -51,6 +51,7 @@ export default function Public({
     invoice,
     studio_name,
     studio_logo,
+    studio_logo_size,
     bill_to,
     can_pay_online,
     bank_details,
@@ -58,6 +59,7 @@ export default function Public({
     invoice: PublicInvoice;
     studio_name: string | null;
     studio_logo: string | null;
+    studio_logo_size: string | null;
     bill_to: { name: string; email: string | null } | null;
     can_pay_online: boolean;
     bank_details: string | null;
@@ -150,7 +152,7 @@ export default function Public({
                     <div className="flex items-start justify-between gap-6">
                         <div>
                             {studio_logo ? (
-                                <img src={studio_logo} alt={studio_name ?? ''} className="mb-3 max-h-16 max-w-[220px] object-contain" />
+                                <img src={studio_logo} alt={studio_name ?? ''} className={`mb-3 ${({ small: 'max-h-8', medium: 'max-h-12', large: 'max-h-24', xlarge: 'max-h-36' } as Record<string, string>)[studio_logo_size ?? 'medium'] ?? 'max-h-12'} max-w-[220px] object-contain`} />
                             ) : null}
                             {studio_name && <p className="text-lg font-semibold text-neutral-900">{studio_name}</p>}
                         </div>
@@ -175,28 +177,30 @@ export default function Public({
                         </div>
                     )}
 
-                    <table className="mt-8 w-full text-[15px]">
-                        <thead>
-                            <tr className="border-b border-neutral-100 text-left text-xs font-medium text-neutral-400">
-                                <th className="py-2">Description</th>
-                                <th className="py-2 text-right">Qty</th>
-                                <th className="py-2 text-right">Unit</th>
-                                <th className="py-2 text-right">Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-neutral-50">
-                            {invoice.items.map((it, i) => (
-                                <tr key={i}>
-                                    <td className="py-2.5 text-neutral-800">{it.description}</td>
-                                    <td className="py-2.5 text-right text-neutral-500">{it.quantity}</td>
-                                    <td className="py-2.5 text-right text-neutral-500">{formatMoney(it.unit_amount_cents, invoice.currency)}</td>
-                                    <td className="py-2.5 text-right text-neutral-800">
-                                        {formatMoney(Math.round((parseFloat(String(it.quantity)) || 0) * it.unit_amount_cents), invoice.currency)}
-                                    </td>
+                    <div className="mt-8 overflow-x-auto">
+                        <table className="w-full text-[15px]">
+                            <thead>
+                                <tr className="border-b border-neutral-100 text-left text-xs font-medium text-neutral-400">
+                                    <th className="py-2">Description</th>
+                                    <th className="py-2 text-right">Qty</th>
+                                    <th className="py-2 text-right">Unit</th>
+                                    <th className="py-2 text-right">Amount</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-neutral-50">
+                                {invoice.items.map((it, i) => (
+                                    <tr key={i}>
+                                        <td className="py-2.5 text-neutral-800">{it.description}</td>
+                                        <td className="py-2.5 text-right text-neutral-500">{it.quantity}</td>
+                                        <td className="py-2.5 text-right text-neutral-500">{formatMoney(it.unit_amount_cents, invoice.currency)}</td>
+                                        <td className="py-2.5 text-right text-neutral-800">
+                                            {formatMoney(Math.round((parseFloat(String(it.quantity)) || 0) * it.unit_amount_cents), invoice.currency)}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
 
                     <div className="mt-4 flex justify-end">
                         <div className="w-full max-w-xs space-y-1.5 text-sm">
@@ -347,7 +351,7 @@ export default function Public({
                             <button
                                 onClick={payCustom}
                                 disabled={paying || !customValid}
-                                className="rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-40"
+                                className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-40"
                             >
                                 {paying ? 'Redirecting…' : `Pay ${formatMoney(customCents, invoice.currency)}`}
                             </button>

@@ -2,6 +2,7 @@ import StudioManagerNav from '@/Components/StudioManagerNav';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 const opts = { preserveScroll: true };
 
@@ -30,8 +31,8 @@ export default function Trash({
 }: PageProps<{ projects: TrashedProject[]; retention_days: number }>) {
     const restore = (p: TrashedProject) => router.post(route('projects.restore', p.id), {}, opts);
 
-    const purge = (p: TrashedProject) => {
-        if (confirm(`Permanently delete “${p.name}”? This cannot be undone.`)) {
+    const purge = async (p: TrashedProject) => {
+        if (await confirmDialog(`Permanently delete “${p.name}”? This cannot be undone.`)) {
             router.delete(route('projects.force-destroy', p.id), opts);
         }
     };
@@ -59,7 +60,7 @@ export default function Trash({
                         <p className="text-sm text-neutral-400">The trash is empty.</p>
                     </div>
                 ) : (
-                    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                    <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-neutral-100 text-left text-xs uppercase tracking-wide text-neutral-400">

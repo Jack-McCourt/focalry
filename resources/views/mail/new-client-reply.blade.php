@@ -1,4 +1,4 @@
-@component('mail::message')
+<x-mail::message>
 # New message from {{ $fromName }}
 
 **Re: {{ $subject }}**
@@ -12,4 +12,4 @@ View conversation
 @endcomponent
 
 Reply right here in your studio messages.
-@endcomponent
+</x-mail::message>

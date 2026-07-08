@@ -71,7 +71,7 @@ interface DashboardProps extends PageProps {
 const STATUS_META: Record<string, { label: string; color: string }> = {
     paid: { label: 'Paid', color: '#22c55e' },
     partial: { label: 'Partially paid', color: '#f59e0b' },
-    sent: { label: 'Awaiting payment', color: '#3b82f6' },
+    sent: { label: 'Awaiting payment', color: '#2a305d' },
     overdue: { label: 'Overdue', color: '#ef4444' },
     draft: { label: 'Draft', color: '#9ca3af' },
 };
@@ -170,7 +170,7 @@ export default function Dashboard(props: DashboardProps) {
                         label="Projected (next 24 mo)"
                         value={formatMoney(kpis.projected_total_cents, currency)}
                         sub={`${formatMoney(kpis.projected_next_12_cents, currency)} in next 12 mo`}
-                        accent="text-emerald-600"
+                        accent="text-accent-600"
                     />
                     <Kpi
                         label="Overdue"
@@ -225,7 +225,7 @@ export default function Dashboard(props: DashboardProps) {
                                     <Line
                                         type="monotone"
                                         dataKey="earned_cents"
-                                        stroke="#4f46e5"
+                                        stroke="#2a305d"
                                         strokeWidth={2}
                                         dot={false}
                                     />
@@ -255,7 +255,7 @@ export default function Dashboard(props: DashboardProps) {
                                         }}
                                         contentStyle={tooltipStyle}
                                     />
-                                    <Bar dataKey="earned_cents" fill="#4f46e5" radius={[3, 3, 0, 0]} />
+                                    <Bar dataKey="earned_cents" fill="#2a305d" radius={[3, 3, 0, 0]} />
                                 </BarChart>
                             )}
                         </ResponsiveContainer>
@@ -304,7 +304,7 @@ export default function Dashboard(props: DashboardProps) {
                                     <Line
                                         type="monotone"
                                         dataKey="projected_cents"
-                                        stroke="#10b981"
+                                        stroke="#f67952"
                                         strokeWidth={2}
                                         dot={false}
                                     />
@@ -335,7 +335,7 @@ export default function Dashboard(props: DashboardProps) {
                                         }}
                                         contentStyle={tooltipStyle}
                                     />
-                                    <Bar dataKey="projected_cents" fill="#10b981" radius={[3, 3, 0, 0]} />
+                                    <Bar dataKey="projected_cents" fill="#f67952" radius={[3, 3, 0, 0]} />
                                 </BarChart>
                             )}
                         </ResponsiveContainer>

@@ -53,6 +53,7 @@ export default function Sign({
     contract,
     studio_name,
     studio_logo,
+    studio_logo_size,
     studio_signature,
     client_signature,
     flash,
@@ -60,6 +61,7 @@ export default function Sign({
     contract: PublicContract;
     studio_name: string | null;
     studio_logo: string | null;
+    studio_logo_size: string | null;
     studio_signature: SignatureInfo | null;
     client_signature: SignatureInfo | null;
 }>) {
@@ -88,7 +90,7 @@ export default function Sign({
     return (
         <>
             <Head title={contract.title} />
-            <PublicShell brand={{ name: studio_name, logo: studio_logo }} maxWidth="lg">
+            <PublicShell brand={{ name: studio_name, logo: studio_logo, size: studio_logo_size }} maxWidth="lg">
                 {flash?.success && (
                     <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{flash.success}</div>
                 )}

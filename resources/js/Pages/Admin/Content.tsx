@@ -1,5 +1,6 @@
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Head, Link, router } from '@inertiajs/react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface CollectionRow {
     id: number;
@@ -28,14 +29,14 @@ function fmtDate(d: string | null) {
 }
 
 export default function AdminContent({ collections, sites }: Props) {
-    const takedownCollection = (c: CollectionRow) => {
-        if (confirm(`Take down “${c.title}”? It will be set back to draft and the public link will stop working.`)) {
+    const takedownCollection = async (c: CollectionRow) => {
+        if (await confirmDialog(`Take down “${c.title}”? It will be set back to draft and the public link will stop working.`)) {
             router.post(route('admin.content.collections.takedown', c.id), {}, { preserveScroll: true });
         }
     };
 
-    const takedownSite = (s: SiteRow) => {
-        if (confirm(`Unpublish “${s.name}”? The public website will go offline.`)) {
+    const takedownSite = async (s: SiteRow) => {
+        if (await confirmDialog(`Unpublish “${s.name}”? The public website will go offline.`)) {
             router.post(route('admin.content.sites.takedown', s.id), {}, { preserveScroll: true });
         }
     };
@@ -50,7 +51,7 @@ export default function AdminContent({ collections, sites }: Props) {
                     <h2 className="mb-3 text-sm font-semibold text-neutral-900">
                         Published galleries <span className="text-neutral-400">({collections.length})</span>
                     </h2>
-                    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                    <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-neutral-100 text-left text-xs uppercase tracking-wide text-neutral-400">
@@ -106,7 +107,7 @@ export default function AdminContent({ collections, sites }: Props) {
                     <h2 className="mb-3 text-sm font-semibold text-neutral-900">
                         Published websites <span className="text-neutral-400">({sites.length})</span>
                     </h2>
-                    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                    <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-neutral-100 text-left text-xs uppercase tracking-wide text-neutral-400">

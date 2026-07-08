@@ -161,6 +161,8 @@ class ProposalController extends Controller
                 ctaUrl: ClientEmailContent::ctaUrl($proposal),
                 details: [],
                 replyToEmail: $request->user()?->email,
+                logoUrl: $proposal->studio?->logoUrl(),
+                logoHeight: $proposal->studio?->emailLogoHeight(),
             ));
         } catch (\Throwable $e) {
             report($e);

@@ -57,6 +57,8 @@ class ClientEmailController extends Controller
                 ctaUrl: ClientEmailContent::ctaUrl($entity),
                 details: $details,
                 replyToEmail: $request->user()?->email,
+                logoUrl: $entity->studio?->logoUrl(),
+                logoHeight: $entity->studio?->emailLogoHeight(),
             ));
         } catch (\Throwable $e) {
             report($e);
@@ -66,6 +68,14 @@ class ClientEmailController extends Controller
         }
 
         $log->fill(['status' => 'sent', 'sent_at' => now()])->save();
+
+        // Emailing a draft contract to the client is what "sends" it.
+        if ($entity instanceof Contract && $entity->status === 'draft') {
+            $entity->update([
+                'status' => 'sent',
+                'sent_at' => $entity->sent_at ?? now(),
+            ]);
+        }
 
         return back()->with('success', 'Email sent to '.$data['to'].'.');
     }

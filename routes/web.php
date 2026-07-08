@@ -19,6 +19,7 @@ use App\Http\Controllers\Gallery\GalleryDownloadController;
 use App\Http\Controllers\Gallery\GuestUploadAdminController;
 use App\Http\Controllers\Gallery\GuestUploadController;
 use App\Http\Controllers\Gallery\SetController;
+use App\Http\Controllers\ImageResizeController;
 use App\Http\Controllers\LightroomPluginController;
 use App\Http\Controllers\Mail\MailOpenController;
 use App\Http\Controllers\MessageTemplateController;
@@ -41,15 +42,14 @@ use App\Http\Controllers\Settings\ZoomController;
 use App\Http\Controllers\Stripe\ConnectController;
 use App\Http\Controllers\Stripe\PublicInvoiceController;
 use App\Http\Controllers\StudioManager\AvailabilityController;
+use App\Http\Controllers\StudioManager\CalendarController;
 use App\Http\Controllers\StudioManager\ClientEmailController;
 use App\Http\Controllers\StudioManager\ClientPortalController as StudioClientPortalController;
-use App\Http\Controllers\StudioManager\CalendarController;
 use App\Http\Controllers\StudioManager\ContactController;
-use App\Http\Controllers\StudioManager\ExpenseController;
-use App\Http\Controllers\StudioManager\ReportController;
 use App\Http\Controllers\StudioManager\ContractController;
 use App\Http\Controllers\StudioManager\ContractTemplateController;
 use App\Http\Controllers\StudioManager\CouponController;
+use App\Http\Controllers\StudioManager\ExpenseController;
 use App\Http\Controllers\StudioManager\GiftCardController;
 use App\Http\Controllers\StudioManager\InvoiceController;
 use App\Http\Controllers\StudioManager\InvoiceSettingsController;
@@ -67,12 +67,20 @@ use App\Http\Controllers\StudioManager\ProjectShareController;
 use App\Http\Controllers\StudioManager\ProposalController;
 use App\Http\Controllers\StudioManager\QuestionnaireController;
 use App\Http\Controllers\StudioManager\QuestionnaireTemplateController;
+use App\Http\Controllers\StudioManager\ReportController;
+use App\Http\Controllers\StudioManager\SiteAiController;
+use App\Http\Controllers\StudioManager\SiteCategoryController;
 use App\Http\Controllers\StudioManager\SiteController;
+use App\Http\Controllers\StudioManager\SiteDomainController;
+use App\Http\Controllers\StudioManager\SiteInstagramController;
+use App\Http\Controllers\StudioManager\SiteMediaController;
+use App\Http\Controllers\StudioManager\SiteReviewsController;
 use App\Http\Controllers\StudioManager\StoreOrderController;
 use App\Http\Controllers\StudioManager\StoreSettingsController;
 use App\Http\Controllers\StudioManager\TaskController;
 use App\Http\Controllers\StudioManager\TaskTemplateController;
 use App\Http\Controllers\StudioManager\WorkflowController;
+use App\Http\Middleware\CachePublicSite;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -325,21 +333,47 @@ Route::middleware(['auth', 'verified', 'studio.active'])->group(function () {
         Route::put('website', [SiteController::class, 'update'])->name('website.update');
         Route::get('website/settings', [SiteController::class, 'settings'])->name('website.settings');
         Route::patch('website/settings', [SiteController::class, 'updateSettings'])->name('website.settings.update');
-        Route::post('website/domain', [SiteController::class, 'updateDomain'])->name('website.domain.update');
-        Route::post('website/domain/verify', [SiteController::class, 'verifyDomain'])->name('website.domain.verify');
-        Route::delete('website/domain', [SiteController::class, 'removeDomain'])->name('website.domain.remove');
         Route::post('website/publish', [SiteController::class, 'publish'])->name('website.publish');
+        Route::delete('website/draft', [SiteController::class, 'discardDraft'])->name('website.draft.discard');
+        Route::post('website/snapshots/{snapshot}/restore', [SiteController::class, 'restoreSnapshot'])->name('website.snapshots.restore');
+        // AI assists (SiteAiController) — env-gated on ANTHROPIC_API_KEY.
+        Route::post('website/ai/alt-text', [SiteAiController::class, 'altText'])->name('website.ai.alt');
+        Route::post('website/ai/seo', [SiteAiController::class, 'seo'])->name('website.ai.seo');
+        Route::post('website/ai/headlines', [SiteAiController::class, 'headlines'])->name('website.ai.headlines');
+        Route::post('website/preview-link', [SiteController::class, 'createPreviewLink'])->name('website.preview.create');
+        Route::delete('website/preview-link', [SiteController::class, 'revokePreviewLink'])->name('website.preview.revoke');
         Route::post('website/template', [SiteController::class, 'applyTemplate'])->name('website.template');
-        Route::post('website/upload', [SiteController::class, 'uploadImage'])->name('website.upload');
-        Route::get('website/gallery-images', [SiteController::class, 'galleryImages'])->name('website.gallery.images');
-        Route::post('website/gallery-images', [SiteController::class, 'importGalleryImages'])->name('website.gallery.import');
-        Route::post('website/categories', [SiteController::class, 'storeCategory'])->name('website.categories.store');
-        Route::patch('website/categories/{category}', [SiteController::class, 'updateCategory'])->name('website.categories.update');
-        Route::delete('website/categories/{category}', [SiteController::class, 'destroyCategory'])->name('website.categories.destroy');
         Route::get('website/leads', [SiteController::class, 'leads'])->name('website.leads');
+        Route::get('website/subscribers', [SiteController::class, 'subscribers'])->name('website.subscribers');
+        Route::get('website/subscribers.csv', [SiteController::class, 'exportSubscribers'])->name('website.subscribers.export');
         Route::get('website/analytics', [SiteController::class, 'analytics'])->name('website.analytics');
-        Route::post('website/google-reviews/search', [SiteController::class, 'googleReviewsSearch'])->name('website.google-reviews.search');
-        Route::post('website/google-reviews', [SiteController::class, 'googleReviews'])->name('website.google-reviews');
+        // Custom domain (SiteDomainController)
+        Route::post('website/domain', [SiteDomainController::class, 'update'])->name('website.domain.update');
+        Route::post('website/domain/verify', [SiteDomainController::class, 'verify'])->name('website.domain.verify');
+        Route::delete('website/domain', [SiteDomainController::class, 'destroy'])->name('website.domain.remove');
+        // Images: uploads + gallery imports (SiteMediaController)
+        Route::post('website/logo', [SiteMediaController::class, 'uploadLogo'])->name('website.logo.upload');
+        Route::delete('website/logo', [SiteMediaController::class, 'deleteLogo'])->name('website.logo.delete');
+        Route::post('website/footer-logo', [SiteMediaController::class, 'uploadFooterLogo'])->name('website.footer-logo.upload');
+        Route::delete('website/footer-logo', [SiteMediaController::class, 'deleteFooterLogo'])->name('website.footer-logo.delete');
+        Route::post('website/upload', [SiteMediaController::class, 'upload'])->name('website.upload');
+        Route::post('website/upload-video', [SiteMediaController::class, 'uploadVideo'])->name('website.upload.video');
+        Route::post('website/upload-font', [SiteMediaController::class, 'uploadFont'])->name('website.upload.font');
+        Route::get('website/gallery-images', [SiteMediaController::class, 'galleryImages'])->name('website.gallery.images');
+        Route::post('website/gallery-images', [SiteMediaController::class, 'importGalleryImages'])->name('website.gallery.import');
+        Route::post('website/gallery-sync', [SiteMediaController::class, 'syncLinkedGallery'])->name('website.gallery.sync');
+        // Blog categories (SiteCategoryController)
+        Route::post('website/categories', [SiteCategoryController::class, 'store'])->name('website.categories.store');
+        Route::patch('website/categories/{category}', [SiteCategoryController::class, 'update'])->name('website.categories.update');
+        Route::delete('website/categories/{category}', [SiteCategoryController::class, 'destroy'])->name('website.categories.destroy');
+        // Instagram feed block (SiteInstagramController)
+        Route::get('website/instagram/connect', [SiteInstagramController::class, 'connect'])->name('website.instagram.connect');
+        Route::get('website/instagram/callback', [SiteInstagramController::class, 'callback'])->name('website.instagram.callback');
+        Route::delete('website/instagram', [SiteInstagramController::class, 'disconnect'])->name('website.instagram.disconnect');
+        Route::post('website/instagram/fetch', [SiteInstagramController::class, 'fetch'])->name('website.instagram.fetch');
+        // Google Reviews block (SiteReviewsController)
+        Route::post('website/google-reviews/search', [SiteReviewsController::class, 'search'])->name('website.google-reviews.search');
+        Route::post('website/google-reviews', [SiteReviewsController::class, 'fetch'])->name('website.google-reviews');
     });
 
     // Send an email to a client about an invoice / contract / gallery
@@ -500,18 +534,31 @@ Route::post('/i/{publicId}/checkout', [PublicInvoiceController::class, 'checkout
 
 // Public studio website (no auth — resolved by slug, only if published)
 Route::post('/site/{slug}/contact', [PublicSiteController::class, 'submitLead'])->name('sites.public.lead')->middleware('throttle:public-forms');
-Route::get('/site/{slug}/sitemap.xml', [PublicSiteController::class, 'sitemap'])->name('sites.public.sitemap');
-Route::get('/site/{slug}/robots.txt', [PublicSiteController::class, 'robots'])->name('sites.public.robots');
+Route::post('/site/{slug}/subscribe', [PublicSiteController::class, 'subscribe'])->name('sites.public.subscribe')->middleware('throttle:public-forms');
+// Tokenized draft preview (shows the work-in-progress draft; noindex, uncached).
+Route::get('/site/preview/{token}/{parent}/{post}', [PublicSiteController::class, 'previewPost'])->name('sites.public.preview.post');
+Route::get('/site/preview/{token}/{page?}', [PublicSiteController::class, 'preview'])->name('sites.public.preview');
+// Payment pages reflect live package/Stripe state — not cached. (Must be
+// registered before the {parent}/{post} catch-all.)
 Route::get('/site/{slug}/pay/{package}', [PublicSiteController::class, 'paymentLink'])->name('sites.public.pay');
-Route::get('/site/{slug}/{parent}/{post}', [PublicSiteController::class, 'showPost'])->name('sites.public.post');
-Route::get('/site/{slug}/{page?}', [PublicSiteController::class, 'show'])->name('sites.public.show');
+// Content pages are served from a full-page cache, versioned on the site's
+// updated_at (busted by Publish / anything that touches the site).
+Route::middleware(CachePublicSite::class)->group(function () {
+    Route::get('/site/{slug}/sitemap.xml', [PublicSiteController::class, 'sitemap'])->name('sites.public.sitemap');
+    Route::get('/site/{slug}/robots.txt', [PublicSiteController::class, 'robots'])->name('sites.public.robots');
+    Route::get('/site/{slug}/feed', [PublicSiteController::class, 'feed'])->name('sites.public.feed');
+    Route::get('/site/{slug}/{parent}/{post}', [PublicSiteController::class, 'showPost'])->name('sites.public.post');
+    Route::get('/site/{slug}/{page?}', [PublicSiteController::class, 'show'])->name('sites.public.show');
+});
 
 // Public site assets streamed from Wasabi (logos, site/product/package images,
 // attachments — everything under the `public/` prefix). See App\Support\PublicAsset.
-Route::get('/assets/{path}', [PublicAssetController::class, 'show'])->where('path', '.*')->name('public-asset');
+Route::get('/assets/{path}', [PublicAssetController::class, 'show'])->where('path', '.*')
+    ->middleware('throttle:public-assets')->name('public-asset');
 
 // On-the-fly responsive image derivatives for site images. See ImageResizeController.
-Route::get('/img', [\App\Http\Controllers\ImageResizeController::class, 'show'])->name('image-resize');
+Route::get('/img', [ImageResizeController::class, 'show'])
+    ->middleware('throttle:public-images')->name('image-resize');
 
 // Public gallery (no full auth — password/email-gate handled inside)
 Route::get('/g/{slug}', [GalleryController::class, 'show'])->name('gallery.show');

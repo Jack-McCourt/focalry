@@ -6,6 +6,7 @@ interface StudioRef {
     name: string;
     slug: string;
     logo_url: string | null;
+    logo_size?: string | null;
 }
 
 /** Standalone, shareable payment-link page (its own URL). */
@@ -22,7 +23,7 @@ export default function Show({
     return (
         <>
             <Head title={`${pkg.name} — ${studio.name}`} />
-            <PublicShell brand={{ name: studio.name, logo: studio.logo_url }} maxWidth="xl">
+            <PublicShell brand={{ name: studio.name, logo: studio.logo_url, size: studio.logo_size }} maxWidth="xl">
                 <PaymentLinkPanels studioSlug={studio.slug} pkg={pkg} canPay={can_pay} />
             </PublicShell>
         </>

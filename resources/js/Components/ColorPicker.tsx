@@ -76,7 +76,7 @@ export default function ColorPicker({
                                 key={c}
                                 type="button"
                                 onClick={() => onChange(c)}
-                                className={`h-5 w-5 rounded ring-1 ring-black/10 transition ${value.toLowerCase() === c.toLowerCase() ? 'outline outline-2 outline-offset-1 outline-blue-500' : 'hover:scale-110'}`}
+                                className={`h-5 w-5 rounded ring-1 ring-black/10 transition ${value.toLowerCase() === c.toLowerCase() ? 'outline outline-2 outline-offset-1 outline-brand-500' : 'hover:scale-110'}`}
                                 style={{ backgroundColor: c }}
                                 title={c}
                             />

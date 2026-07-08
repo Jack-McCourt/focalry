@@ -27,9 +27,16 @@ class StudioSettingsController extends Controller
             'country' => ['nullable', 'string', Rule::in(array_keys(Currencies::COUNTRY_CURRENCY))],
             'default_currency' => ['required', 'string', Rule::in(Currencies::codes())],
             'email_signature' => 'nullable|string|max:5000',
+            'email_logo_size' => ['nullable', Rule::in(['small', 'medium', 'large', 'xlarge'])],
         ]);
 
-        $studio->update($validated);
+        // The logo size lives in the branding JSON blob, not its own column.
+        $emailLogoSize = $validated['email_logo_size'] ?? 'medium';
+        unset($validated['email_logo_size']);
+        $studio->update([
+            ...$validated,
+            'branding' => [...($studio->branding ?? []), 'email_logo_size' => $emailLogoSize],
+        ]);
 
         return back()->with('success', 'Studio settings updated.');
     }

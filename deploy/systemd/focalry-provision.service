@@ -1,0 +1,12 @@
+[Unit]
+Description=Focalry: provision nginx + TLS for verified custom domains
+# certbot needs outbound network + nginx up to write/reload vhosts.
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Runs as root (systemd default) — the wrapper writes nginx config and runs
+# certbot directly, so no sudo is needed here. Same argument-less idempotent
+# batch the fast-path job invokes via sudo.
+ExecStart=/usr/local/sbin/focalry-provision

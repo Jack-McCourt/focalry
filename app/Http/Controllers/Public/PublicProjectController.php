@@ -34,6 +34,7 @@ class PublicProjectController extends Controller
                 'sent' => (bool) $request->session()->get('share_code_sent'),
                 'studio_name' => $studio?->name,
                 'studio_logo' => $studio?->logoUrl(),
+                'studio_logo_size' => $studio?->logoSize(),
             ]);
         }
 
@@ -64,6 +65,7 @@ class PublicProjectController extends Controller
             'fields' => $fields,
             'studio_name' => $studio?->name,
             'studio_logo' => $studio?->logoUrl(),
+            'studio_logo_size' => $studio?->logoSize(),
         ]);
     }
 

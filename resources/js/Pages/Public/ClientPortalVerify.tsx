@@ -8,12 +8,14 @@ export default function ClientPortalVerify({
     sent,
     studio_name,
     studio_logo,
+    studio_logo_size,
 }: PageProps<{
     token: string;
     masked_email: string;
     sent: boolean;
     studio_name: string | null;
     studio_logo: string | null;
+    studio_logo_size: string | null;
 }>) {
     const codeForm = useForm({ code: '' });
     const sendForm = useForm({});
@@ -25,7 +27,7 @@ export default function ClientPortalVerify({
     };
 
     return (
-        <PublicShell brand={{ name: studio_name, logo: studio_logo }} maxWidth="sm">
+        <PublicShell brand={{ name: studio_name, logo: studio_logo, size: studio_logo_size }} maxWidth="sm">
             <Head title="Your portal" />
 
             <div className="rounded-2xl border border-neutral-200 bg-white p-8 text-center shadow-sm">

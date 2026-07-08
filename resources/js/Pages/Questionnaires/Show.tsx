@@ -4,6 +4,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { EmailDefaults, PageProps } from '@/types';
 import { Head, router } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface UploadRef {
     url: string;
@@ -46,7 +47,7 @@ function UploadAnswer({ type, value }: { type: string; value: UploadRef[] }) {
         <ul className="mt-2 space-y-1">
             {value.map((f, i) => (
                 <li key={i}>
-                    <a href={f.url} download={f.name} target="_blank" rel="noreferrer" className="text-sm font-medium text-blue-600 hover:text-blue-800">
+                    <a href={f.url} download={f.name} target="_blank" rel="noreferrer" className="text-sm font-medium text-brand hover:text-brand-800">
                         {f.name ?? 'File'}
                     </a>
                 </li>
@@ -70,8 +71,8 @@ export default function Show({
     };
 
     const markSent = () => router.post(route('questionnaires.send', questionnaire.id), {}, { preserveScroll: true });
-    const del = () => {
-        if (confirm('Delete this questionnaire?')) router.delete(route('questionnaires.destroy', questionnaire.id));
+    const del = async () => {
+        if (await confirmDialog('Delete this questionnaire?')) router.delete(route('questionnaires.destroy', questionnaire.id));
     };
 
     const completed = questionnaire.status === 'completed';
@@ -93,7 +94,7 @@ export default function Show({
 
             <div className="mx-auto max-w-3xl px-4 sm:px-8 py-8">
                 <div className="mb-4 flex items-center gap-3 text-sm text-neutral-500">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${completed ? 'bg-emerald-50 text-emerald-700' : questionnaire.status === 'sent' ? 'bg-blue-50 text-blue-700' : 'bg-neutral-100 text-neutral-500'}`}>{questionnaire.status}</span>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${completed ? 'bg-emerald-50 text-emerald-700' : questionnaire.status === 'sent' ? 'bg-brand-50 text-brand-700' : 'bg-neutral-100 text-neutral-500'}`}>{questionnaire.status}</span>
                     {questionnaire.project && <span>{questionnaire.project.name}</span>}
                     {questionnaire.contact && <span>· {questionnaire.contact.name}</span>}
                 </div>

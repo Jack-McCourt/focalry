@@ -56,7 +56,7 @@ export default function PaymentLinkPanels({
         post(route('packages.public.checkout', { slug: studioSlug, package: pkg.slug }));
     };
 
-    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900';
+    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500';
     const detailItems = (pkg.details ?? '').split('\n').filter((l) => l.trim());
 
     return (

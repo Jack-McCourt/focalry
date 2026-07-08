@@ -31,7 +31,7 @@ export default function Index({ workflows }: PageProps<{ workflows: Row[]; trigg
             <Head title="Workflows" />
             <StudioManagerNav active="workflows" />
 
-            <div className="px-4 sm:px-8 py-8">
+            <div className="px-4 py-8 sm:px-8">
                 <p className="mb-6 max-w-2xl text-sm text-neutral-500">
                     Automate your studio: when something happens — a project is booked, an invoice is paid, a contract is signed — run a series of steps like sending an email, creating tasks or sending a questionnaire.
                 </p>

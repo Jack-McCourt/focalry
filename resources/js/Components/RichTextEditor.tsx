@@ -34,7 +34,10 @@ export default function RichTextEditor({
 }) {
     const [tokOpen, setTokOpen] = useState(false);
     const editor = useEditor({
-        extensions: [StarterKit],
+        extensions: [
+            // StarterKit bundles the Link mark; don't follow links while editing.
+            StarterKit.configure({ link: { openOnClick: false, defaultProtocol: 'https' } }),
+        ],
         content: value || '',
         onUpdate: ({ editor }) => onChange(editor.getHTML()),
         editorProps: { attributes: { class: `${minHeightClass} focus:outline-none` } },
@@ -55,6 +58,20 @@ export default function RichTextEditor({
         setTokOpen(false);
     };
 
+    const editLink = () => {
+        const current = editor.getAttributes('link').href as string | undefined;
+        const input = window.prompt('Link URL — a full address (https://…), a page path (/about) or an anchor (#contact). Leave empty to remove the link.', current ?? '');
+        if (input === null) return; // cancelled
+        const url = input.trim();
+        if (url === '') {
+            editor.chain().focus().extendMarkRange('link').unsetLink().run();
+            return;
+        }
+        // Bare domains get https://; in-site paths (/…) and anchors (#…) pass through.
+        const href = /^(https?:\/\/|mailto:|tel:|\/|#)/i.test(url) ? url : `https://${url}`;
+        editor.chain().focus().extendMarkRange('link').setLink({ href }).run();
+    };
+
     return (
         <div className="rounded-lg border border-neutral-300">
             <div className="flex flex-wrap items-center gap-0.5 border-b border-neutral-200 p-1.5">
@@ -65,6 +82,15 @@ export default function RichTextEditor({
                 <Btn title="Subheading" active={editor.isActive('heading', { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>H3</Btn>
                 <Btn title="Bullet list" active={editor.isActive('bulletList')} onClick={() => editor.chain().focus().toggleBulletList().run()}>•</Btn>
                 <Btn title="Numbered list" active={editor.isActive('orderedList')} onClick={() => editor.chain().focus().toggleOrderedList().run()}>1.</Btn>
+                <span className="mx-1 h-5 w-px bg-neutral-200" />
+                <Btn title={editor.isActive('link') ? 'Edit link' : 'Add link'} active={editor.isActive('link')} onClick={editLink}>
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>
+                </Btn>
+                {editor.isActive('link') && (
+                    <Btn title="Remove link" onClick={() => editor.chain().focus().extendMarkRange('link').unsetLink().run()}>
+                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.181 8.68a4.503 4.503 0 011.903 6.405m-9.768-2.782L3.56 14.06a4.5 4.5 0 006.364 6.365l3.129-3.129m5.614-5.615l1.757-1.757a4.5 4.5 0 00-6.364-6.365l-4.5 4.5c-.258.26-.479.541-.661.84m1.903 6.405a4.495 4.495 0 01-1.242-.88 4.483 4.483 0 01-1.062-1.683m6.587 2.345l5.907 5.907m-5.907-5.907L8.898 8.898M2.991 2.99L8.898 8.9" /></svg>
+                    </Btn>
+                )}
                 <span className="mx-1 h-5 w-px bg-neutral-200" />
                 <Btn title="Undo" onClick={() => editor.chain().focus().undo().run()}>↶</Btn>
                 <Btn title="Redo" onClick={() => editor.chain().focus().redo().run()}>↷</Btn>
@@ -91,7 +117,7 @@ export default function RichTextEditor({
             </div>
             <EditorContent
                 editor={editor}
-                className="px-3 py-2 text-sm leading-relaxed [&_h1]:my-2 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:my-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:my-1.5 [&_h3]:text-lg [&_h3]:font-semibold [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5"
+                className="px-3 py-2 text-sm leading-relaxed [&_a]:text-brand [&_a]:underline [&_h1]:my-2 [&_h1]:text-2xl [&_h1]:font-semibold [&_h2]:my-2 [&_h2]:text-xl [&_h2]:font-semibold [&_h3]:my-1.5 [&_h3]:text-lg [&_h3]:font-semibold [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:my-1 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5"
             />
         </div>
     );

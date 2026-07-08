@@ -1,10 +1,12 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import SiteSettings, { SettingsTabKey } from '@/Components/site/SiteSettings';
+import { useUrlState } from '@/lib/useUrlState';
 import { PageProps, SiteData, SiteNavItem, SiteTemplateMeta, SiteTheme } from '@/types';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
-export default function Settings({ site, templates, public_url, domain_config, studio_logo }: PageProps<{ site: SiteData; templates: SiteTemplateMeta[]; public_url: string; domain_config: { target: string | null; ip: string | null }; studio_logo: string | null }>) {
+export default function Settings({ site, templates, public_url, domain_config, studio_logo, site_logo, snapshots }: PageProps<{ site: SiteData; templates: SiteTemplateMeta[]; public_url: string; domain_config: { target: string | null; ip: string | null }; studio_logo: string | null; site_logo: string | null; snapshots?: { id: number; published_at: string; pages: number; name: string }[] }>) {
     const [name, setName] = useState(site.name);
     const [slug, setSlug] = useState(site.slug);
     const [contactEmail, setContactEmail] = useState(site.contact_email ?? '');
@@ -23,17 +25,24 @@ export default function Settings({ site, templates, public_url, domain_config, s
     const [cookieConsent, setCookieConsent] = useState(!!site.cookie_consent);
     const [cookieMessage, setCookieMessage] = useState(site.cookie_message ?? '');
     const [cookiePolicyUrl, setCookiePolicyUrl] = useState(site.cookie_policy_url ?? '');
-    const [tab, setTab] = useState<SettingsTabKey>('general');
+    const [announcement, setAnnouncement] = useState<Record<string, any>>(site.announcement ?? {});
+    const [social, setSocial] = useState<Record<string, string>>((site.social as Record<string, string>) ?? {});
+    const [footerInfo, setFooterInfo] = useState<Record<string, any>>(site.footer ?? {});
+    const [comingSoon, setComingSoon] = useState(!!site.coming_soon);
+    const [turnstileSiteKey, setTurnstileSiteKey] = useState(site.turnstile_site_key ?? '');
+    const [turnstileSecretKey, setTurnstileSecretKey] = useState('');
+    const [customFonts, setCustomFonts] = useState<{ name: string; url: string }[]>(site.custom_fonts ?? []);
+    const [tab, setTab] = useUrlState<SettingsTabKey>('tab', 'general');
     const [saving, setSaving] = useState(false);
 
     const errors = usePage().props.errors as Record<string, string>;
     const pageRefs = site.pages.filter((p) => !p.is_post).map((p) => ({ title: p.title, slug: p.slug, is_home: !!p.is_home }));
 
-    const applyTemplate = (key: string, replace = false) => {
+    const applyTemplate = async (key: string, replace = false) => {
         const msg = replace
             ? 'Replace all pages and content with this template’s sample pages? This cannot be undone.'
             : 'Apply this template’s colours & fonts? Your pages and content are kept.';
-        if (!window.confirm(msg)) return;
+        if (!(await confirmDialog(msg))) return;
         router.post(route('website.template'), { template: key, replace }, { onSuccess: () => location.reload() });
     };
 
@@ -57,6 +66,13 @@ export default function Settings({ site, templates, public_url, domain_config, s
             cookie_consent: cookieConsent,
             cookie_message: cookieMessage,
             cookie_policy_url: cookiePolicyUrl,
+            announcement,
+            social,
+            footer: footerInfo,
+            coming_soon: comingSoon,
+            turnstile_site_key: turnstileSiteKey,
+            turnstile_secret_key: turnstileSecretKey,
+            custom_fonts: customFonts,
         };
         router.patch(route('website.settings'), payload as any, {
             preserveScroll: true,
@@ -112,6 +128,23 @@ export default function Settings({ site, templates, public_url, domain_config, s
                         site={site}
                         domainConfig={domain_config}
                         studioLogo={studio_logo}
+                        siteLogo={site_logo}
+                        footerLogo={site.footer_logo}
+                        announcement={announcement}
+                        setAnnouncement={setAnnouncement}
+                        social={social}
+                        setSocial={setSocial}
+                        footerInfo={footerInfo}
+                        setFooterInfo={setFooterInfo}
+                        comingSoon={comingSoon}
+                        setComingSoon={setComingSoon}
+                        turnstileSiteKey={turnstileSiteKey}
+                        setTurnstileSiteKey={setTurnstileSiteKey}
+                        turnstileSecretKey={turnstileSecretKey}
+                        setTurnstileSecretKey={setTurnstileSecretKey}
+                        customFonts={customFonts}
+                        setCustomFonts={setCustomFonts}
+                        snapshots={snapshots ?? []}
                         tab={tab}
                         setTab={setTab}
                     />

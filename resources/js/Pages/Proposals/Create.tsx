@@ -85,7 +85,7 @@ export default function Create({
                             {packages.map((p) => <option key={p.id} value={p.id}>{p.name} — {formatMoney(p.price_cents, p.currency)}</option>)}
                         </select>
                         {packages.length === 0 && (
-                            <p className="mt-1 text-xs text-neutral-400">No packages yet — <Link href={route('packages.index')} className="text-blue-600">create one</Link>.</p>
+                            <p className="mt-1 text-xs text-neutral-400">No packages yet — <Link href={route('packages.index')} className="text-brand">create one</Link>.</p>
                         )}
                     </div>
                     <div>
@@ -95,7 +95,7 @@ export default function Create({
                             {projectContracts.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
                         </select>
                         {pid && projectContracts.length === 0 && (
-                            <p className="mt-1 text-xs text-neutral-400">No contracts for this project yet — <Link href={route('contracts.create')} className="text-blue-600">create one</Link>.</p>
+                            <p className="mt-1 text-xs text-neutral-400">No contracts for this project yet — <Link href={route('contracts.create')} className="text-brand">create one</Link>.</p>
                         )}
                     </div>
                     <div>
@@ -105,7 +105,7 @@ export default function Create({
                             {projectInvoices.map((i) => <option key={i.id} value={i.id}>{i.label}</option>)}
                         </select>
                         {pid && projectInvoices.length === 0 && (
-                            <p className="mt-1 text-xs text-neutral-400">No invoices for this project yet — <Link href={route('invoices.create')} className="text-blue-600">create one</Link>.</p>
+                            <p className="mt-1 text-xs text-neutral-400">No invoices for this project yet — <Link href={route('invoices.create')} className="text-brand">create one</Link>.</p>
                         )}
                     </div>
 

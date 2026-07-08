@@ -1,7 +1,7 @@
 import { SiteBlock, SiteBlockType } from '@/types';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BLOCK_LIBRARY } from './blocks';
+import { BLOCK_LIBRARY, POST_ONLY_BLOCK_TYPES, SECTION_PRESETS, SectionPreset } from './blocks';
 
 interface SavedSection { id: string; name: string; block: SiteBlock }
 
@@ -13,16 +13,22 @@ export default function BlockPicker({
     open,
     onClose,
     onAdd,
+    onInsertPreset,
     savedSections = [],
     onInsertSection,
     onDeleteSection,
+    isPost = false,
 }: {
     open: boolean;
     onClose: () => void;
     onAdd: (type: SiteBlockType) => void;
+    /** Insert a pre-designed section (one or more styled blocks). */
+    onInsertPreset?: (preset: SectionPreset) => void;
     savedSections?: SavedSection[];
     onInsertSection?: (id: string) => void;
     onDeleteSection?: (id: string) => void;
+    /** The page being edited is a blog post — enables post-only blocks. */
+    isPost?: boolean;
 }) {
     const [q, setQ] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
@@ -36,14 +42,21 @@ export default function BlockPicker({
 
     const blocks = useMemo(() => {
         const term = q.trim().toLowerCase();
-        if (!term) return BLOCK_LIBRARY;
-        return BLOCK_LIBRARY.filter((b) => b.label.toLowerCase().includes(term) || b.hint.toLowerCase().includes(term));
-    }, [q]);
+        // Post-only blocks (e.g. the post header) appear on blog posts only.
+        const available = isPost ? BLOCK_LIBRARY : BLOCK_LIBRARY.filter((b) => !POST_ONLY_BLOCK_TYPES.includes(b.type));
+        if (!term) return available;
+        return available.filter((b) => b.label.toLowerCase().includes(term) || b.hint.toLowerCase().includes(term));
+    }, [q, isPost]);
 
     const sections = useMemo(() => {
         const term = q.trim().toLowerCase();
         return term ? savedSections.filter((s) => s.name.toLowerCase().includes(term)) : savedSections;
     }, [q, savedSections]);
+
+    const presets = useMemo(() => {
+        const term = q.trim().toLowerCase();
+        return term ? SECTION_PRESETS.filter((p) => p.name.toLowerCase().includes(term) || p.hint.toLowerCase().includes(term)) : SECTION_PRESETS;
+    }, [q]);
 
     if (!open) return null;
 
@@ -93,6 +106,30 @@ export default function BlockPicker({
                         </div>
                     )}
 
+                    {onInsertPreset && presets.length > 0 && (
+                        <div className="mb-5">
+                            <p className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400">Pre-designed sections</p>
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                                {presets.map((p) => (
+                                    <button
+                                        key={p.id}
+                                        onClick={() => { onInsertPreset(p); onClose(); }}
+                                        className="flex flex-col overflow-hidden rounded-xl border border-neutral-200 text-left transition hover:border-neutral-900 hover:shadow-sm"
+                                    >
+                                        <div className="flex h-24 items-center justify-center border-b border-neutral-100 bg-gradient-to-br from-neutral-50 to-neutral-100">
+                                            <span className="rounded-md bg-white px-2 py-1 text-[11px] font-medium text-neutral-500 shadow-sm ring-1 ring-neutral-200">{p.build().length > 1 ? `${p.build().length} blocks` : 'Styled section'}</span>
+                                        </div>
+                                        <div className="px-3 py-2">
+                                            <span className="block text-sm font-medium text-neutral-800">{p.name}</span>
+                                            <span className="mt-0.5 block text-xs leading-snug text-neutral-400">{p.hint}</span>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                            <p className="mb-2 mt-5 px-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400">Blocks</p>
+                        </div>
+                    )}
+
                     {blocks.length > 0 ? (
                         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                             {blocks.map((b) => (
@@ -134,6 +171,8 @@ function BlockThumb({ type }: { type: SiteBlockType }) {
     switch (type) {
         case 'hero':
             return <Frame className="items-center justify-center gap-1.5 bg-neutral-700 ring-neutral-700"><span className="h-2 w-20 rounded-full bg-white/90" /><span className="h-1.5 w-14 rounded-full bg-white/50" /><span className="mt-1 h-3 w-12 rounded-full bg-white/80" /></Frame>;
+        case 'post_header':
+            return <Frame className="flex-col p-0"><span className="flex flex-1 flex-col items-center justify-center gap-1 bg-neutral-700"><span className="h-2 w-20 rounded-full bg-white/90" /><span className="h-1 w-12 rounded-full bg-white/50" /></span><span className="flex items-center justify-center gap-1 py-1.5"><span className="h-1 w-6 rounded-full bg-neutral-300" /><span className="h-1 w-1 rounded-full bg-neutral-300" /><span className="h-1 w-8 rounded-full bg-neutral-300" /></span></Frame>;
         case 'slider':
             return <Frame className="relative items-center justify-center gap-1.5 bg-neutral-700 ring-neutral-700"><span className="h-2 w-16 rounded-full bg-white/90" /><span className="h-1.5 w-12 rounded-full bg-white/50" /><span className="absolute left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white/40" /><span className="absolute right-1.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-white/40" /><span className="absolute inset-x-0 bottom-1.5 flex justify-center gap-1"><span className="h-1 w-1 rounded-full bg-white/90" /><span className="h-1 w-1 rounded-full bg-white/50" /><span className="h-1 w-1 rounded-full bg-white/50" /></span></Frame>;
         case 'about':
@@ -174,6 +213,20 @@ function BlockThumb({ type }: { type: SiteBlockType }) {
             return <Frame className="items-center justify-center p-3"><span className="h-px w-full bg-neutral-300" /></Frame>;
         case 'grid':
             return <Frame className="flex-row gap-1.5 p-2"><span className="flex-1 rounded border border-dashed border-neutral-300" /><span className="flex-1 rounded border border-dashed border-neutral-300" /></Frame>;
+        case 'instagram':
+            return <Frame className="p-2"><span className="grid h-full grid-cols-4 gap-1">{Array.from({ length: 8 }).map((_, i) => <span key={i} className={box} />)}</span></Frame>;
+
+        case 'beforeafter':
+            return <Frame className="relative p-0"><span className="absolute inset-y-0 left-0 w-1/2 bg-neutral-300" /><span className="absolute inset-y-0 right-0 w-1/2 bg-neutral-100" /><span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-white shadow" /><span className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow ring-1 ring-neutral-200" /></Frame>;
+        case 'countdown':
+            return <Frame className="flex-row items-center justify-center gap-1.5 p-3">{['12', '08', '45'].map((n, i) => <span key={i} className="rounded bg-neutral-100 px-1.5 py-1 text-[10px] font-bold text-neutral-600 ring-1 ring-neutral-200">{n}</span>)}</Frame>;
+
+        case 'booking':
+            return <Frame className="flex-row gap-1.5 p-2"><span className="flex w-1/3 flex-col gap-1">{[0, 1, 2].map((i) => <span key={i} className="h-3 rounded bg-neutral-100 ring-1 ring-neutral-200" />)}</span><span className="grid flex-1 grid-cols-4 gap-0.5">{Array.from({ length: 12 }).map((_, i) => <span key={i} className={`rounded-sm ${i === 5 ? 'bg-neutral-700' : 'bg-neutral-100'}`} />)}</span></Frame>;
+
+        case 'newsletter':
+            return <Frame className="items-center justify-center gap-1.5 p-3"><span className="h-2 w-16 rounded-full bg-neutral-400" /><span className="flex w-full gap-1"><span className="h-3 flex-1 rounded-full bg-neutral-100 ring-1 ring-neutral-200" /><span className="h-3 w-8 rounded-full bg-neutral-700" /></span></Frame>;
+
         case 'contact':
             return <Frame className="justify-center gap-1.5 p-2"><span className={`h-3 w-full ${box}`} /><span className={`h-3 w-full ${box}`} /><span className="mt-0.5 h-3 w-14 rounded-full bg-neutral-800" /></Frame>;
         default:

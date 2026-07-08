@@ -6,10 +6,11 @@ import { centsToInput, currencySymbol, formatMoney, toCents } from '@/lib/money'
 import { EmailDefaults, Invoice, PageProps } from '@/types';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 const STATUS_STYLES: Record<Invoice['status'], string> = {
     draft: 'bg-neutral-100 text-neutral-500',
-    sent: 'bg-blue-50 text-blue-700',
+    sent: 'bg-brand-50 text-brand-700',
     partial: 'bg-amber-50 text-amber-700',
     paid: 'bg-emerald-50 text-emerald-700',
     void: 'bg-neutral-100 text-neutral-400 line-through',
@@ -177,7 +178,7 @@ export default function Show({ invoice, email_defaults }: PageProps<{ invoice: I
             <Head title={invoice.number} />
             <StudioManagerNav active="invoices" />
 
-            <div className="px-4 sm:px-8 py-8">
+            <div className="px-4 py-8 sm:px-8">
                 <div className="grid gap-6 lg:grid-cols-3">
                     {/* Document */}
                     <div className="rounded-xl border border-neutral-200 bg-white p-8 lg:col-span-2">
@@ -215,28 +216,30 @@ export default function Show({ invoice, email_defaults }: PageProps<{ invoice: I
                         </div>
 
                         {/* Items */}
-                        <table className="mt-6 w-full text-sm">
-                            <thead>
-                                <tr className="border-b border-neutral-100 text-left text-xs font-medium text-neutral-400">
-                                    <th className="py-2">Description</th>
-                                    <th className="py-2 text-right">Qty</th>
-                                    <th className="py-2 text-right">Unit</th>
-                                    <th className="py-2 text-right">Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-neutral-50">
-                                {items.map((it, i) => (
-                                    <tr key={i}>
-                                        <td className="py-2.5 text-neutral-800">{it.description}</td>
-                                        <td className="py-2.5 text-right text-neutral-500">{it.quantity}</td>
-                                        <td className="py-2.5 text-right text-neutral-500">{formatMoney(it.unit_amount_cents, invoice.currency)}</td>
-                                        <td className="py-2.5 text-right text-neutral-800">
-                                            {formatMoney(Math.round((parseFloat(String(it.quantity)) || 0) * it.unit_amount_cents), invoice.currency)}
-                                        </td>
+                        <div className="mt-6 overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b border-neutral-100 text-left text-xs font-medium text-neutral-400">
+                                        <th className="py-2">Description</th>
+                                        <th className="py-2 text-right">Qty</th>
+                                        <th className="py-2 text-right">Unit</th>
+                                        <th className="py-2 text-right">Amount</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-neutral-50">
+                                    {items.map((it, i) => (
+                                        <tr key={i}>
+                                            <td className="py-2.5 text-neutral-800">{it.description}</td>
+                                            <td className="py-2.5 text-right text-neutral-500">{it.quantity}</td>
+                                            <td className="py-2.5 text-right text-neutral-500">{formatMoney(it.unit_amount_cents, invoice.currency)}</td>
+                                            <td className="py-2.5 text-right text-neutral-800">
+                                                {formatMoney(Math.round((parseFloat(String(it.quantity)) || 0) * it.unit_amount_cents), invoice.currency)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
 
                         {/* Totals */}
                         <div className="mt-4 flex justify-end">
@@ -372,12 +375,12 @@ export default function Show({ invoice, email_defaults }: PageProps<{ invoice: I
                 {/* Secondary actions */}
                 <div className="mt-6 flex items-center gap-3">
                     {invoice.status !== 'void' && invoice.status !== 'paid' && (
-                        <button onClick={() => { if (confirm('Void this invoice?')) post('invoices.void'); }} className="text-sm text-neutral-500 hover:text-neutral-800">
+                        <button onClick={async () => { if (await confirmDialog('Void this invoice?')) post('invoices.void'); }} className="text-sm text-neutral-500 hover:text-neutral-800">
                             Void invoice
                         </button>
                     )}
                     <button
-                        onClick={() => { if (confirm('Delete this invoice? This cannot be undone.')) router.delete(route('invoices.destroy', invoice.id)); }}
+                        onClick={async () => { if (await confirmDialog('Delete this invoice? This cannot be undone.')) router.delete(route('invoices.destroy', invoice.id)); }}
                         className="text-sm text-red-500 hover:text-red-700"
                     >
                         Delete

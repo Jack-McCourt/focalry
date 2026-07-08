@@ -22,7 +22,7 @@ interface InvoiceLite {
 
 const INV_STATUS: Record<InvoiceLite['status'], string> = {
     draft: 'bg-neutral-100 text-neutral-500',
-    sent: 'bg-blue-50 text-blue-700',
+    sent: 'bg-brand-50 text-brand-700',
     partial: 'bg-amber-50 text-amber-700',
     paid: 'bg-emerald-50 text-emerald-700',
     void: 'bg-neutral-100 text-neutral-400 line-through',
@@ -36,7 +36,7 @@ interface ContractLite {
 
 const CON_STATUS: Record<ContractLite['status'], string> = {
     draft: 'bg-neutral-100 text-neutral-500',
-    sent: 'bg-blue-50 text-blue-700',
+    sent: 'bg-brand-50 text-brand-700',
     signed: 'bg-emerald-50 text-emerald-700',
     declined: 'bg-red-50 text-red-700',
     void: 'bg-neutral-100 text-neutral-400 line-through',

@@ -44,7 +44,7 @@ class SendMeetingReminders extends Command
                     }
 
                     try {
-                        Mail::to($meeting->client_email)->send(new MeetingReminder($meeting, $studio?->name ?: config('app.name')));
+                        Mail::to($meeting->client_email)->send(new MeetingReminder($meeting, $studio?->name ?: config('app.name'), $studio?->logoUrl(), $studio?->emailLogoHeight()));
                         $sent[] = $key;
                         $meeting->forceFill(['reminders_sent' => $sent])->saveQuietly();
                         $sentCount++;

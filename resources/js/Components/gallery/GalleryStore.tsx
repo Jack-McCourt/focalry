@@ -387,7 +387,7 @@ function CartDrawer({
     const digitalOnly = quote?.digital_only ?? cart.every((i) => i.is_digital);
     const selectedShipping = store.shipping_methods.find((m) => m.id === shippingId);
     const needsAddress = !digitalOnly && !selectedShipping?.is_pickup;
-    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900';
+    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500';
 
     const canCheckout = customer.customer_name && customer.customer_email && (!needsAddress || (ship.shipping_line1 && ship.shipping_city && ship.shipping_postal_code && ship.shipping_country));
 

@@ -15,7 +15,7 @@ interface Row {
 
 const STATUS_STYLES: Record<Status, string> = {
     draft: 'bg-neutral-100 text-neutral-500',
-    sent: 'bg-blue-50 text-blue-700',
+    sent: 'bg-brand-50 text-brand-700',
     completed: 'bg-emerald-50 text-emerald-700',
 };
 
@@ -46,7 +46,7 @@ export default function Index({ questionnaires, filters }: PageProps<{ questionn
             <Head title="Questionnaires" />
             <StudioManagerNav active="questionnaires" />
 
-            <div className="px-4 sm:px-8 py-8">
+            <div className="px-4 py-8 sm:px-8">
                 <div className="mb-6 flex flex-wrap gap-1.5">
                     {tabs.map((t) => {
                         const active = (filters.status ?? null) === t.key;
@@ -65,7 +65,7 @@ export default function Index({ questionnaires, filters }: PageProps<{ questionn
                         <Link href={route('questionnaires.create')} className="btn-primary mt-6">New questionnaire</Link>
                     </div>
                 ) : (
-                    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+                    <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-neutral-100 text-left text-xs font-medium text-neutral-400">

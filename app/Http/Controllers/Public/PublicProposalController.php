@@ -57,6 +57,7 @@ class PublicProposalController extends Controller
             ] : null,
             'studio_name' => $studio?->name,
             'studio_logo' => $studio?->logoUrl(),
+            'studio_logo_size' => $studio?->logoSize(),
         ]);
     }
 

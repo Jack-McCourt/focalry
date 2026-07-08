@@ -19,10 +19,11 @@ export interface StudioSettings {
     email_signature: string | null;
     stripe_connect_status: string | null;
     logo_url: string | null;
+    email_logo_size: string | null;
 }
 
 const selectClasses =
-    'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500';
+    'mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-brand-500';
 
 export default function StudioSettingsForm({
     studio,
@@ -41,6 +42,7 @@ export default function StudioSettingsForm({
         country: studio.country ?? '',
         default_currency: studio.default_currency ?? 'gbp',
         email_signature: studio.email_signature ?? '',
+        email_logo_size: studio.email_logo_size ?? 'medium',
     });
 
     const submit: FormEventHandler = (e) => {
@@ -104,6 +106,24 @@ export default function StudioSettingsForm({
                 </div>
                 {logoForm.progress && <p className="mt-1 text-xs text-gray-500">Uploading…</p>}
                 <InputError message={logoForm.errors.logo} className="mt-2" />
+
+                <div className="mt-4 max-w-[220px]">
+                    <InputLabel htmlFor="email_logo_size" value="Email logo size" />
+                    <select
+                        id="email_logo_size"
+                        value={data.email_logo_size}
+                        className={selectClasses}
+                        onChange={(e) => setData('email_logo_size', e.target.value)}
+                    >
+                        <option value="small">Small</option>
+                        <option value="medium">Medium</option>
+                        <option value="large">Large</option>
+                        <option value="xlarge">Extra large</option>
+                    </select>
+                    <p className="mt-1 text-sm text-gray-500">
+                        How large your logo appears in the header of emails to clients. Use a smaller size for long logos, larger for a stamp-style icon.
+                    </p>
+                </div>
             </div>
 
             <form onSubmit={submit} className="mt-6 space-y-6">
@@ -219,7 +239,7 @@ export default function StudioSettingsForm({
                         id="email_signature"
                         value={data.email_signature}
                         rows={4}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-brand-500"
                         onChange={(e) => setData('email_signature', e.target.value)}
                         placeholder={'— ' + (data.name || 'Your studio')}
                     />

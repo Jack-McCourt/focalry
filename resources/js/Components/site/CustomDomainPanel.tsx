@@ -1,5 +1,6 @@
 import { router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface SiteDomain {
     custom_domain: string | null;
@@ -33,19 +34,26 @@ function Record({ type, host, value }: { type: string; host: string; value: stri
 export default function CustomDomainPanel({ site, config }: { site: SiteDomain; config: { target: string | null; ip: string | null } }) {
     const form = useForm({ custom_domain: site.custom_domain ?? '' });
     const [verifying, setVerifying] = useState(false);
+    const [verifyError, setVerifyError] = useState<string | null>(null);
 
     const connect = (e: React.FormEvent) => {
         e.preventDefault();
+        setVerifyError(null);
         form.post(route('website.domain.update'), { preserveScroll: true });
     };
 
     const verify = () => {
         setVerifying(true);
-        router.post(route('website.domain.verify'), {}, { preserveScroll: true, onFinish: () => setVerifying(false) });
+        setVerifyError(null);
+        router.post(route('website.domain.verify'), {}, {
+            preserveScroll: true,
+            onError: (errors) => setVerifyError((errors.custom_domain as string) ?? 'Verification failed.'),
+            onFinish: () => setVerifying(false),
+        });
     };
 
-    const disconnect = () => {
-        if (!confirm('Disconnect this custom domain? Your site will go back to its focalry URL.')) return;
+    const disconnect = async () => {
+        if (!(await confirmDialog('Disconnect this custom domain? Your site will go back to its focalry URL.'))) return;
         router.delete(route('website.domain.remove'), { preserveScroll: true });
     };
 
@@ -100,6 +108,7 @@ export default function CustomDomainPanel({ site, config }: { site: SiteDomain; 
                             <button type="button" onClick={verify} disabled={verifying} className="btn-secondary px-3 py-1.5 text-xs">
                                 {verifying ? 'Verifying…' : 'Verify domain'}
                             </button>
+                            {verifyError && <p className="text-xs text-red-600">{verifyError}</p>}
                         </>
                     )}
 
@@ -110,7 +119,7 @@ export default function CustomDomainPanel({ site, config }: { site: SiteDomain; 
                     {site.domain_live && (
                         <p className="text-xs text-neutral-500">
                             Your site is live at{' '}
-                            <a href={`https://${domain}`} target="_blank" rel="noreferrer" className="font-medium text-blue-700 hover:underline">https://{domain}</a>.
+                            <a href={`https://${domain}`} target="_blank" rel="noreferrer" className="font-medium text-brand-700 hover:underline">https://{domain}</a>.
                         </p>
                     )}
 

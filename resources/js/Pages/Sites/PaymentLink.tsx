@@ -18,7 +18,7 @@ export default function PaymentLink({
     can_pay,
     package: pkg,
 }: {
-    site: { name: string; slug: string; base_path: string; theme: SiteTheme; header_nav: SiteNavItem[]; footer_nav: SiteNavItem[] };
+    site: { name: string; slug: string; base_path: string; theme: SiteTheme; header_nav: SiteNavItem[]; footer_nav: SiteNavItem[]; favicon_url?: string | null };
     studio_logo: string | null;
     pages: PageRef[];
     studio_slug: string;
@@ -27,7 +27,9 @@ export default function PaymentLink({
 }) {
     return (
         <>
-            <Head title={pkg.name} />
+            <Head title={pkg.name}>
+                {site.favicon_url && <link rel="icon" href={site.favicon_url} />}
+            </Head>
             <SiteShell
                 siteName={site.name}
                 siteSlug={site.slug}

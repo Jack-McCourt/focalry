@@ -35,6 +35,8 @@ class PaymentReminder extends Mailable
             with: [
                 'invoice' => $this->invoice,
                 'studioName' => $this->invoice->studio?->name ?? config('app.name'),
+                'logoUrl' => $this->invoice->studio?->logoUrl(),
+                'logoHeight' => $this->invoice->studio?->emailLogoHeight(),
                 'amount' => number_format($this->amountCents / 100, 2),
                 'currency' => strtoupper($this->invoice->currency),
                 'dueDate' => $this->dueDate->toFormattedDateString(),

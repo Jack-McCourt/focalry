@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface Proposal {
     id: number;
@@ -21,7 +22,7 @@ interface Proposal {
 
 const STATUS_STYLES: Record<string, string> = {
     draft: 'bg-neutral-100 text-neutral-500',
-    sent: 'bg-blue-50 text-blue-700',
+    sent: 'bg-brand-50 text-brand-700',
     accepted: 'bg-emerald-50 text-emerald-700',
     declined: 'bg-red-50 text-red-700',
 };
@@ -35,8 +36,8 @@ export default function Show({ proposal, public_url }: PageProps<{ proposal: Pro
     };
 
     const send = () => router.post(route('proposals.send', proposal.id), {}, { preserveScroll: true });
-    const del = () => {
-        if (confirm('Delete this proposal?')) router.delete(route('proposals.destroy', proposal.id));
+    const del = async () => {
+        if (await confirmDialog('Delete this proposal?')) router.delete(route('proposals.destroy', proposal.id));
     };
 
     const canSend = proposal.status === 'draft' || proposal.status === 'sent';

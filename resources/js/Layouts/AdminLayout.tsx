@@ -1,3 +1,4 @@
+import Toaster from '@/Components/Toaster';
 import { PageProps } from '@/types';
 import { Link, usePage } from '@inertiajs/react';
 import { PropsWithChildren, ReactNode } from 'react';
@@ -55,6 +56,8 @@ export default function AdminLayout({ header, children }: PropsWithChildren<{ he
                 </header>
                 <main className="flex-1 overflow-y-auto">{children}</main>
             </div>
+
+            <Toaster />
         </div>
     );
 }

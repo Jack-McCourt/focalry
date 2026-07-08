@@ -26,6 +26,15 @@ class ResolveCustomDomain
             return $next($request);
         }
 
+        // Host-agnostic app utility endpoints must reach their real routes rather
+        // than be rewritten into the site: the responsive-image resizer (/img)
+        // and the public-asset stream (/assets). Rewriting them to /site/{slug}/…
+        // 404s, which silently breaks every <img srcset> on the custom domain.
+        $first = strtolower(explode('/', trim($request->path(), '/'), 2)[0]);
+        if (in_array($first, ['img', 'assets'], true)) {
+            return $next($request);
+        }
+
         $site = Site::withoutGlobalScopes()
             ->where('custom_domain', $host)
             ->whereNotNull('domain_verified_at')

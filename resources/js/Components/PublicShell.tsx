@@ -7,6 +7,15 @@ const MAX = {
     xl: 'max-w-4xl',
 } as const;
 
+// Studio logo size (matches the email sizes: 32 / 48 / 96 / 144px). Full class
+// names so Tailwind keeps them. Medium (max-h-12) is the established default.
+const LOGO_SIZE: Record<string, string> = {
+    small: 'max-h-8',
+    medium: 'max-h-12',
+    large: 'max-h-24',
+    xlarge: 'max-h-36',
+};
+
 /**
  * Shared frame for the studio's public-facing documents/forms (proposals,
  * contracts, questionnaires, payment links). A calm, paper-like background, a
@@ -18,7 +27,7 @@ export default function PublicShell({
     maxWidth = 'lg',
     children,
 }: PropsWithChildren<{
-    brand?: { name?: string | null; logo?: string | null };
+    brand?: { name?: string | null; logo?: string | null; size?: string | null };
     maxWidth?: keyof typeof MAX;
 }>) {
     return (
@@ -26,7 +35,7 @@ export default function PublicShell({
             <div className={`mx-auto ${MAX[maxWidth]} px-4`}>
                 <header className="pb-7 pt-12 text-center sm:pt-16">
                     {brand?.logo ? (
-                        <img src={brand.logo} alt={brand.name ?? ''} className="mx-auto max-h-12 object-contain" />
+                        <img src={brand.logo} alt={brand.name ?? ''} className={`mx-auto ${LOGO_SIZE[brand.size ?? 'medium'] ?? 'max-h-12'} object-contain`} />
                     ) : brand?.name ? (
                         <span className="text-sm font-medium uppercase tracking-[0.28em] text-neutral-600">{brand.name}</span>
                     ) : null}

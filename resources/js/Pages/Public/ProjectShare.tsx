@@ -74,17 +74,19 @@ export default function ProjectShare({
     fields,
     studio_name,
     studio_logo,
+    studio_logo_size,
 }: PageProps<{
     project: ShareProject;
     fields: FieldDef[];
     studio_name: string | null;
     studio_logo: string | null;
+    studio_logo_size: string | null;
 }>) {
     const eventDate = fmtDate(project.event_date);
     const visibleFields = fields.filter((f) => !isEmpty(project.custom_fields[f.key]));
 
     return (
-        <PublicShell brand={{ name: studio_name, logo: studio_logo }} maxWidth="lg">
+        <PublicShell brand={{ name: studio_name, logo: studio_logo, size: studio_logo_size }} maxWidth="lg">
             <Head title={project.name} />
 
             <div className="mb-4 flex items-center justify-end print:hidden">

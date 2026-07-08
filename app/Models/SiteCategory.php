@@ -17,6 +17,9 @@ class SiteCategory extends Model
 {
     use BelongsToStudio, HasFactory;
 
+    /** Category changes bump the site's updated_at → busts the public-page cache. */
+    protected $touches = ['site'];
+
     protected $fillable = [
         'studio_id',
         'site_id',

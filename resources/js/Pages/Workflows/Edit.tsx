@@ -3,6 +3,7 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageProps } from '@/types';
 import { Head, router, useForm } from '@inertiajs/react';
 import { useRef } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 // Merge tokens supported by WorkflowEngine::merge(). Friendly label → token.
 const MERGE_TOKENS: { label: string; token: string }[] = [
@@ -177,8 +178,8 @@ export default function Edit({
         else form.patch(route('workflows.update', workflow.id!));
     };
 
-    const del = () => {
-        if (workflow.id && confirm('Delete this workflow?')) router.delete(route('workflows.destroy', workflow.id));
+    const del = async () => {
+        if (workflow.id && await confirmDialog('Delete this workflow?')) router.delete(route('workflows.destroy', workflow.id));
     };
 
     return (
@@ -264,7 +265,7 @@ export default function Edit({
                     ))}
 
                     {condition_fields.length > 0 && (
-                        <button type="button" onClick={addCondition} className="text-sm font-medium text-blue-600 hover:text-blue-800">+ Add condition</button>
+                        <button type="button" onClick={addCondition} className="text-sm font-medium text-brand hover:text-brand-800">+ Add condition</button>
                     )}
                 </div>
 
@@ -288,7 +289,7 @@ export default function Edit({
                             <StepTiming step={step} onChange={(patch) => setStep(i, patch)} scheduleModes={schedule_modes} offsetUnits={offset_units} />
                         </div>
                     ))}
-                    <button type="button" onClick={addStep} className="text-sm font-medium text-blue-600 hover:text-blue-800">+ Add step</button>
+                    <button type="button" onClick={addStep} className="text-sm font-medium text-brand hover:text-brand-800">+ Add step</button>
                 </div>
 
                 <div className="flex justify-end gap-2">

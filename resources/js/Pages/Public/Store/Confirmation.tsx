@@ -72,7 +72,7 @@ export default function Confirmation({
                                 </div>
                                 <div className="flex shrink-0 items-center gap-3">
                                     {i.download_url && (
-                                        <a href={i.download_url} className="text-xs font-medium text-blue-600 hover:underline">Download</a>
+                                        <a href={i.download_url} className="text-xs font-medium text-brand hover:underline">Download</a>
                                     )}
                                     <span className="text-neutral-700">{formatMoney(i.line_total_cents, c)}</span>
                                 </div>
@@ -91,7 +91,7 @@ export default function Confirmation({
                     </div>
 
                     {hasDigital && paid && (
-                        <p className="mt-4 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                        <p className="mt-4 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
                             Your digital downloads are ready above and have also been emailed to you.
                         </p>
                     )}

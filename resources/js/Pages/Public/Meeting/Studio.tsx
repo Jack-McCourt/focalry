@@ -49,7 +49,7 @@ export default function Studio({ studio, meetingTypes }: { studio: StudioRef; me
                                 className="block rounded-xl border border-neutral-200 bg-white p-5 transition hover:border-neutral-300 hover:shadow-sm"
                             >
                                 <div className="flex items-center gap-2">
-                                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: t.color ?? '#6366f1' }} />
+                                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: t.color ?? '#2a305d' }} />
                                     <span className="text-base font-semibold text-neutral-900">{t.name}</span>
                                 </div>
                                 <p className="mt-1 text-sm text-neutral-500">

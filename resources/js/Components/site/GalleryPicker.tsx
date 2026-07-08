@@ -118,11 +118,11 @@ export default function GalleryPicker({
                                         key={p.id}
                                         type="button"
                                         onClick={() => toggle(p.id)}
-                                        className={`relative aspect-square overflow-hidden rounded-lg ring-2 transition ${sel ? 'ring-blue-600' : 'ring-transparent hover:ring-neutral-300'}`}
+                                        className={`relative aspect-square overflow-hidden rounded-lg ring-2 transition ${sel ? 'ring-brand' : 'ring-transparent hover:ring-neutral-300'}`}
                                     >
                                         <img src={p.thumb} alt="" className="h-full w-full object-cover" />
                                         {sel && (
-                                            <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-white">
+                                            <span className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-brand text-white">
                                                 <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
                                             </span>
                                         )}

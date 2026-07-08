@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\SiteVisit;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -21,3 +22,9 @@ Schedule::command('store:release-orders')->everyFifteenMinutes();
 Schedule::command('workflows:run')->everyFifteenMinutes();
 // Auto-delete stale leads (opt-in per studio) + purge trashed projects past retention.
 Schedule::command('leads:prune')->dailyAt('03:00');
+// Refresh Instagram tokens (~60-day lifetime) before they lapse.
+Schedule::command('instagram:refresh-tokens')->weeklyOn(1, '05:00');
+// Keep live-linked website gallery blocks in step with their client galleries.
+Schedule::command('site:sync-linked-galleries')->dailyAt('04:00');
+// Trim raw site-analytics page views past their retention (see SiteVisit::prunable).
+Schedule::command('model:prune', ['--model' => [SiteVisit::class]])->dailyAt('03:30');

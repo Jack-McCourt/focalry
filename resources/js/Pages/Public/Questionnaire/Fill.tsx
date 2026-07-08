@@ -25,8 +25,9 @@ export default function Fill({
     questionnaire,
     studio_name,
     studio_logo,
+    studio_logo_size,
     flash,
-}: PageProps<{ questionnaire: Questionnaire; studio_name: string | null; studio_logo: string | null }>) {
+}: PageProps<{ questionnaire: Questionnaire; studio_name: string | null; studio_logo: string | null; studio_logo_size: string | null }>) {
     const initial: Record<string, AnswerValue> = {};
     questionnaire.questions.forEach((q) => {
         if (q.type === 'checkbox') initial[q.key] = !!questionnaire.answers[q.key];
@@ -45,7 +46,7 @@ export default function Fill({
     return (
         <>
             <Head title={questionnaire.title} />
-            <PublicShell brand={{ name: studio_name, logo: studio_logo }} maxWidth="md">
+            <PublicShell brand={{ name: studio_name, logo: studio_logo, size: studio_logo_size }} maxWidth="md">
                 {flash?.success && (
                     <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{flash.success}</div>
                 )}

@@ -4,6 +4,7 @@ import { centsToInput, formatMoney, toCents } from '@/lib/money';
 import { PageProps } from '@/types';
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
+import { confirmDialog } from '@/Components/ConfirmDialog';
 
 interface Item {
     id: number;
@@ -71,8 +72,8 @@ export default function OrderShow({ order, statuses }: PageProps<{ order: Order;
 
     const fulfil = () => router.post(route('store.orders.fulfil', order.id), {}, { preserveScroll: true });
 
-    const recordOffline = () => {
-        if (confirm('Mark this order as paid offline? This will trigger fulfilment.')) {
+    const recordOffline = async () => {
+        if (await confirmDialog('Mark this order as paid offline? This will trigger fulfilment.')) {
             router.post(route('store.orders.offline', order.id), {}, { preserveScroll: true });
         }
     };
@@ -87,14 +88,14 @@ export default function OrderShow({ order, statuses }: PageProps<{ order: Order;
     };
 
     const isPaid = !['pending', 'cancelled'].includes(order.status);
-    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-neutral-900 focus:ring-neutral-900';
+    const field = 'mt-1 block w-full rounded-md border-neutral-300 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500';
 
     return (
         <AuthenticatedLayout header={<h1 className="text-sm font-semibold text-neutral-900">Store</h1>}>
             <Head title={`Order ${order.number}`} />
             <StoreNav active="orders" />
 
-            <div className="px-4 py-6 sm:px-8">
+            <div className="px-4 py-8 sm:px-8">
                 <Link href={route('store.orders.index')} className="text-xs text-neutral-400 hover:text-neutral-700">
                     ← All orders
                 </Link>
@@ -173,7 +174,7 @@ export default function OrderShow({ order, statuses }: PageProps<{ order: Order;
                             {order.customer_phone && <p className="text-neutral-600">{order.customer_phone}</p>}
                             {order.collection && (
                                 <p className="mt-2 text-xs text-neutral-400">
-                                    From gallery: <a href={`/g/${order.collection.slug}`} className="text-blue-600 hover:underline">{order.collection.title}</a>
+                                    From gallery: <a href={`/g/${order.collection.slug}`} className="text-brand hover:underline">{order.collection.title}</a>
                                 </p>
                             )}
                         </div>
